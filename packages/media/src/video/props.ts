@@ -4,7 +4,7 @@ import type {
 	LogLevel,
 	LoopVolumeCurveBehavior,
 	OnVideoFrame,
-	OnVideoFramePresented,
+	OnVideoFrameCallback,
 	SequenceProps,
 	VolumeProp,
 } from 'remotion';
@@ -30,7 +30,7 @@ export type FallbackOffthreadVideoProps = {
 	useWebAudioApi?: boolean;
 	pauseWhenBuffering?: boolean;
 	onAutoPlayError?: null | (() => void);
-	onVideoFramePresented?: OnVideoFramePresented;
+	onVideoFrameCallback?: OnVideoFrameCallback;
 };
 
 type MandatoryVideoProps = {
