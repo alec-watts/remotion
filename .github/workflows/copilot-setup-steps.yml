@@ -1,38 +1,108 @@
-name: 'Copilot Coding agent setup'
+name: Fork-only macOS and Linux 3D pixel diagnostic
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
+permissions:
+  contents: read
+concurrency:
+  group: fork-macos-linux-3d-pixel-diagnostic
+  cancel-in-progress: false
 jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+  native-3d-pixels:
+    name: 3D native pixels on ${{ matrix.os }}
+    if: github.repository == 'alec-watts/remotion' && github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      FORCE_COLOR: '1'
+      TURBO_TELEMETRY_DISABLED: '1'
+      TURBO_NO_UPDATE_NOTIFIER: '1'
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
     steps:
-      - name: Checkout code
+      - name: Check out exact public 3D source
         uses: actions/checkout@v6
         with:
+          repository: remotion-dev/remotion
+          ref: e4ab550833e80c0ed9123c7320210cc070d4ef2c
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+          path: source
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 26
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: 1.4.3
-      - name: Cache turbo build setup
-        uses: actions/cache@v5
+      - name: Record exact source and runner tools
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/diagnostic-output"
+          test "$(git rev-parse HEAD)" = e4ab550833e80c0ed9123c7320210cc070d4ef2c
+          {
+            echo "diagnostic_commit=$GITHUB_SHA"
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "runner=${ImageOS:-unknown} ${ImageVersion:-unknown} ${RUNNER_ARCH:-unknown}"
+            uname -a
+            node --version
+            bun --revision
+          } | tee "$GITHUB_WORKSPACE/diagnostic-output/environment.txt"
+          node --input-type=module <<'NODE' | tee "$GITHUB_WORKSPACE/diagnostic-output/source-sha256.txt"
+          import {createHash} from 'node:crypto';
+          import {readFileSync} from 'node:fs';
+          for (const file of [
+            'packages/web-renderer/src/test/preserve-3d-depth.test.tsx',
+            'packages/web-renderer/src/test/fixtures/preserve-3d-depth.tsx',
+            'packages/web-renderer/src/test/native-reference.tsx',
+            'packages/web-renderer/src/drawing/transform-in-3d.ts',
+          ]) {
+            console.log(`${createHash('sha256').update(readFileSync(file)).digest('hex')}  ${file}`);
+          }
+          NODE
+      - name: Install locked dependencies as upstream
+        run: |
+          set -euo pipefail
+          bun ci 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/install.log"
+      - name: Install upstream Playwright browsers and OS dependencies
+        working-directory: source/packages/web-renderer
+        run: |
+          set -euo pipefail
+          bunx playwright install --with-deps 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/browser-install.log"
+          bunx playwright --version | tee "$GITHUB_WORKSPACE/diagnostic-output/playwright-version.txt"
+          if [ "$RUNNER_OS" = macOS ]; then
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version | tee "$GITHUB_WORKSPACE/diagnostic-output/chrome-version.txt"
+          else
+            google-chrome --version | tee "$GITHUB_WORKSPACE/diagnostic-output/chrome-version.txt"
+          fi
+      - name: Build the upstream web-renderer task dependency closure
+        run: |
+          set -euo pipefail
+          bunx turbo run make --filter=@remotion/web-renderer --concurrency=1 --no-update-notifier 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/build.log"
+      - name: Run unchanged actual 3D tests in all configured engines
+        working-directory: source/packages/web-renderer
+        run: |
+          set -euo pipefail
+          bunx vitest src/test/preserve-3d-depth.test.tsx --browser --run 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/3d-tests.log"
+      - name: Verify the source and test files remain unchanged
+        if: always()
+        run: |
+          set -euo pipefail
+          git diff --exit-code HEAD | tee "$GITHUB_WORKSPACE/diagnostic-output/source-diff.txt"
+          git status --short | tee "$GITHUB_WORKSPACE/diagnostic-output/source-status.txt"
+      - name: Retain original native pixels, GPU failure metadata and logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-      - name: Install
-        run: bun i
-      - name: Build
-        run: bun run build
+          name: 3d-pixels-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            diagnostic-output
+            source/packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+            source/packages/web-renderer/.vitest/attachments/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
