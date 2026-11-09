@@ -1,20 +1,16 @@
-name: Fork-only macOS and Linux 3D pixel diagnostic
+name: Fork-only matched macOS grid sampler counterfactual
 on:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: fork-macos-linux-3d-pixel-diagnostic
+  group: fork-macos-grid-sampler-counterfactual
   cancel-in-progress: false
 jobs:
   native-3d-pixels:
-    name: 3D native pixels on ${{ matrix.os }}
+    name: Matched macOS baseline and candidate
     if: github.repository == 'alec-watts/remotion' && github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     timeout-minutes: 30
     env:
       CI: 'true'
@@ -26,6 +22,12 @@ jobs:
         shell: bash
         working-directory: source
     steps:
+      - name: Check out reviewed diagnostic capsule
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: diagnostic
       - name: Check out exact public 3D source
         uses: actions/checkout@v6
         with:
@@ -35,7 +37,7 @@ jobs:
           path: source
       - uses: actions/setup-node@v6
         with:
-          node-version: 26
+          node-version: 26.13.0
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: 1.4.3
@@ -83,11 +85,19 @@ jobs:
         run: |
           set -euo pipefail
           bunx turbo run make --filter=@remotion/web-renderer --concurrency=1 --no-update-notifier 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/build.log"
-      - name: Run unchanged actual 3D tests in all configured engines
-        working-directory: source/packages/web-renderer
+      - name: Verify capsule hashes
         run: |
-          set -euo pipefail
-          bunx vitest src/test/preserve-3d-depth.test.tsx --browser --run 2>&1 | tee "$GITHUB_WORKSPACE/diagnostic-output/3d-tests.log"
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import hashlib,json,os
+          d=Path(os.environ['GITHUB_WORKSPACE'])/'diagnostic/diagnostics/3d-grid'
+          for name,digest in json.loads((d/'capsule-sha256.json').read_text()).items():
+            assert hashlib.sha256((d/name).read_bytes()).hexdigest()==digest,name
+          PYTHON
+      - name: Exact baseline and observer400/hash gate
+        run: python3 "$GITHUB_WORKSPACE/diagnostic/diagnostics/3d-grid/run-phase.py" baseline
+      - name: Reviewed sampler candidate with original positive PNGs
+        run: python3 "$GITHUB_WORKSPACE/diagnostic/diagnostics/3d-grid/run-phase.py" candidate
       - name: Verify the source and test files remain unchanged
         if: always()
         run: |
@@ -98,11 +108,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 3d-pixels-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: 3d-grid-macos-latest-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             diagnostic-output
             source/packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
             source/packages/web-renderer/.vitest/attachments/
+            source/packages/web-renderer/src/test/__screenshots__/3d-grid-diagnostic/
+            diagnostic/diagnostics/3d-grid/
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7

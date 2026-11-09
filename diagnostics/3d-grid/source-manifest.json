@@ -1,0 +1,21 @@
+{
+  "base": "e4ab550833e80c0ed9123c7320210cc070d4ef2c",
+  "shadersByteIdentical": true,
+  "files": [
+    {
+      "path": "packages/web-renderer/src/drawing/transform-in-3d.ts",
+      "baseSha256": "041571d9651aa56cc2da9a6d00c6bfe564e95050783bed45b521687cc267489c",
+      "candidateSha256": "91d3d9de1eb9cf576105f7ae77e11e25b50794fe9931882c7dcb5259eb916f21"
+    },
+    {
+      "path": "packages/web-renderer/src/drawing/handle-3d-transform.ts",
+      "baseSha256": "3cf4b2f9dbaf937fdd1b1fd7e5878340c51b688428d73ad4d51a25ed89dc9cfb",
+      "candidateSha256": "fe3f60198b0575b2581a5b566326556364368ad4b35ac297c06c4776dfead34a"
+    },
+    {
+      "path": "packages/web-renderer/src/drawing/process-node.ts",
+      "baseSha256": "0c5f7c92330c898f1e14a4dbc832c48ceddfa20656de5cc3fd5bc2a4c0712c43",
+      "candidateSha256": "698ecbc8a182cb785add57af6f53ffdec51f936f2b1180a71002bcb7c65f650a"
+    }
+  ]
+}
