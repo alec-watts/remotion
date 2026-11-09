@@ -1,38 +1,55 @@
-name: 'Copilot Coding agent setup'
+name: Internal mask sizing timing (fork only)
+run-name: Timing exact fc54141472 on macos-latest
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
+permissions:
+  contents: read
+env:
+  FORCE_COLOR: 1
+  TURBO_TELEMETRY_DISABLED: 1
+  TURBO_NO_UPDATE_NOTIFIER: 1
 jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+  timing:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: alec-watts/remotion
+          ref: fc54141472cd6d8de861393dc6e7ddf9f143dcc4
+          persist-credentials: false
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+          path: .diagnostic-control
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+          node-version: 26.13.0
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
-      - name: Cache turbo build setup
-        uses: actions/cache@v5
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
+      - name: Record actual host and runtime
+        run: |
+          mkdir -p validation/mask-math/hosted-timing
+          { sw_vers; uname -a; sysctl -n machdep.cpu.brand_string hw.memsize hw.logicalcpu; node --version; bun --version; git rev-parse HEAD; shasum -a 256 bun.lock; "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version; } > validation/mask-math/hosted-timing/host.txt
       - name: Install
-        run: bun i
-      - name: Build
-        run: bun run build
+        run: bun ci
+      - name: Install deps
+        run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Cache Turbo
+        uses: rharkor/caching-for-turbo@0abc2381e688c4d2832f0665a68a01c6e82f0d6c
+      - name: Original full Turbo closure with passive phase observer
+        run: python3 .diagnostic-control/.github/diagnostics/mask-math-observer.py "$PWD"
+      - name: Retain successful and partial-timeout phase evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mask-math-fc541-timing
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            validation/mask-math/hosted-timing/
+            packages/web-renderer/validation/mask-math/hosted-phases/
+            packages/web-renderer/.vitest/attachments/
