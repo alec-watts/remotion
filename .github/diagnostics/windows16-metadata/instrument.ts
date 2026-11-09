@@ -3,8 +3,11 @@ import {resolve} from 'node:path';
 const root = resolve(process.argv[2] ?? '.');
 const edit = (file: string, old: string, next: string) => {
  const path = resolve(root, file); const source = readFileSync(path, 'utf8');
- if(source.split(old).length !== 2) throw new Error(`Expected one observer marker in ${file}: ${old.slice(0,80)}`);
- writeFileSync(path, source.replace(old,next));
+ const newline = source.includes('\r\n') ? '\r\n' : '\n';
+ const marker = old.replace(/\r?\n/g, newline);
+ const replacement = next.replace(/\r?\n/g, newline);
+ if(source.split(marker).length !== 2) throw new Error(`Expected one observer marker in ${file}: ${old.slice(0,80)}`);
+ writeFileSync(path, source.replace(marker,replacement));
 };
 const renderer = 'packages/renderer/src/';
 const core = 'packages/core/src/delay-render.ts';
