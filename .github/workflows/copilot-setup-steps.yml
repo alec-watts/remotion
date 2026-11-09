@@ -1,38 +1,88 @@
-name: 'Copilot Coding agent setup'
+name: 'Fork-only Windows16 metadata diagnostic'
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
+permissions:
+  contents: read
+concurrency:
+  group: fork-windows16-metadata-diagnostic
+  cancel-in-progress: false
 jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+  windows16-metadata:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      FORCE_COLOR: '1'
+      TURBO_TELEMETRY_DISABLED: '1'
+      TURBO_NO_UPDATE_NOTIFIER: '1'
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: source
     steps:
-      - name: Checkout code
+      - name: Check out diagnostic scripts
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+          path: diagnostic
+      - name: Check out exact failed source merge
+        uses: actions/checkout@v6
         with:
-          node-version: 20
-      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+          repository: remotion-dev/remotion
+          ref: 0be9adbd3345d60927ef4b52df17e49f8a6ae3ba
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 16.20.2
+          architecture: x64
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
-      - name: Cache turbo build setup
-        uses: actions/cache@v5
+      - name: Record source and tools
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE/diagnostic-output" | Out-Null
+          git -C "$env:GITHUB_WORKSPACE/diagnostic" rev-parse HEAD | Out-File -Encoding utf8 "$env:GITHUB_WORKSPACE/diagnostic-output/diagnostic-commit.txt"
+          git rev-parse HEAD | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/source.txt"
+          node --version | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/node.txt"
+          bun --revision | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/bun.txt"
+          Write-Output "$env:ImageOS $env:ImageVersion $env:RUNNER_ARCH" | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/image.txt"
+      - name: Install locked dependencies
+        run: bun ci
+      - name: Apply reviewed observation-only instrumentation
+        run: |
+          bun "$env:GITHUB_WORKSPACE/diagnostic/.github/diagnostics/windows16-metadata/instrument.ts" .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff -- packages/core/src packages/renderer/src | Out-File -Encoding utf8 "$env:GITHUB_WORKSPACE/diagnostic-output/observer.patch"
+          Copy-Item "packages/renderer/src/windows-metadata-diagnostic.ts" "$env:GITHUB_WORKSPACE/diagnostic-output/helper-observer.ts"
+          Copy-Item "$env:GITHUB_WORKSPACE/diagnostic/.github/diagnostics/windows16-metadata/instrument.ts" "$env:GITHUB_WORKSPACE/diagnostic-output/instrument.ts"
+      - name: Build actual CLI and example dependencies
+        timeout-minutes: 30
+        run: |
+          bunx turbo run make --filter=@remotion/cli... --filter=@remotion/example... --concurrency=2 --no-update-notifier 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          bunx turbo run bundle --filter=@remotion/example --concurrency=2 --no-update-notifier 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/bundle.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Ensure the incumbent renderer browser before the warm CLI cohort
+        working-directory: source/packages/example
+        run: |
+          $started = Get-Date
+          bunx remotion browser ensure 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/browser-ensure.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "Matching the already-installed browser condition of the late reported failures; ensure elapsed $((Get-Date)-$started)." | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/browser-condition.txt"
+      - name: Run the unchanged original rendering cohort and limits
+        working-directory: source/packages/it-tests
+        env:
+          REMOTION_METADATA_DIAG_DIR: ${{ github.workspace }}/diagnostic-output/trace
+        run: |
+          bun run test 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/rendering-cohort.log"
+          exit $LASTEXITCODE
+      - name: Retain original diagnostic records
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-      - name: Install
-        run: bun i
-      - name: Build
-        run: bun run build
+          name: windows16-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostic-output
+          retention-days: 7
+          if-no-files-found: warn
