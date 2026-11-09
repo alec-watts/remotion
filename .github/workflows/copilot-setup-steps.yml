@@ -60,7 +60,7 @@ jobs:
       - name: Build actual CLI and example dependencies
         timeout-minutes: 30
         run: |
-          bunx turbo run make --filter=@remotion/cli... --filter=@remotion/example... --concurrency=2 --no-update-notifier 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/build.log"
+          bunx turbo run make --filter=@remotion/cli... --filter=@remotion/example... --filter=@remotion/media-parser... --concurrency=2 --no-update-notifier 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           bunx turbo run bundle --filter=@remotion/example --concurrency=2 --no-update-notifier 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/diagnostic-output/bundle.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
