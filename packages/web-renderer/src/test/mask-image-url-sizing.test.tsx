@@ -450,6 +450,11 @@ for (const transparent of [false, true]) {
 	}
 }
 
+const reportMaskTiming = (event: Record<string, unknown>) => {
+	// eslint-disable-next-line no-console
+	console.info(JSON.stringify(event));
+};
+
 // KINO-7771: Math sizes must resolve like independently authored literal sizes.
 // These comparisons isolate sizing from existing native raster-mask paint gaps.
 for (const {math, literal, transparent} of [
@@ -502,9 +507,23 @@ for (const {math, literal, transparent} of [
 
 		for (const scale of [1, 2]) {
 			test(`resolves CSS math mask sizes ${math.id} frame ${frame} at scale ${scale}`, async () => {
+				const traceProgress = math === maskMathExtendedMultipleTransparent;
+				const reportProgress = (stage: string, id: string) => {
+					if (traceProgress)
+						reportMaskTiming({maskProbe: stage, id, frame, scale});
+				};
+
+				reportProgress('viewport-start', math.id);
 				await page.viewport(1280, 720);
 				const rendered: Blob[] = [];
 				for (const composition of [math, literal]) {
+					for (const entry of performance.getEntriesByType('measure')) {
+						if (entry.name.startsWith('mask-probe:'))
+							performance.clearMeasures(entry.name);
+					}
+
+					reportProgress('render-start', composition.id);
+					const renderStarted = performance.now();
 					const result = await renderStillOnWeb({
 						composition,
 						frame,
@@ -513,18 +532,52 @@ for (const {math, literal, transparent} of [
 						licenseKey: 'free-license',
 						allowHtmlInCanvas: false,
 					});
+					const render = performance.now() - renderStarted;
+					const stages: Record<
+						string,
+						{count: number; total: number; max: number}
+					> = {};
+					for (const entry of performance.getEntriesByType('measure')) {
+						if (!entry.name.startsWith('mask-probe:')) continue;
+						stages[entry.name] ??= {count: 0, total: 0, max: 0};
+						const stage = stages[entry.name];
+						stage.count++;
+						stage.total += entry.duration;
+						stage.max = Math.max(stage.max, entry.duration);
+					}
+
 					const canvas = await result.canvas();
 					try {
+						reportProgress('encode-start', composition.id);
+						const encodeStarted = performance.now();
 						rendered.push(await result.blob({format: 'png'}));
+						reportMaskTiming({
+							maskProbe: 'render',
+							id: composition.id,
+							frame,
+							scale,
+							render,
+							stages,
+							encode: performance.now() - encodeStarted,
+						});
 					} finally {
 						canvas.width = 0;
 						canvas.height = 0;
 					}
 				}
 
-				expect(
-					(await countNativePixels(rendered[0], rendered[1])).mismatchedPixels,
-				).toBe(0);
+				reportProgress('compare-start', math.id);
+				const compareStarted = performance.now();
+				const comparison = await countNativePixels(rendered[0], rendered[1]);
+				reportMaskTiming({
+					maskProbe: 'compare',
+					id: math.id,
+					frame,
+					scale,
+					compare: performance.now() - compareStarted,
+					...comparison,
+				});
+				expect(comparison.mismatchedPixels).toBe(0);
 			});
 		}
 	}

@@ -19,6 +19,7 @@ export const createCssMask = async ({
 	height: number;
 	internalState: InternalState;
 }) => {
+	const assetsStarted = performance.now();
 	const images = await Promise.all(
 		maskImageInfo.layers.map(async (layer) => {
 			if (layer === null) return 'none';
@@ -30,6 +31,7 @@ export const createCssMask = async ({
 			return `url("${src}")`;
 		}),
 	);
+	performance.measure('mask-probe:mask-assets', {start: assetsStarted});
 	const {svg, target} = createNativeMaskSvg({
 		ownerDocument: document,
 		maskRect,
