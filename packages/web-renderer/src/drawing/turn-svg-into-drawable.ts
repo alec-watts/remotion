@@ -81,6 +81,7 @@ const drawableBySvg = new WeakMap<
 >();
 
 export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
+	const prepareStarted = performance.now();
 	const {fill, color, width, height, opacity} = getComputedStyle(svg);
 	const textElements = Array.from(
 		svg.querySelectorAll('text, tspan, textPath'),
@@ -290,7 +291,9 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 	}
 
 	const drawable = new Promise<HTMLImageElement>((resolve, reject) => {
+		performance.measure('mask-probe:serialize', {start: prepareStarted});
 		const image = new Image();
+		let loadStarted = 0;
 
 		const blob = new Blob([serializedSvg], {
 			type: 'image/svg+xml;charset=utf-8',
@@ -301,6 +304,7 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 			: URL.createObjectURL(blob);
 
 		image.onload = function () {
+			performance.measure('mask-probe:image-load', {start: loadStarted});
 			if (url !== null) URL.revokeObjectURL(url);
 			resolve(image);
 		};
@@ -311,12 +315,17 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		};
 
 		if (url !== null) {
+			loadStarted = performance.now();
 			image.src = url;
 		} else {
+			const textStarted = performance.now();
 			blob
 				.text()
 				.then((markup) => {
-					image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+					const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+					performance.measure('mask-probe:data-url', {start: textStarted});
+					loadStarted = performance.now();
+					image.src = dataUrl;
 				})
 				.catch(reject);
 		}
