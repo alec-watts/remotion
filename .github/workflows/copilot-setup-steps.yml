@@ -43,9 +43,15 @@ jobs:
           echo '1a0ad906c2233ace752cb7a9ae3a1926  '"$RUNNER_TEMP/oracle-chrome.zip" | md5sum -c -
           sha256sum "$RUNNER_TEMP/oracle-chrome.zip" > validation/font-oracle-linux/chrome-archive.sha256
           unzip -q "$RUNNER_TEMP/oracle-chrome.zip" -d "$RUNNER_TEMP/oracle-chrome"
-          sudo chown root:root "$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome_sandbox"
-          sudo chmod 4755 "$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome_sandbox"
-          echo "ORACLE_CHROME=$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome" >> "$GITHUB_ENV"
+          sudo mkdir -p /opt/remotion-oracle-chrome-156
+          sudo cp -a "$RUNNER_TEMP/oracle-chrome/chrome-linux64/." /opt/remotion-oracle-chrome-156/
+          sudo chown -R root:root /opt/remotion-oracle-chrome-156
+          sudo install -o root -g root -m 4755 /opt/remotion-oracle-chrome-156/chrome_sandbox /opt/remotion-oracle-chrome-156/chrome-sandbox
+          cmp "$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome" /opt/remotion-oracle-chrome-156/chrome
+          cmp /opt/remotion-oracle-chrome-156/chrome_sandbox /opt/remotion-oracle-chrome-156/chrome-sandbox
+          { sha256sum /opt/remotion-oracle-chrome-156/chrome*; stat -c '%u:%g %a %n' /opt/remotion-oracle-chrome-156 /opt/remotion-oracle-chrome-156/chrome /opt/remotion-oracle-chrome-156/chrome-sandbox; } > validation/font-oracle-linux/chrome-install.txt
+          { cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns; cat /etc/apparmor.d/chrome 2>/dev/null || true; } > validation/font-oracle-linux/apparmor-before.txt
+          echo 'ORACLE_CHROME=/opt/remotion-oracle-chrome-156/chrome' >> "$GITHUB_ENV"
       - name: Record host and runtime
         shell: bash
         run: |

@@ -74,6 +74,43 @@ assert '156.0.8078.79' in metadata['chrome'], metadata
 (proof / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
 results = {}
 try:
+    probe = r"""
+const {chromium} = require('playwright');
+const fs = require('node:fs');
+const path = require('node:path');
+const metadata = {};
+let server, browser;
+(async () => {
+ try {
+  server = await chromium.launchServer({
+   executablePath: process.env.ORACLE_CHROME, chromiumSandbox: true, headless: true,
+  });
+  metadata.args = server.process().spawnargs;
+  if (metadata.args.includes('--no-sandbox') || metadata.args.includes('--disable-setuid-sandbox')) throw Error('Sandbox-disabling argument');
+  browser = await chromium.connect(server.wsEndpoint());
+  metadata.version = browser.version();
+  const page = await browser.newPage();
+  await page.goto('chrome://sandbox');
+  metadata.status = await page.locator('body').innerText();
+  if (!/SUID sandbox\s+Yes/i.test(metadata.status) || !/Seccomp-BPF sandbox\s+Yes/i.test(metadata.status)) throw Error('Sandbox status is not enabled');
+ } finally {
+  try {
+   if (browser) await browser.close();
+  } finally {
+   try {
+    if (server) await server.close();
+   } finally {
+    fs.writeFileSync(path.join(process.env.ORACLE_PROOF, 'sandbox-status.json'), JSON.stringify(metadata, null, 2));
+   }
+  }
+ }
+})().catch(error => {console.error(error); process.exitCode = 1;});
+"""
+    probe_env = os.environ.copy()
+    probe_env['ORACLE_PROOF'] = str(proof)
+    with (proof / 'sandbox-probe.log').open('w') as log:
+        subprocess.run(['node', '-e', probe], cwd=root / 'packages/web-renderer',
+            env=probe_env, stdout=log, stderr=subprocess.STDOUT, timeout=60, check=True)
     for phase in ['original', 'corrected']:
         if phase == 'corrected':
             subprocess.run(['git', 'apply', '--check', str(patch)], cwd=root, check=True)
@@ -106,6 +143,10 @@ finally:
     restored = {name: sha((root / name).read_bytes()) for name in manifest_paths}
     assert restored == manifest, restored
     (proof / 'restore-proof.json').write_text(json.dumps(restored, indent=2) + '\n')
+    policy = Path('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')
+    after_policy = policy.read_text() if policy.exists() else 'unavailable\n'
+    (proof / 'apparmor-after.txt').write_text(after_policy)
+    assert (proof / 'apparmor-before.txt').read_text().splitlines()[0] == after_policy.strip()
 
 old = results['original']
 new = results['corrected']
