@@ -24,6 +24,9 @@ jobs:
       - name: Create diagnostic output
         shell: pwsh
         run: New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE/evidence" | Out-Null
+      - name: Enable Git long paths for upstream branch refs
+        shell: pwsh
+        run: git config --global core.longpaths true
       - uses: actions/checkout@v6
         with:
           repository: remotion-dev/remotion
