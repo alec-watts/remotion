@@ -1,38 +1,70 @@
-name: 'Copilot Coding agent setup'
+name: Internal generic serif oracle diagnostic (fork only)
+run-name: Linux serif oracle on exact 4ed07575b2
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
+permissions:
+  contents: read
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  TURBO_NO_UPDATE_NOTIFIER: 1
 jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+  oracle:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
+          repository: alec-watts/remotion
+          ref: 4ed07575b2ac7489f3510964ec590533d3ac8320
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
         with:
-          node-version: 20
-      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+          path: .diagnostic-control
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26.13.0
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
-      - name: Cache turbo build setup
-        uses: actions/cache@v5
+      - name: Own frozen dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Install standard browser system dependencies
+        working-directory: packages/web-renderer
+        run: bun --bun node_modules/playwright/cli.js install-deps chromium
+      - name: Pin official Chrome for Testing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation/font-oracle-linux
+          curl -fsSL https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.79/linux64/chrome-linux64.zip -o "$RUNNER_TEMP/oracle-chrome.zip"
+          echo '1a0ad906c2233ace752cb7a9ae3a1926  '"$RUNNER_TEMP/oracle-chrome.zip" | md5sum -c -
+          sha256sum "$RUNNER_TEMP/oracle-chrome.zip" > validation/font-oracle-linux/chrome-archive.sha256
+          unzip -q "$RUNNER_TEMP/oracle-chrome.zip" -d "$RUNNER_TEMP/oracle-chrome"
+          sudo chown root:root "$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome_sandbox"
+          sudo chmod 4755 "$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome_sandbox"
+          echo "ORACLE_CHROME=$RUNNER_TEMP/oracle-chrome/chrome-linux64/chrome" >> "$GITHUB_ENV"
+      - name: Record host and runtime
+        shell: bash
+        run: |
+          { uname -a; cat /etc/os-release; node --version; bun --revision; git rev-parse HEAD; sha256sum bun.lock; "$ORACLE_CHROME" --version; fc-list | sort; } > validation/font-oracle-linux/host.txt
+      - name: Build own runtime without cache replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun --bun node_modules/turbo/bin/turbo run make --filter=@remotion/web-renderer --force 2>&1 | tee validation/font-oracle-linux/build.log
+      - name: Original and corrected exact six-test Linux guards
+        run: python3 .diagnostic-control/.github/diagnostics/svg-font-oracle-linux.py "$PWD" "$PWD/.diagnostic-control"
+      - name: Retain success, failure and restoration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-      - name: Install
-        run: bun i
-      - name: Build
-        run: bun run build
+          name: svg-serif-oracle-4ed-linux
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            validation/font-oracle-linux/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/
