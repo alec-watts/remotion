@@ -1,0 +1,29 @@
+{
+  "source": "11dd229a8eacc2bc400e0e938cc969d3a9fd3f64",
+  "hostedMerge": "54b33d97721f1f0ca88ad42e533c9fe319c8867e",
+  "tree": "afda10b1f802cc20f7e655281b24bc31fce1e3fb",
+  "target": "resolves CSS math mask sizes mask-math-extended-math-transparent-multiple frame 0",
+  "expected": {
+    "chromium": {
+      "stages": 42,
+      "blobs": 6
+    },
+    "webkit": {
+      "stages": 42,
+      "blobs": 6
+    },
+    "firefox": {
+      "stages": 36,
+      "blobs": 4
+    }
+  },
+  "originalHashes": {
+    "packages/web-renderer/src/test/mask-image-url-sizing.test.tsx": "839ce208562a610bfb7749b6b5c297ee2cb6150039ef2b21edde9f7880ecc703",
+    "packages/web-renderer/vitest.config.ts": "5f6cf3023b83db87eadda7876fc18f4ef3196f2f61bac27b9f44b8f6f2b27191",
+    "packages/web-renderer/src/test/native-reference.tsx": "3c4dc0ba8a1d97a752c39de22da7a7ac97be401ba3cd6404f682323b2f0e4ebb",
+    "packages/web-renderer/src/test/fixtures/mask-image-url-math-size.tsx": "aba9df4ba95b0c9242feefd3686987bb6cfb8223743481c1ac49a8add555eb0e",
+    "bun.lock": "ae367c963f7125b17246f130210f16849ab3b796aa74848d2b8233a239b170d6",
+    "package.json": "69f0cea28dc75286a21f99f160ff9a42345ea62f1cb118f4ae7d732ed8d5cab6",
+    "turbo.json": "34182e6236060dbea0aab8d71a6b5ff5be7181701fd38a8d0f3a0bd8f23a283e"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "observed-config.ts": "b529d3cb59f84b291d6cf82a70c7d5f28588cc8b57ad4ff5ce54897eb532de37",
+  "order-reporter.ts": "b1ba6bf886c2f0e818c6db39a8be10a01f57dd209dc728de7aa2ee0fef25b7dc",
+  "summarize.py": "b2fc6baea8bb6248507873059f9bf78a6e34ad43d6d7641971d1545fad029472",
+  "README.md": "0beea913109162cb82093e0e0da33f9ab2893dc17baaa0ffd5b839ded7edbd4c",
+  "manifest.json": "3e2566910c9ec22f024e1b17cf466596358cf18c698821ddecf149a09a478407",
+  "verify.py": "c15c4222060ee26cff12e6670adcd60b38c352219420984e59903d0cc5064c17",
+  "instrument.py": "d8f9f046563bc4b403622f800effab8a028d4e4ae7b17fee488c85784b156278",
+  "observed-test.tsx": "0f8eacd84c4396ca7cf62d97313bb75cd301530ffe41a25a4a126eb06d3eeb9f",
+  "../../workflows/copilot-setup-steps.yml": "dc0917d9ea1036a88471fa5f3dbb5e2d16cd478be2ea31ca3aa404ac29207e53"
+}

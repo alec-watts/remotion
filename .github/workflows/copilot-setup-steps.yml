@@ -1,38 +1,79 @@
-name: 'Copilot Coding agent setup'
+name: Mask timeout workload observation
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
+permissions:
+  contents: read
 jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+  observe:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      FORCE_COLOR: '1'
+      TURBO_TELEMETRY_DISABLED: '1'
+      TURBO_NO_UPDATE_NOTIFIER: '1'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          ref: ${{ github.sha }}
+          path: capsule
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          node-version: 20
-      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+          repository: remotion-dev/remotion
+          ref: 54b33d97721f1f0ca88ad42e533c9fe319c8867e
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 26.13.0
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
-      - name: Cache turbo build setup
-        uses: actions/cache@v5
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
+      - name: Verify immutable source and actual tools
+        working-directory: source
+        run: |
+          mkdir -p ../evidence
+          test "$(git rev-parse HEAD)" = 54b33d97721f1f0ca88ad42e533c9fe319c8867e
+          test "$(git rev-parse 'HEAD^{tree}')" = afda10b1f802cc20f7e655281b24bc31fce1e3fb
+          test "$(node --version)" = v26.13.0
+          test "$(bun --version)" = 1.4.3
+          { git rev-parse HEAD 'HEAD^{tree}'; sw_vers; uname -m; node --version; bun --version; /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' '/Applications/Google Chrome.app/Contents/Info.plist'; } > ../evidence/platform.txt
+          python3 ../capsule/.github/diagnostics/ci-mask-timeout/verify.py ../capsule/.github/diagnostics/ci-mask-timeout
       - name: Install
-        run: bun i
-      - name: Build
-        run: bun run build
+        working-directory: source
+        run: bun ci
+      - name: Install deps
+        working-directory: source/packages/web-renderer
+        run: bunx playwright install --with-deps
+      - name: Cache Turbo
+        uses: rharkor/caching-for-turbo@0abc2381e688c4d2832f0665a68a01c6e82f0d6c
+      - name: Apply passive observer
+        run: |
+          python3 capsule/.github/diagnostics/ci-mask-timeout/instrument.py source evidence
+          git -C source diff > evidence/observer.patch
+      - name: Test web renderer
+        working-directory: source
+        run: |
+          set -o pipefail
+          bun run testwebrenderer 2>&1 | tee ../evidence/tests.log
+      - name: Test Browser Studio
+        working-directory: source
+        run: bun run testbrowserstudio
+      - name: Restore original source
+        if: always()
+        run: |
+          if test -f evidence/observer-state.json; then python3 capsule/.github/diagnostics/ci-mask-timeout/instrument.py source evidence --restore; fi
+      - name: Summarize observations
+        if: always()
+        run: python3 capsule/.github/diagnostics/ci-mask-timeout/summarize.py evidence
+      - name: Retain original observations on every outcome
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mask-timeout-workload-observation
+          path: |
+            evidence
+            source/packages/web-renderer/src/test/__screenshots__/native-pixel-failures
+          retention-days: 7
+          if-no-files-found: warn
