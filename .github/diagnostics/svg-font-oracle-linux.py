@@ -92,7 +92,10 @@ let server, browser;
   const page = await browser.newPage();
   await page.goto('chrome://sandbox');
   metadata.status = await page.locator('body').innerText();
-  if (!/SUID sandbox\s+Yes/i.test(metadata.status) || !/Seccomp-BPF sandbox\s+Yes/i.test(metadata.status)) throw Error('Sandbox status is not enabled');
+  if (![
+   /Layer 1 Sandbox\s+SUID/i, /PID namespaces\s+Yes/i,
+   /Network namespaces\s+Yes/i, /Seccomp-BPF sandbox\s+Yes/i,
+  ].every(check => check.test(metadata.status))) throw Error('Sandbox status is not enabled');
  } finally {
   try {
    if (browser) await browser.close();
