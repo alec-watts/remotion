@@ -1,0 +1,51 @@
+name: Solid context cleanup review
+on:
+  push:
+    branches: [codex/12934-solid-context-review]
+permissions:
+  contents: read
+jobs:
+  node-regressions:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify unpatched Solid context source
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = "27f4c008d1b1f6d1a2dafe614bdc841db1160cb5c89406a1c142ebde69144f6b"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/player
+      - name: Lint core and Player
+        run: |
+          cd packages/core
+          bun run lint
+          cd ../player
+          bun run lint
+      - name: Verify production source after build
+        run: git diff --exit-code -- packages/core/src packages/player/src
+      - name: Run existing ownership controls and new context regressions
+        run: cd packages/player && mkdir -p test-results && bun test src/test/solid-owned-reporting.test.tsx --reporter=junit --reporter-outfile=./test-results/review-contexts.xml
+      - name: Full Player and core tests
+        run: |
+          cd packages/player
+          bun test src
+          cd ../core
+          bun test src
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: solid-context-cleanup-baseline
+          path: packages/player/test-results/
+          if-no-files-found: error
+          retention-days: 7
