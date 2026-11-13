@@ -1,6 +1,7 @@
 import {parseLengthPercentage, splitAtTopLevel} from './background-image-rect';
 import type {LinearGradientInfo} from './parse-linear-gradient';
 import {parseLinearGradient} from './parse-linear-gradient';
+import type {SvgResourceMaskImageInfo} from './svg-mask';
 
 type LinearGradientMaskImageInfo = {
 	type: 'linear-gradient';
@@ -27,6 +28,7 @@ type MaskLayerStyle = Pick<
 	| 'maskMode'
 >;
 export type MaskImageInfo =
+	| SvgResourceMaskImageInfo
 	| SingleMaskImageInfo
 	| {
 			type: 'layers';

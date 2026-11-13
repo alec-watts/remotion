@@ -7,6 +7,7 @@ import {
 	parseMaskImage,
 } from './mask-image';
 import {parseTransformOrigin} from './parse-transform-origin';
+import {getSvgResourceMask} from './svg-mask';
 
 /**
  * CSS filters that affect children and require precompositing.
@@ -280,7 +281,8 @@ export const calculateTransforms = ({
 			opacity = parseFloat(computedStyle.opacity);
 			const maskImageValue = getMaskImageValue(computedStyle);
 			maskImageInfo = maskImageValue
-				? parseMaskImage(maskImageValue, computedStyle)
+				? (getSvgResourceMask(maskImageValue, parent, computedStyle) ??
+					parseMaskImage(maskImageValue, computedStyle))
 				: null;
 
 			svgClip = getSvgClipForPrecompositing(computedStyle.clipPath, parent);

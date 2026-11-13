@@ -276,6 +276,11 @@ const drawableBySvg = new WeakMap<
 	}
 >();
 
+const cssFontStylesBySvg = new WeakMap<
+	SVGSVGElement,
+	{key: string; promise: Promise<string>}
+>();
+
 export const getSvgFontSnapshot = (svg: SVGSVGElement) => {
 	const textElements = getSvgTextElements(svg);
 	const referencedTemplates = textElements.length
@@ -416,6 +421,7 @@ export const getSvgFontSnapshot = (svg: SVGSVGElement) => {
 	const authoredEmpty =
 		authoredElements?.map((element) => element.matches(':empty')) ?? null;
 	return {
+		ownerSvg: svg,
 		textStyles,
 		authoredStyles,
 		authoredMedia,
@@ -432,6 +438,7 @@ export const turnSvgIntoDrawable = (
 ) => {
 	const {fill, color, width, height, opacity} = getComputedStyle(svg);
 	const {
+		ownerSvg,
 		textStyles,
 		authoredStyles,
 		authoredMedia,
@@ -649,14 +656,24 @@ export const turnSvgIntoDrawable = (
 		return cached.drawable;
 	}
 
-	const cssFontStyle = Promise.all(
-		cssFontRules.map(async (rule) => {
-			if (rule.url === null) return rule.css;
-			const fontData = await NoReactInternals.fetchFontData(rule.url);
-			const src = `url("data:application/octet-stream;base64,${getBase64(fontData)}")`;
-			return `@font-face{${rule.declarations.map(([name, value]) => `${name}:${name === 'src' ? src : value}`).join(';')}}`;
-		}),
-	).then((rules) => rules.join(''));
+	const cssFontKey = JSON.stringify(cssFontRules);
+	const cachedFontStyle = cssFontStylesBySvg.get(ownerSvg);
+	const cssFontStyle =
+		cachedFontStyle?.key === cssFontKey
+			? cachedFontStyle.promise
+			: Promise.all(
+					cssFontRules.map(async (rule) => {
+						if (rule.url === null) return rule.css;
+						const fontData = await NoReactInternals.fetchFontData(rule.url);
+						const src = `url("data:application/octet-stream;base64,${getBase64(fontData)}")`;
+						return `@font-face{${rule.declarations.map(([name, value]) => `${name}:${name === 'src' ? src : value}`).join(';')}}`;
+					}),
+				).then((rules) => rules.join(''));
+	cssFontStylesBySvg.set(ownerSvg, {key: cssFontKey, promise: cssFontStyle});
+	cssFontStyle.catch(() => {
+		if (cssFontStylesBySvg.get(ownerSvg)?.promise === cssFontStyle)
+			cssFontStylesBySvg.delete(ownerSvg);
+	});
 	const drawable = new Promise<HTMLImageElement>((resolve, reject) => {
 		const image = new Image();
 		let url: string | null = null;

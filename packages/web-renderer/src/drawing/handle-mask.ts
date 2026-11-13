@@ -6,6 +6,7 @@ import type {MaskImageInfo} from './mask-image';
 import {createCanvasGradient} from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
 import {createSvgClipMask} from './svg-clip-mask';
+import {createSvgResourceMask} from './svg-mask';
 
 export const getPrecomposeRectForMask = (element: HTMLElement | SVGElement) => {
 	const boundingRect = getBiggestBoundingClientRect(element);
@@ -28,6 +29,31 @@ export const handleMask = async ({
 	scale: number;
 	internalState: InternalState;
 }) => {
+	if (maskImageInfo.type === 'svg-resource') {
+		const image = await createSvgResourceMask(maskImageInfo);
+		const mask = new OffscreenCanvas(
+			tempContext.canvas.width,
+			tempContext.canvas.height,
+		).getContext('2d');
+		if (!mask) throw new Error('Could not create SVG mask context');
+		try {
+			mask.drawImage(
+				image,
+				(maskRect.left - precomposeRect.left) * scale,
+				(maskRect.top - precomposeRect.top) * scale,
+				maskRect.width * scale,
+				maskRect.height * scale,
+			);
+			tempContext.globalCompositeOperation = 'destination-in';
+			tempContext.drawImage(mask.canvas, 0, 0);
+		} finally {
+			mask.canvas.width = 0;
+			mask.canvas.height = 0;
+		}
+
+		return;
+	}
+
 	if (maskImageInfo.type === 'layers') {
 		const groupImage = await createCssMask({
 			maskImageInfo,
