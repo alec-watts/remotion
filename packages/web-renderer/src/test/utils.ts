@@ -1,4 +1,5 @@
 import type {ComponentType} from 'react';
+import {Internals} from 'remotion';
 import {expect, onTestFinished} from 'vitest';
 import {page} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -17,7 +18,13 @@ export const testImage = async ({
 }) => {
 	const phase = (name: string) => {
 		if (testId.startsWith('issue-10676-svg-gradient-stroke')) {
-			console.info('[gradient-image-phase]', testId, name, performance.now());
+			Internals.Log.info(
+				{logLevel: 'info', tag: 'gradient-diagnostic'},
+				'[gradient-image-phase]',
+				testId,
+				name,
+				performance.now(),
+			);
 		}
 	};
 

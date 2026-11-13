@@ -1,3 +1,4 @@
+import {Internals} from 'remotion';
 import {test} from 'vitest';
 import {page} from 'vitest/browser';
 import {renderMediaOnWeb} from '../render-media-on-web';
@@ -9,7 +10,8 @@ import {testImage} from './utils';
 test('preserves SVG gradient strokes in still and media renders', async (t) => {
 	const started = performance.now();
 	const phase = (name: string) => {
-		console.info(
+		Internals.Log.info(
+			{logLevel: 'info', tag: 'gradient-diagnostic'},
 			'[gradient-phase]',
 			t.task.file.projectName,
 			name,
