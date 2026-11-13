@@ -45,8 +45,8 @@ const ShadowScene = ({
 	variant,
 	preserve,
 }: {
-	variant: keyof typeof geometry;
-	preserve: boolean;
+	readonly variant: keyof typeof geometry;
+	readonly preserve: boolean;
 }) => {
 	const frame = useCurrentFrame();
 	const shadow = (
