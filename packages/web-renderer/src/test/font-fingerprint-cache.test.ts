@@ -43,7 +43,7 @@ const fixture = () => {
 	const fonts = Object.assign(new EventTarget(), {
 		status: 'loaded',
 		ready: Promise.resolve(),
-		check: () => true,
+		check: (): boolean => true,
 		[Symbol.iterator]: () => faces[Symbol.iterator](),
 		add: (face: FontFace) => {
 			faces.add(face);
