@@ -13,7 +13,6 @@ import {
 } from './drawing/get-pretransform-rect';
 import {getPrecomposeRectFor3DTransform} from './drawing/handle-3d-transform';
 import {getElementsNeedingIsolation} from './drawing/isolation';
-import {roundToExpandRect} from './drawing/round-to-expand-rect';
 import {getBiggestBoundingClientRect} from './get-biggest-bounding-client-rect';
 import type {InternalState} from './internal-state';
 import {createTreeWalkerCleanupAfterChildren} from './tree-walker-cleanup-after-children';
@@ -286,7 +285,9 @@ const planPreserve3DPlanes = ({
 
 				const projection = projectedPlane(
 					transforms.totalMatrix,
-					roundToExpandRect(paintRect),
+					// Capture rounding can extend transparent margins across another
+					// plane. Use paint geometry for ordering, not the raster surface.
+					paintRect,
 					parentRect,
 				);
 				if (!projection) {
