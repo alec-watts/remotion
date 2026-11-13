@@ -14,10 +14,10 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Verify unpatched review source
+      - name: Verify candidate review source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "1efc1735dbfb039d612de22ab0d6905ccbe1ada90d4f95c62d4a796c123f58b6"
+          test "$actual" = "26fc7b7682a62073959124ced4aea2b4abcbb19aafc937d40320d1fb35b44683"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -29,11 +29,17 @@ jobs:
       - name: Verify production source after build
         run: git diff --exit-code -- packages/core/src packages/player/src
       - name: Run existing ownership controls and new context regressions
-        run: cd packages/player && bun test src/test/async-render-error.test.tsx src/test/custom-renderer-cancellation.test.tsx --reporter=junit --reporter-outfile=./test-results/review-contexts.xml
+        run: cd packages/player && mkdir -p test-results && bun test src/test/async-render-error.test.tsx src/test/custom-renderer-cancellation.test.tsx --reporter=junit --reporter-outfile=./test-results/review-contexts.xml
+      - name: Full Player and core tests
+        run: |
+          cd packages/player
+          bun test src
+          cd ../core
+          bun test src
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: player-context-review-baseline
+          name: player-context-review-candidate
           path: packages/player/test-results/
           if-no-files-found: error
           retention-days: 7
