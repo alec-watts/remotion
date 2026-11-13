@@ -34,6 +34,7 @@ jobs:
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/compose.ts > packages/web-renderer/src/compose.ts
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/drawing/process-node.ts > packages/web-renderer/src/drawing/process-node.ts
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts > packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts
+          git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/get-biggest-bounding-client-rect.ts > packages/web-renderer/src/get-biggest-bounding-client-rect.ts
           # This candidate-only unit suite exercises an API absent from the baseline.
           # Keep the shared native comparison fixture and every pixel assertion intact.
           rm packages/web-renderer/src/test/filter-capture-viewport.test.ts
@@ -41,7 +42,7 @@ jobs:
       - run: cd packages/web-renderer && bunx playwright install --with-deps
       - run: bunx turbo run make --filter=@remotion/web-renderer
       - name: Compare native pixels without tolerance
-        run: cd packages/web-renderer && bunx vitest src/test/affine-filter-input-review.test.tsx src/test/affine-filter-stress.test.tsx src/test/backface-native.test.tsx --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/affine.json
+        run: cd packages/web-renderer && bunx vitest src/test/affine-filter-input-review.test.tsx src/test/affine-filter-stress.test.tsx src/test/backface-native.test.tsx src/test/outline.test.tsx src/test/inline-scale.test.tsx --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/affine.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
