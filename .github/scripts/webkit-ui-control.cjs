@@ -26,6 +26,39 @@ fs.mkdirSync(output, {recursive: true});
 		const delegate = implementation.delegate;
 		assert.equal(delegate.constructor.name, '_WKPage');
 		const session = delegate._pageProxySession;
+		const readNativeHitTarget = () =>
+			page.evaluate(() => {
+				const host = document.getElementById('host');
+				const plane = host.firstElementChild.firstElementChild;
+				const rect = plane.getBoundingClientRect();
+				const x = rect.left + rect.width / 2;
+				const y = rect.top + rect.height / 2;
+				const hit = document.elementFromPoint(x, y);
+				const style = getComputedStyle(plane);
+				const matrix = new DOMMatrixReadOnly(style.transform);
+				return {
+					x,
+					y,
+					bounds: {
+						left: rect.left,
+						top: rect.top,
+						width: rect.width,
+						height: rect.height,
+					},
+					hitIsPlaneOrDescendant: hit !== null && plane.contains(hit),
+					hitKind:
+						hit === plane
+							? 'plane'
+							: hit && plane.contains(hit)
+								? 'descendant'
+								: (hit?.tagName ?? null),
+					backfaceVisibility: style.backfaceVisibility,
+					parentTransformStyle: getComputedStyle(plane.parentElement)
+						.transformStyle,
+					forwardM33: matrix.m33,
+					inverseM33: matrix.inverse().m33,
+				};
+			});
 		for (const item of input.cases) {
 			assert.equal(
 				crypto.createHash('sha256').update(item.markup).digest('hex'),
@@ -44,6 +77,7 @@ fs.mkdirSync(output, {recursive: true});
 					),
 			);
 			const before = await page.locator('#host').innerHTML();
+			const hitBefore = await readNativeHitTarget();
 			const directory = path.join(output, `${item.variant}-${item.frame}`);
 			fs.mkdirSync(directory, {recursive: true});
 			await page.screenshot({
@@ -74,8 +108,12 @@ fs.mkdirSync(output, {recursive: true});
 				scale: 'css',
 			});
 			assert.equal(await page.locator('#host').innerHTML(), before);
+			const hitAfter = await readNativeHitTarget();
+			assert.deepEqual(hitAfter, hitBefore);
 			results.push({
 				...item,
+				hitBefore,
+				hitAfter,
 				browserVersion: browser.version(),
 				userAgent: await page.evaluate(() => navigator.userAgent),
 			});
