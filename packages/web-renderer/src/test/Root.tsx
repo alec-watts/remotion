@@ -292,6 +292,7 @@ import {
 	svgRegisteredCdataFont,
 } from './fixtures/svg-registered-cdata-font';
 import {svgRootOpacity} from './fixtures/svg-root-opacity';
+import {svgTitledDataFont} from './fixtures/svg-titled-data-font';
 import {
 	svgTitledFontMediaCache,
 	svgTitledFontCarrier,
@@ -541,6 +542,13 @@ export const Root: React.FC = () => {
 			)}
 			<Composition {...svgCssDataFont} />
 			<Composition {...svgCssImportFont} />
+			{[false, true].flatMap((firstRoboto) =>
+				[false, true].map((literal) => {
+					const fixture = svgTitledDataFont(firstRoboto, literal);
+					return <Composition key={fixture.id} {...fixture} />;
+				}),
+			)}
+
 			{svgAdoptedFontGroups.map((group) => (
 				<Composition key={group} {...svgAdoptedFont({group, literal: false})} />
 			))}

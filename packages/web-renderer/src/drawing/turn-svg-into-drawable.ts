@@ -199,6 +199,15 @@ const getCssFontRules = (svg: SVGSVGElement, fontFamilies: Set<string>) => {
 				);
 			if (!source) continue;
 			const sourceUrl = source[1] ?? source[2] ?? source[3];
+			// A self-contained local face already belongs to its titled sheet.
+			// Hoisting it into other carriers promotes inactive sets into active ones.
+			if (
+				/^data:/i.test(sourceUrl) &&
+				sheet.ownerNode instanceof ownerWindow.SVGStyleElement &&
+				svg.contains(sheet.ownerNode) &&
+				sheet.ownerNode.getAttribute('title')?.trim()
+			)
+				continue;
 			let url: string | null = null;
 			if (!/^data:/i.test(sourceUrl)) {
 				let resolved: URL;
