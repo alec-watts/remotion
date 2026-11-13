@@ -4,6 +4,7 @@ import {Composition, Folder} from 'remotion';
 import {accumulatedTransforms} from './fixtures/accumulated-transforms';
 import {affineFilterInputReviewPreview} from './fixtures/affine-filter-input-review';
 import {makeScaledShadowFixture} from './fixtures/affine-filter-stress';
+import {backfaceNative, backfaceNativeCases} from './fixtures/backface-native';
 import {backfaceVisibilityMask} from './fixtures/backface-visibility-mask';
 import {backgroundBlendMode} from './fixtures/background-blend-mode';
 import {backgroundColor} from './fixtures/background-color';
@@ -676,6 +677,9 @@ export const Root: React.FC = () => {
 			)}
 			<Composition {...affineFilterInputReviewPreview} />
 			<Composition {...makeScaledShadowFixture('rounded', false)} />
+			{backfaceNativeCases.map((variant) => (
+				<Composition key={variant} {...backfaceNative(variant)} />
+			))}
 		</>
 	);
 };
