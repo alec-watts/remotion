@@ -15,6 +15,10 @@ export const backfaceNativeCases = [
 	'perspective-front',
 	'matrix-front',
 	'matrix-back',
+	'perspective-front-parent-3d',
+	'perspective-front-layer',
+	'back-hidden-layer',
+	'back-hidden-parent-3d',
 ] as const;
 
 export const backfaceNative = (
@@ -26,6 +30,7 @@ export const backfaceNative = (
 	let computed: Record<string, string> = {};
 	const Component = () => {
 		const frame = useCurrentFrame();
+		const perspectiveFront = variant.startsWith('perspective-front');
 		const nested =
 			variant === 'nested-double-turn' ||
 			variant === 'flat-double-turn' ||
@@ -35,7 +40,7 @@ export const backfaceNative = (
 				? 'matrix3d(1,0,-1,0, 0,1,0,0, 2,0,-1,0, 0,0,0,1)'
 				: variant === 'matrix-back'
 					? 'matrix3d(1,0,1,0, 0,1,0,0, 2,0,1,0, 0,0,0,1)'
-					: variant === 'perspective-front'
+					: perspectiveFront
 						? 'perspective(200px) translateX(-100px) rotateY(100deg)'
 						: variant === 'reflect-x'
 							? 'scaleX(-1)'
@@ -46,14 +51,14 @@ export const backfaceNative = (
 									: 'rotateY(180deg)';
 		const style: CSSProperties = {
 			position: 'absolute',
-			left: (variant === 'perspective-front' ? 200 : 100) + frame,
+			left: (perspectiveFront ? 200 : 100) + frame,
 			top: 100,
 			width: 100,
 			height: 100,
 			backgroundColor: nested ? 'red' : 'blue',
 			transform,
-			transformOrigin:
-				variant === 'perspective-front' ? '0px 0px' : '50px 50px',
+			transformOrigin: perspectiveFront ? '0px 0px' : '50px 50px',
+			willChange: variant.endsWith('-layer') ? 'transform' : 'auto',
 			backfaceVisibility:
 				variant === 'back-visible' || nested
 					? variant === 'hidden-parent-front-child'
@@ -71,6 +76,9 @@ export const backfaceNative = (
 				style={{
 					backgroundColor: 'white',
 					perspective: variant === 'back-hidden-perspective' ? '500px' : 'none',
+					transformStyle: variant.endsWith('-parent-3d')
+						? 'preserve-3d'
+						: 'flat',
 				}}
 			>
 				<div
@@ -94,6 +102,14 @@ export const backfaceNative = (
 						const matrix = new DOMMatrixReadOnly(style.transform);
 						computed.forwardM33 = String(matrix.m33);
 						computed.inverseM33 = String(matrix.inverse().m33);
+						const bounds = node.getBoundingClientRect();
+						const parentBounds = node.parentElement!.getBoundingClientRect();
+						computed.boundsRelativeToParent = JSON.stringify({
+							left: bounds.left - parentBounds.left,
+							top: bounds.top - parentBounds.top,
+							width: bounds.width,
+							height: bounds.height,
+						});
 						ancestors = [];
 						for (
 							let parent = node.parentElement;
