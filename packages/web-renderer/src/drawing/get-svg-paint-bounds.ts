@@ -11,7 +11,9 @@ export const getSvgPaintBounds = (svg: SVGSVGElement): DOMPoint[] | null => {
 		rootStyle.backgroundImage !== 'none' ||
 		rootStyle.maskImage !== 'none' ||
 		rootStyle.filter !== 'none' ||
-		svg.querySelector('foreignObject, use')
+		// Text geometry can be smaller than the rasterized glyph ink.
+		// Retain the viewport until ink-safe bounds are available.
+		svg.querySelector('foreignObject, use, text')
 	)
 		return null;
 	const points: DOMPoint[] = [];

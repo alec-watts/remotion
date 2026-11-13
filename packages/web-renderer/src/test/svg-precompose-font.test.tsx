@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {getSvgPaintBounds} from '../drawing/get-svg-paint-bounds';
 import '../symbol-dispose';
 import {makeInternalState} from '../internal-state';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -114,5 +115,18 @@ test('refreshes font snapshots between captures of the same SVG', async () => {
 	} finally {
 		host.remove();
 		style.remove();
+	}
+});
+
+// Glyph ink in a serialized SVG need not fit the mounted text's getBBox().
+test('retains conservative viewport bounds for blended SVG text', () => {
+	const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+	svg.style.mixBlendMode = 'multiply';
+	svg.innerHTML = '<text x="12" y="62">SVG font capture</text>';
+	document.body.appendChild(svg);
+	try {
+		expect(getSvgPaintBounds(svg)).toBeNull();
+	} finally {
+		svg.remove();
 	}
 });
