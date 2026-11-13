@@ -24,6 +24,7 @@ test.for(['fractional', 'rounded', 'blurred'] as const)(
 					experimental3DRendering: true,
 				})
 			).blob({format: 'png'});
+
 		const plain = await render();
 		const path = `test/__results__/filter-stage-probe/${server.browser}/${variant}`;
 		const traced = await traceAffineFilter(path, render);
