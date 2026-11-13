@@ -1,0 +1,56 @@
+name: Filter local-dependency qualification
+on:
+  push:
+    branches: [codex/12686-filter-local-dependencies]
+permissions:
+  contents: read
+jobs:
+  native-pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify candidate package inputs
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = "7a62ee9a21027d5df3414d0c8b5203d50ab765f68779fd15cf3e21769e1fa010"
+      - name: Fetch the public producer for both source audits
+        run: git fetch --no-tags --depth=1 origin a5f19eb436a13e1e752adac13cf7aa101f840291
+      - name: Restore only public planning and capture for the matched baseline
+        if: matrix.producer == 'baseline'
+        run: |
+          git restore --source=a5f19eb436a13e1e752adac13cf7aa101f840291 -- packages/web-renderer/src/compose.ts packages/web-renderer/src/drawing/process-node.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Record producer source differences
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          git diff --name-only > packages/web-renderer/test/__results__/producer-source-differences.txt
+          git diff --exit-code a5f19eb436a13e1e752adac13cf7aa101f840291 -- packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/take-screenshot.ts
+      - name: Compare all original affine and stress pixels without tolerance
+        run: cd packages/web-renderer && bunx vitest src/test/filter-capture-source-rect.test.ts src/test/filter-capture-viewport.test.ts src/test/affine-filter-input-review.test.tsx src/test/affine-filter-stress.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/local-dependencies.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filter-local-dependencies-${{ matrix.producer }}-${{ github.run_attempt }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
