@@ -276,6 +276,10 @@ import {
 	registeredCdataWrappers,
 	svgRegisteredCdataFont,
 } from './fixtures/svg-registered-cdata-font';
+import {
+	svgRootMaskGeometry,
+	svgRootMaskModes,
+} from './fixtures/svg-root-mask-geometry';
 import {svgRootOpacity} from './fixtures/svg-root-opacity';
 import {svgUrlNonzeroViewbox} from './fixtures/svg-url-nonzero-viewbox';
 import {svgXmlMetadataModes, svgXmlMetadata} from './fixtures/svg-xml-metadata';
@@ -454,6 +458,16 @@ export const Root: React.FC = () => {
 					{...svgLayerFontIdentity({mode, literal: false})}
 				/>
 			))}
+			<Folder name="SVG-root-mask-geometry">
+				{svgRootMaskModes.flatMap((mode) =>
+					[1, 1.5].map((scale) => (
+						<Composition
+							key={`${mode}-${scale}`}
+							{...svgRootMaskGeometry(mode, scale)}
+						/>
+					)),
+				)}
+			</Folder>
 			{svgDefinitionModes.map((mode) => (
 				<Composition
 					key={mode}
