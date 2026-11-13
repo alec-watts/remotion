@@ -1,0 +1,63 @@
+name: Owned resource cleanup qualification
+on:
+  push:
+    branches: [codex/12934-owned-resource-cleanup]
+permissions:
+  contents: read
+jobs:
+  readiness:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify candidate inputs and restore only the baseline producer
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = f93bd31253483942d55805050a008b6a5fb7198b602461661daf4513bab3d711
+          git fetch --no-tags --depth=1 origin 690fefcf3285c299c71f4430a56ab44d296bd6cc
+          if test "$ARM" = baseline; then
+            git restore --source=690fefcf3285c299c71f4430a56ab44d296bd6cc -- packages/core/src/internals.ts packages/media-utils/src/use-windowed-audio-data.ts packages/transitions/src/html-in-canvas-presentation.tsx
+          fi
+          mkdir -p qualification-results/source
+          git rev-parse HEAD > qualification-results/source/head.txt
+          git diff --name-only > qualification-results/source/restored-paths.txt
+          shasum -a 256 packages/core/src/internals.ts packages/media-utils/src/use-windowed-audio-data.ts packages/transitions/src/html-in-canvas-presentation.tsx > qualification-results/source/producer.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/player --filter=@remotion/media-utils --filter=@remotion/transitions
+      - name: Lint all affected packages
+        run: |
+          (cd packages/core && bun run lint)
+          (cd packages/player && bun run lint)
+          (cd packages/media-utils && bun run lint)
+          (cd packages/transitions && bun run lint)
+      - name: Preserve all CPU package cohorts and ownership regressions
+        run: |
+          status=0
+          (cd packages/core && bun test src --reporter=junit --reporter-outfile=../../qualification-results/core.xml) || status=1
+          (cd packages/player && bun test src --reporter=junit --reporter-outfile=../../qualification-results/player.xml) || status=1
+          (cd packages/media-utils && bun test src --reporter=junit --reporter-outfile=../../qualification-results/media-utils.xml) || status=1
+          (cd packages/transitions && bun test src --reporter=junit --reporter-outfile=../../qualification-results/transitions.xml) || status=1
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owned-resource-cleanup-${{ matrix.arm }}
+          path: qualification-results/
+          if-no-files-found: warn
+          retention-days: 7
