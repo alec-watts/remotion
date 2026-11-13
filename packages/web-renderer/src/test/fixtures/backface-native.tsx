@@ -15,6 +15,8 @@ export const backfaceNativeCases = [
 export const backfaceNative = (
 	variant: (typeof backfaceNativeCases)[number],
 ) => {
+	let markup = '';
+	let ancestors: string[] = [];
 	const Component = () => {
 		const frame = useCurrentFrame();
 		const nested =
@@ -49,7 +51,22 @@ export const backfaceNative = (
 		};
 		return (
 			<AbsoluteFill style={{backgroundColor: 'white'}}>
-				<div style={style}>
+				<div
+					style={style}
+					ref={(node) => {
+						if (!node) return;
+						markup = node.outerHTML;
+						ancestors = [];
+						for (
+							let parent = node.parentElement;
+							parent;
+							parent = parent.parentElement
+						) {
+							const clone = parent.cloneNode(false) as Element;
+							ancestors.push(clone.outerHTML);
+						}
+					}}
+				>
 					{nested ? (
 						<div
 							style={{
@@ -67,6 +84,7 @@ export const backfaceNative = (
 		);
 	};
 	return {
+		getNativeMarkup: () => ({markup, ancestors}),
 		component: Component,
 		id: `backface-native-${variant}`,
 		width: 300,
