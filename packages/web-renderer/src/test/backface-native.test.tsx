@@ -5,14 +5,55 @@ import {calculateTransforms} from '../drawing/calculate-transforms';
 import {getPrecomposeRectFor3DTransform} from '../drawing/handle-3d-transform';
 import {walkOverNode} from '../walk-over-node';
 
+const boundsTrace = vi.hoisted(() => [] as Record<string, unknown>[]);
+vi.mock('../get-biggest-bounding-client-rect', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('../get-biggest-bounding-client-rect')
+		>();
+	return {
+		...actual,
+		getBiggestBoundingClientRect: vi.fn(
+			(...args: Parameters<typeof actual.getBiggestBoundingClientRect>) => {
+				const style = getComputedStyle(args[0]);
+				const before = args[0].getBoundingClientRect().toJSON();
+				const properties = Object.fromEntries(
+					[
+						'outline-width',
+						'outline-offset',
+						'outline-style',
+						'box-shadow',
+						'line-height',
+						'font-size',
+					].map((name) => [name, style.getPropertyValue(name)]),
+				);
+				const result = actual.getBiggestBoundingClientRect(...args);
+				boundsTrace.push({
+					node: args[0].outerHTML.slice(0, 1000),
+					includePaintOutsets: args[1],
+					includeDescendantFilters: args[2],
+					options: args[3],
+					before,
+					properties,
+					result: result.toJSON(),
+				});
+				return result;
+			},
+		),
+	};
+});
 vi.mock('../drawing/calculate-transforms', {spy: true});
 vi.mock('../drawing/handle-3d-transform', {spy: true});
 vi.mock('../walk-over-node', {spy: true});
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+	vi.clearAllMocks();
+	boundsTrace.length = 0;
+});
 
 const nodeLabel = (node: Node) =>
 	node instanceof Element ? node.outerHTML.slice(0, 1000) : node.textContent;
 const planeTrace = () => ({
+	bounds: [...boundsTrace],
 	transforms: vi.mocked(calculateTransforms).mock.calls.map(([args], index) => {
 		const result = vi.mocked(calculateTransforms).mock.results[index];
 		const value = result.type === 'return' ? result.value : null;
