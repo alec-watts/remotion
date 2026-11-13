@@ -118,7 +118,7 @@ export const svgTitledPersistentOrder = (
 			mode !== 'import-last' || literal,
 		);
 		const family = `Persistent order ${mode} ${firstRoboto ? 'Roboto' : 'Bangers'}`;
-		const importedStyle = useRef<SVGStyleElement>(null);
+		const importedStyle = useRef<HTMLStyleElement>(null);
 		useLayoutEffect(() => {
 			const style = importedStyle.current;
 			if (style === null) return;
