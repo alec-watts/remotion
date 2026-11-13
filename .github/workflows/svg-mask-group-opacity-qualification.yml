@@ -1,0 +1,53 @@
+name: SVG mask group opacity qualification
+on:
+  push:
+    branches: [codex/13102-svg-mask-group-opacity]
+permissions:
+  contents: read
+jobs:
+  masks:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify package source and restore only the baseline producer
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = c2c483feb020eb62b62f9bb750b870eaaf70ed4843e35d14dc38f9c870f5b9e4
+          git fetch --no-tags --depth=1 origin 18d11cdab8dfe7fa5bb5da31b357ad3f32effd25
+          if test "$ARM" = baseline; then
+            git restore --source=18d11cdab8dfe7fa5bb5da31b357ad3f32effd25 -- packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/process-node.ts
+          fi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Preserve all original mask, resource and URL-font comparisons
+        run: cd packages/web-renderer && bunx vitest src/test/svg-root-mask-geometry.test.tsx src/test/svg-font-definition-review.test.tsx src/test/svg-css-url-font.test.ts src/test/svg-css-font-usage-cache.test.tsx src/test/mask-image.test.tsx src/test/mask-image-url.test.tsx src/test/mask-image-url-sizing.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/svg-root-mask.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-mask-group-opacity-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
