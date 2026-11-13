@@ -24,7 +24,7 @@ fs.mkdirSync(output, {recursive: true});
 		});
 		const implementation = page._connection.toImpl(page);
 		const delegate = implementation.delegate;
-		assert.equal(delegate.constructor.name, 'WKPage');
+		assert.equal(delegate.constructor.name, '_WKPage');
 		const session = delegate._pageProxySession;
 		for (const item of input.cases) {
 			assert.equal(
