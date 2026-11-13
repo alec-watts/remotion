@@ -10,7 +10,7 @@ import {getWiderRectAndExpand} from './clamp-rect-to-parent-bounds';
 import {doRectsIntersect} from './do-rects-intersect';
 import {drawElement} from './draw-element';
 import type {DrawFn} from './drawn-fn';
-import {parseFilterOutsets} from './filter-outsets';
+import {getFilterCaptureViewport} from './filter-capture-viewport';
 import {getPrecomposedLayerGeometry} from './get-precomposed-layer-geometry';
 import {
 	clipSourceRectToViewport,
@@ -118,20 +118,15 @@ export const processNode = async ({
 					filter: precompositing.needsFilterPrecompositing,
 				})
 			: null;
-		// Include offscreen inputs before the perspective path can reject them.
-		const outsets =
+		const captureViewport =
 			internalState.experimental3DRendering &&
 			precompositing.needsFilterPrecompositing
-				? parseFilterOutsets(precompositing.needsFilterPrecompositing)
-				: {left: 0, right: 0, top: 0, bottom: 0};
-		const captureViewport = internalState.experimental3DRendering
-			? new DOMRect(
-					parentRect.left - outsets.right,
-					parentRect.top - outsets.bottom,
-					parentRect.width + outsets.left + outsets.right,
-					parentRect.height + outsets.top + outsets.bottom,
-				)
-			: parentRect;
+				? getFilterCaptureViewport({
+						viewport: parentRect,
+						filter: precompositing.needsFilterPrecompositing,
+						matrix: totalMatrix,
+					})
+				: parentRect;
 
 		let precomposeRect: DOMRect | null = null;
 		let projectedRect: DOMRect | null = null;
