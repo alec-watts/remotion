@@ -17,7 +17,7 @@ jobs:
       - name: Verify replacement candidate source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "fee10121d3f6d01c1ac1840ab7a77f1832e69b7e16c7beae5b4fb39d841dc570"
+          test "$actual" = "06cc5ab7aa2fef8874dccb44e24056a66a229f7d87f5beca69b9d4cc5c6210a6"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -26,6 +26,12 @@ jobs:
           bun-version: 1.4.3
       - run: bun ci
       - run: bunx turbo run make --filter=@remotion/player
+      - name: Lint core and Player
+        run: |
+          cd packages/core
+          bun run lint
+          cd ../player
+          bun run lint
       - name: Verify production source after build
         run: git diff --exit-code -- packages/core/src packages/player/src
       - name: Run existing ownership controls and new context regressions
