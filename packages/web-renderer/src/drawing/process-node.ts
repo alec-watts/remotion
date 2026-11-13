@@ -136,6 +136,7 @@ export const processNode = async ({
 			precompositing.needsBlendMode !== null ||
 			precompositing.needsIsolation ||
 			precompositing.needsSvgClip !== null ||
+			precompositing.needsMaskImage !== null ||
 			precompositing.needsFilterPrecompositing?.includes('url(') === true;
 
 		if (needsGroup) {

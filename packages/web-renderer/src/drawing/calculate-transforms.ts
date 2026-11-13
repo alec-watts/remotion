@@ -293,6 +293,7 @@ export const calculateTransforms = ({
 				blendMode !== null ||
 				isolated ||
 				svgClip !== null ||
+				maskImageInfo !== null ||
 				computedStyle.filter.includes('url(');
 
 			filterForPrecompositing =
