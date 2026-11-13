@@ -84,7 +84,10 @@ test.for(cases)(
 			);
 		};
 
-		const native = await captureNativeReference(
+		const native = await captureNativeReference(composition, frame, {
+			omitBackground: false,
+		});
+		const wrappedNative = await captureNativeReference(
 			{...composition, component: Capture, id: `svg-probe-${composition.id}`},
 			frame,
 			{omitBackground: false},
@@ -107,8 +110,10 @@ test.for(cases)(
 			context.drawImage(image, 0, 0);
 			const output = await canvas.convertToBlob({type: 'image/png'});
 			const difference = await countNativePixels(native, output);
+			const wrapperDifference = await countNativePixels(native, wrappedNative);
 			for (const [name, blob] of [
 				['native', native],
+				['wrapped-native', wrappedNative],
 				['svg', output],
 			] as const) {
 				let binary = '';
@@ -131,10 +136,12 @@ test.for(cases)(
 					browser: server.browser,
 					userAgent: navigator.userAgent,
 					backend: 'svg-foreign-object',
+					wrapperMismatchedPixels: wrapperDifference.mismatchedPixels,
 					mismatchedPixels: difference.mismatchedPixels,
 					maxChannelDelta: difference.maxChannelDelta,
 				}),
 			);
+			expect(wrapperDifference.mismatchedPixels).toBe(0);
 			expect(difference.mismatchedPixels).toBe(0);
 		} finally {
 			image.src = '';
