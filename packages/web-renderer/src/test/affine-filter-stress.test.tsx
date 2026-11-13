@@ -4,6 +4,7 @@ import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {makeScaledShadowFixture} from './fixtures/affine-filter-stress';
 import {captureNativeReference, compareNativePixels} from './native-reference';
+import {traceAffineFilter} from './trace-affine-filter';
 
 const filterInputReviewCases = [
 	'fractional',
@@ -39,8 +40,17 @@ test.for(
 					experimental3DRendering,
 				})
 			).blob({format: 'png'});
-		const defaultOutput = await render(false);
-		const enabled = await render(true);
+		const trace =
+			!preserve &&
+			frame === 0 &&
+			['fractional', 'rounded', 'blurred'].includes(variant);
+		const tracePath = `test/__results__/affine-stage-traces/${server.browser}/${variant}`;
+		const defaultOutput = trace
+			? await traceAffineFilter(`${tracePath}/default`, () => render(false))
+			: await render(false);
+		const enabled = trace
+			? await traceAffineFilter(`${tracePath}/enabled`, () => render(true))
+			: await render(true);
 		const ordinary = await compareNativePixels(native, defaultOutput);
 		const experimental = await compareNativePixels(native, enabled);
 		const path = `test/__results__/affine-stress-evidence/${server.browser}/${variant}-${preserve}-${frame}`;
