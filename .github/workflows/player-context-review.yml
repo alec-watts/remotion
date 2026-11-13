@@ -14,10 +14,10 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Verify unpatched Solid context source
+      - name: Verify Solid context cleanup candidate source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "96321434daa004f0d9485b3cc707da3db18734f1c03bd8d0c032cf4b68261260"
+          test "$actual" = "e420bdc540918d991f4fec5c4c862f0fa1973bcf232281b3657b129884db72ed"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: solid-context-cleanup-baseline
+          name: solid-context-cleanup-candidate
           path: packages/player/test-results/
           if-no-files-found: error
           retention-days: 7
