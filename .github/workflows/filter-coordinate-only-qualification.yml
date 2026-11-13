@@ -21,7 +21,7 @@ jobs:
       - name: Verify candidate package inputs
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "61adb9e40032eaa01b19e40da6bf1facd61767d0a6f165d71d7463bc5491312f"
+          test "$actual" = "4713c5a54fb364c71458f2cd17cc53320e3a5f4592e01e2d175a66463010b1fe"
       - name: Restore unchanged public clipping for the matched baseline
         if: matrix.producer == 'baseline'
         run: |
@@ -35,9 +35,9 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun ci
-      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
       - run: bunx turbo run make --filter=@remotion/web-renderer
       - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
       - name: Record producer source differences
         run: |
           mkdir -p packages/web-renderer/test/__results__
