@@ -1,5 +1,7 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import '../symbol-dispose';
+import * as fontGroups from '../drawing/fingerprint-css-font-groups';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	svgPercentDataFont,
@@ -11,6 +13,8 @@ import {
 	compareNativePixels,
 	countNativePixels,
 } from './native-reference';
+
+vi.mock('../drawing/fingerprint-css-font-groups', {spy: true});
 
 export const registerPercentDataFontPixelCases = (
 	preferredTitle: 'A' | 'B',
@@ -26,6 +30,7 @@ export const registerPercentDataFontPixelCases = (
 		'preserves $encoding titled $preferred frame $frame',
 		async ({encoding, preferred, frame}, context) => {
 			const failure = createFontFailureRecorder(context);
+			const trace: unknown[] = [];
 			const composition = svgPercentDataFont(encoding, preferred, null, false);
 			const literal = svgPercentDataFont(encoding, preferred, preferred, false);
 			const fallback = svgPercentDataFont(encoding, preferred, preferred, true);
@@ -47,8 +52,10 @@ export const registerPercentDataFontPixelCases = (
 			const repeat = await captureNativeReference(composition, frame, {
 				omitBackground: false,
 			});
-			const render = async (target: typeof composition) =>
-				(
+			const render = async (target: typeof composition, stage: string) => {
+				const spy = vi.mocked(fontGroups.fingerprintCssFontGroups);
+				spy.mockClear();
+				const output = (
 					await renderStillOnWeb({
 						composition: target,
 						frame,
@@ -57,9 +64,32 @@ export const registerPercentDataFontPixelCases = (
 						allowHtmlInCanvas: false,
 					})
 				).blob({format: 'png'});
-			const actual = await render(composition);
-			const literalActual = await render(literal);
-			const fallbackActual = await render(fallback);
+				trace.push({
+					stage,
+					calls: spy.mock.calls.map(([, samples, groups], index) => ({
+						result: spy.mock.results[index],
+						samples: samples.map((sample) => ({
+							text: sample.text,
+							font: sample.style.font,
+							family: sample.style.fontFamily,
+						})),
+						groups: groups.map((group) => ({
+							name: group.name,
+							rules: group.rules.map((rule) => ({
+								family: rule.style.fontFamily,
+								title: rule.parentStyleSheet?.title,
+								srcPrefix: rule.style.getPropertyValue('src').slice(0, 100),
+								srcLength: rule.style.getPropertyValue('src').length,
+							})),
+						})),
+					})),
+				});
+				spy.mockClear();
+				return output;
+			};
+			const actual = await render(composition, 'actual');
+			const literalActual = await render(literal, 'literal');
+			const fallbackActual = await render(fallback, 'fallback');
 			const results = {
 				nativeLiteral: await compareNativePixels(native, nativeLiteral),
 				repeat: await compareNativePixels(native, repeat),
@@ -69,6 +99,12 @@ export const registerPercentDataFontPixelCases = (
 						: await countNativePixels(native, actual),
 				literalActual: await compareNativePixels(literalActual, actual),
 			};
+			const tracePath = `test/__results__/font-selection/${server.browser}/${encoding}-${preferred}-${frame}-${crypto.randomUUID()}`;
+			await server.commands.writeFile(
+				`${tracePath}/fingerprint.json`,
+				JSON.stringify({encoding, preferred, frame, trace}),
+			);
+			failure.record('fingerprint.json', JSON.stringify(trace));
 			for (const [name, blob] of Object.entries({
 				native,
 				nativeLiteral,

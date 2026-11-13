@@ -1,0 +1,38 @@
+name: Data font selection qualification
+
+on:
+  push:
+    branches: [codex/data-font-selection-qualification]
+
+permissions:
+  contents: read
+
+jobs:
+  native-font-selection:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Retain wrong-face evidence and selection reasons
+        run: cd packages/web-renderer && bunx vitest src/test/svg-percent-data-font-a.test.tsx src/test/svg-percent-data-font-b.test.tsx --browser --run --repeats 4 --reporter=default --reporter=json --outputFile=./test/__results__/font-selection.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-font-selection-${{ github.run_attempt }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
