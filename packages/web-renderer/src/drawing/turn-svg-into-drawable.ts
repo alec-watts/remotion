@@ -674,6 +674,7 @@ export const turnSvgIntoDrawable = (
 		if (cssFontStylesBySvg.get(ownerSvg)?.promise === cssFontStyle)
 			cssFontStylesBySvg.delete(ownerSvg);
 	});
+
 	const drawable = new Promise<HTMLImageElement>((resolve, reject) => {
 		const image = new Image();
 		let url: string | null = null;

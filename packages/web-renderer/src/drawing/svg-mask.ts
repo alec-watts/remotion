@@ -42,6 +42,7 @@ export const getSvgResourceMask = (
 	const svg = element.cloneNode(true) as SVGSVGElement;
 	for (const property of ['width', 'height', 'fill', 'color'])
 		svg.style.setProperty(property, style.getPropertyValue(property));
+
 	return {type: 'svg-resource', svg, id, fontSnapshot};
 };
 
@@ -75,6 +76,7 @@ export const createSvgResourceMask = ({
 		['mix-blend-mode', 'normal'],
 	])
 		white.style.setProperty(property, value, 'important');
+
 	svg.appendChild(white);
 	for (const [property, value] of [
 		['mask-image', `url("#${encodeURIComponent(id)}")`],
@@ -85,6 +87,7 @@ export const createSvgResourceMask = ({
 		['opacity', '1'],
 	])
 		svg.style.setProperty(property, value, 'important');
+
 	return turnSvgIntoDrawable(svg, {
 		...fontSnapshot,
 		authoredStyles:
