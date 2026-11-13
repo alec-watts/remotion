@@ -1,0 +1,50 @@
+name: Painted plane qualification
+on:
+  push:
+    branches: [codex/12686-painted-plane-port]
+permissions:
+  contents: read
+jobs:
+  renderer:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify qualified source tree
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = "30b316460366580dc8939143736ae9901cd63389a3e1a038a3dbf8a263a94953"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Restore original PR producer
+        if: matrix.producer == 'baseline'
+        run: |
+          git fetch --no-tags --depth=1 origin 36f0c6198d216c64ad17d9208afc1f2cea008c2d
+          git show 36f0c6198d216c64ad17d9208afc1f2cea008c2d:packages/web-renderer/src/compose.ts > packages/web-renderer/src/compose.ts
+          git show 36f0c6198d216c64ad17d9208afc1f2cea008c2d:packages/web-renderer/src/get-biggest-bounding-client-rect.ts > packages/web-renderer/src/get-biggest-bounding-client-rect.ts
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Run original renderer controls and exact occlusion regressions
+        run: cd packages/web-renderer && bunx vitest src/test/preserve-3d-depth.test.tsx src/test/painted-plane-bounds.test.tsx src/test/outline.test.tsx src/test/inline-scale.test.tsx src/test/3d-grid-sampler.test.ts src/test/filter.test.tsx src/test/clip-path.test.tsx --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/painted-plane.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: painted-plane-${{ matrix.producer }}-${{ github.run_attempt }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
