@@ -11,7 +11,6 @@ import {
 	clipSourceRectToViewport,
 	isScaleTooBig,
 } from './drawing/get-pretransform-rect';
-import {getPrecomposeRectFor3DTransform} from './drawing/handle-3d-transform';
 import {getElementsNeedingIsolation} from './drawing/isolation';
 import {getBiggestBoundingClientRect} from './get-biggest-bounding-client-rect';
 import type {InternalState} from './internal-state';
@@ -256,7 +255,11 @@ const planPreserve3DPlanes = ({
 					node,
 					true,
 					experimental3DRendering,
-					{onlyOwnPlane: preserving, experimental3DRendering},
+					{
+						onlyOwnPlane: preserving,
+						experimental3DRendering,
+						includeCapturePadding: false,
+					},
 				);
 				const paintBounds = new DOMRect(
 					bounds.left - filterOutsets.left,
@@ -264,20 +267,11 @@ const planPreserve3DPlanes = ({
 					bounds.width + filterOutsets.left + filterOutsets.right,
 					bounds.height + filterOutsets.top + filterOutsets.bottom,
 				);
-				const paintRect = transforms.totalMatrix.is2D
-					? clipSourceRectToViewport(
-							paintBounds,
-							transforms.totalMatrix,
-							filterViewport,
-						)
-					: getPrecomposeRectFor3DTransform({
-							element: node,
-							parentRect: filterViewport,
-							matrix: transforms.totalMatrix,
-							onlyOwnPlane: preserving,
-							experimental3DRendering,
-							sourceRect: null,
-						});
+				const paintRect = clipSourceRectToViewport(
+					paintBounds,
+					transforms.totalMatrix,
+					filterViewport,
+				);
 				if (!paintRect) {
 					// An invisible own plane does not invalidate the other context planes.
 					return preserving ? [...node.childNodes] : null;

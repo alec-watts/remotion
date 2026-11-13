@@ -55,7 +55,12 @@ export const getBiggestBoundingClientRect = (
 	{
 		onlyOwnPlane = false,
 		experimental3DRendering = false,
-	}: {onlyOwnPlane?: boolean; experimental3DRendering?: boolean} = {},
+		includeCapturePadding = true,
+	}: {
+		onlyOwnPlane?: boolean;
+		experimental3DRendering?: boolean;
+		includeCapturePadding?: boolean;
+	} = {},
 ) => {
 	const treeWalker = document.createTreeWalker(
 		element,
@@ -68,17 +73,23 @@ export const getBiggestBoundingClientRect = (
 
 	while (true) {
 		const computedStyle = getComputedStyle(treeWalker.currentNode as Element);
+		// Existing capture margins affect texture sampling. Depth ordering can
+		// request painted bounds without changing those raster surfaces.
 		const hasOutline =
 			includePaintOutsets &&
-			computedStyle.outlineStyle !== 'none' &&
-			computedStyle.outlineStyle !== 'hidden';
+			(includeCapturePadding ||
+				(computedStyle.outlineStyle !== 'none' &&
+					computedStyle.outlineStyle !== 'hidden'));
 		const outlineWidth = hasOutline
 			? parseOutlineWidth(computedStyle.outlineWidth)
 			: 0;
 		const outlineOffset = hasOutline
 			? parseOutlineOffset(computedStyle.outlineOffset)
 			: 0;
-		const outlineOutset = Math.max(0, outlineWidth + outlineOffset);
+		const boundsOutlineWidth = includeCapturePadding
+			? outlineWidth
+			: Math.max(0, outlineWidth + outlineOffset);
+		const boundsOutlineOffset = includeCapturePadding ? outlineOffset : 0;
 		const rect = (treeWalker.currentNode as Element).getBoundingClientRect();
 
 		// Calculate text overflow for elements with line-height < 1
@@ -162,24 +173,34 @@ export const getBiggestBoundingClientRect = (
 
 		mostLeft = Math.min(
 			mostLeft,
-			rect.left - outlineOutset - shadowLeft - filterOutsets.left,
+			rect.left -
+				boundsOutlineOffset -
+				boundsOutlineWidth -
+				shadowLeft -
+				filterOutsets.left,
 		);
 		mostTop = Math.min(
 			mostTop,
 			rect.top -
-				outlineOutset -
+				boundsOutlineOffset -
+				boundsOutlineWidth -
 				shadowTop -
 				textOverflow.top -
 				filterOutsets.top,
 		);
 		mostRight = Math.max(
 			mostRight,
-			rect.right + outlineOutset + shadowRight + filterOutsets.right,
+			rect.right +
+				boundsOutlineOffset +
+				boundsOutlineWidth +
+				shadowRight +
+				filterOutsets.right,
 		);
 		mostBottom = Math.max(
 			mostBottom,
 			rect.bottom +
-				outlineOutset +
+				boundsOutlineOffset +
+				boundsOutlineWidth +
 				shadowBottom +
 				textOverflow.bottom +
 				filterOutsets.bottom,

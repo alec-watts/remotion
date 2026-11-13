@@ -42,7 +42,13 @@ test.for([
 		document.body.appendChild(element);
 		try {
 			const border = element.getBoundingClientRect();
-			const bounds = getBiggestBoundingClientRect(element);
+			const boundsOptions = {onlyOwnPlane: true, includeCapturePadding: false};
+			const bounds = getBiggestBoundingClientRect(
+				element,
+				true,
+				false,
+				boundsOptions,
+			);
 			expect([bounds.left, bounds.top, bounds.right, bounds.bottom]).toEqual([
 				border.left - expected,
 				border.top - expected,
