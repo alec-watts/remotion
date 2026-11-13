@@ -7,7 +7,7 @@ import {captureNativeReference, countNativePixels} from './native-reference';
 import {traceAffineFilter} from './trace-affine-filter';
 
 test.for(['fractional', 'rounded', 'blurred'] as const)(
-	'preserves raw output while probing $0 filter stages',
+	'preserves raw output while probing %s filter stages',
 	async (variant) => {
 		const composition = makeScaledShadowFixture(variant, false);
 		const native = await captureNativeReference(composition, 0, {
