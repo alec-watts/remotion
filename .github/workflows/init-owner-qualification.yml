@@ -1,0 +1,59 @@
+name: Pending initialization owner qualification
+on:
+  push:
+    branches: [codex/12934-init-owner-retirement]
+permissions:
+  contents: read
+jobs:
+  ownership:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Guard exact source and restore only baseline producer
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = 4f84de8ad675ea5f093d9a2833da83dfde75b7b8bfed12b075176489192e6dfd
+          git fetch --no-tags --depth=1 origin 3f49e97264cc6693861ebc5527285bfcf835ba2a
+          if test "$ARM" = baseline; then
+            git show 3f49e97264cc6693861ebc5527285bfcf835ba2a:packages/core/src/HtmlInCanvas.tsx > packages/core/src/HtmlInCanvas.tsx
+          fi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/player
+      - run: cd packages/core && bun run lint
+      - run: cd packages/player && bun run lint
+      - name: Original and replacement paint lifecycle regressions
+        run: |
+          mkdir -p validation
+          set -o pipefail
+          cd packages/core
+          bun test src/test/html-in-canvas.test.tsx 2>&1 | tee ../../validation/html-in-canvas.log
+      - name: Full core suite
+        if: matrix.arm == 'candidate'
+        run: cd packages/core && bun test src/test
+      - name: Full Player suite
+        if: matrix.arm == 'candidate'
+        run: cd packages/player && bun test src/test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: init-owner-${{ matrix.arm }}
+          path: validation/
+          if-no-files-found: warn
+          retention-days: 7
