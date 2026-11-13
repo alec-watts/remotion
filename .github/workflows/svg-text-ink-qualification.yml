@@ -1,0 +1,53 @@
+name: SVG blended text ink bounds qualification
+on:
+  push:
+    branches: [codex/13117-svg-text-ink-bounds]
+permissions:
+  contents: read
+jobs:
+  fonts:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify source and restore only the baseline producer
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = 9ab4d7c70f640a43f85a15f709404cd8258ab528bc9223f3dbb06ced2e798a39
+          git fetch --no-tags --depth=1 origin 64cd32b93dd6879d5bea396f5555c4aa6e8be57b
+          if test "$ARM" = baseline; then
+            git restore --source=64cd32b93dd6879d5bea396f5555c4aa6e8be57b -- packages/web-renderer/src/drawing/get-svg-paint-bounds.ts
+          fi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Compare blended glyph ink against unblended and native controls
+        run: cd packages/web-renderer && bunx vitest src/test/svg-precompose-font.test.tsx src/test/svg-blend-text-ink.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/svg-text-ink.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-text-ink-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
