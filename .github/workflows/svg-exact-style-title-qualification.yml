@@ -1,0 +1,57 @@
+name: SVG exact stylesheet title qualification
+on:
+  push:
+    branches: [codex/13117-exact-style-title-qualification]
+permissions:
+  contents: read
+jobs:
+  fonts:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Restore exact baseline producer and record inputs
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          git fetch --no-tags --depth=1 origin c97acaba5aa83a632ae56369e2e9eb550952aec7
+          if test "$ARM" = baseline; then
+            git restore --source=c97acaba5aa83a632ae56369e2e9eb550952aec7 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
+          fi
+          mkdir -p packages/web-renderer/test/__results__/source
+          git rev-parse HEAD > packages/web-renderer/test/__results__/source/head.txt
+          git diff --name-only HEAD > packages/web-renderer/test/__results__/source/restored-paths.txt
+          git ls-tree -r HEAD -- packages/web-renderer/src/test > packages/web-renderer/test/__results__/source/tests.txt
+          shasum -a 256 packages/web-renderer/src/drawing/turn-svg-into-drawable.ts packages/web-renderer/src/drawing/svg-font-css-for-carrier.ts > packages/web-renderer/test/__results__/source/producer.txt
+          git diff --exit-code HEAD -- packages/web-renderer/src/test package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Preserve strict old and new font cohorts
+        run: cd packages/web-renderer && bunx vitest src/test/svg-exact-title-qualification.test.tsx src/test/svg-font-css-for-carrier.test.ts src/test/svg-persistent-font-order.test.tsx src/test/svg-titled-data-font.test.tsx src/test/svg-font-definition-review.test.tsx src/test/svg-precompose-font.test.tsx src/test/svg-inactive-titled-font.test.tsx src/test/svg-paint-resource-font.test.tsx src/test/svg-css-import-font.test.ts src/test/svg-css-url-font.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/exact-titles.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-exact-titles-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
