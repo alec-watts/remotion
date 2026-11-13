@@ -244,7 +244,7 @@ import {
 } from './fixtures/svg-filter-reference';
 import {
 	svgDefinitionModes,
-	svgPaintResourceFont,
+	svgPaintResourceFontSize,
 	svgDefinitionFont,
 	svgDefinitionFontUrl,
 	svgWildcardStyleModes,
@@ -547,7 +547,7 @@ export const Root: React.FC = () => {
 			{(['pattern', 'mask'] as const).flatMap((kind) =>
 				[false, true].flatMap((inDefs) =>
 					[false, true].map((literal) => {
-						const fixture = svgPaintResourceFont({kind, inDefs, literal});
+						const fixture = svgPaintResourceFontSize({kind, inDefs, literal});
 						return <Composition key={fixture.id} {...fixture} />;
 					}),
 				),

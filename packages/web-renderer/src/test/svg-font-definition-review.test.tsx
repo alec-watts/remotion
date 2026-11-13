@@ -5,7 +5,7 @@ import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	svgDefinitionModes,
-	svgPaintResourceFont,
+	svgPaintResourceFontSize,
 	svgDefinitionFont,
 	svgDefinitionFontUrl,
 	svgWildcardStyleModes,
@@ -88,7 +88,7 @@ test.for(
 )(
 	'preserves external font size in $kind resource, defs=$inDefs',
 	async ({kind, inDefs}) => {
-		const composition = svgPaintResourceFont({kind, inDefs, literal: false});
+		const composition = svgPaintResourceFontSize({kind, inDefs, literal: false});
 		const native = await captureNativeReference(composition, 0, {
 			omitBackground: false,
 		});
@@ -104,7 +104,7 @@ test.for(
 		const control = await (
 			await renderStillOnWeb({
 				...options,
-				composition: svgPaintResourceFont({kind, inDefs, literal: true}),
+				composition: svgPaintResourceFontSize({kind, inDefs, literal: true}),
 			})
 		).blob({format: 'png'});
 		const controlPixels = await countNativePixels(control, actual);

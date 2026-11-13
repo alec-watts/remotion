@@ -173,7 +173,7 @@ export const svgWildcardStyle = ({
 	} as const;
 };
 
-export const svgPaintResourceFont = ({
+export const svgPaintResourceFontSize = ({
 	kind,
 	inDefs,
 	literal,
