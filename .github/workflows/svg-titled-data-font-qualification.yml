@@ -1,0 +1,53 @@
+name: SVG titled data-font ownership qualification
+on:
+  push:
+    branches: [codex/13117-titled-data-ownership]
+permissions:
+  contents: read
+jobs:
+  fonts:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify source and restore only the baseline producer
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = 9534104659b1a56cee26b143ae9b789349a8a4b01d78586d233a3ba697a5db16
+          git fetch --no-tags --depth=1 origin 4cae19ac1ccfac56be931e6ed285082a1b335a54
+          if test "$ARM" = baseline; then
+            git restore --source=4cae19ac1ccfac56be931e6ed285082a1b335a54 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
+          fi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Preserve consolidated font cohorts alongside titled data-font regression
+        run: cd packages/web-renderer && bunx vitest src/test/svg-titled-data-font.test.tsx src/test/svg-font-definition-review.test.tsx src/test/svg-precompose-font.test.tsx src/test/svg-inactive-titled-font.test.tsx src/test/svg-paint-resource-font.test.tsx src/test/svg-css-import-font.test.ts src/test/svg-css-url-font.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/titled-data-font.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-titled-data-font-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
