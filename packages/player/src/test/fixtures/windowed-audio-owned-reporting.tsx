@@ -83,7 +83,7 @@ const main = async () => {
 		return <span>healthy sibling</span>;
 	};
 
-	const Content = ({src}: {src: string}) => {
+	const Content = ({src}: {readonly src: string}) => {
 		useWindowedAudioData({src, frame: 100, fps: 30, windowInSeconds: 1});
 		return <span>audio {src}</span>;
 	};
