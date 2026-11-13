@@ -266,6 +266,9 @@ export const processNode = async ({
 			parentRect,
 			scale,
 			is3DPrecomposition,
+			rasterizeFilterAtProjectedScale:
+				internalState.experimental3DRendering &&
+				precompositing.needsFilterPrecompositing !== null,
 		});
 
 		const tempContext = await createLayer({

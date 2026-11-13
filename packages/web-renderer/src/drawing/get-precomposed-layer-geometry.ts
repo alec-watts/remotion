@@ -4,12 +4,14 @@ export const getPrecomposedLayerGeometry = ({
 	parentRect,
 	scale,
 	is3DPrecomposition,
+	rasterizeFilterAtProjectedScale,
 }: {
 	precomposeRect: DOMRect;
 	totalMatrix: DOMMatrix;
 	parentRect: DOMRect;
 	scale: number;
 	is3DPrecomposition: boolean;
+	rasterizeFilterAtProjectedScale: boolean | null;
 }) => {
 	if (
 		is3DPrecomposition ||
@@ -18,9 +20,16 @@ export const getPrecomposedLayerGeometry = ({
 		!(totalMatrix.a > 0) ||
 		totalMatrix.a !== totalMatrix.d
 	) {
+		const filterScale =
+			rasterizeFilterAtProjectedScale === true &&
+			!is3DPrecomposition &&
+			totalMatrix.b === 0 &&
+			totalMatrix.c === 0
+				? Math.max(1, Math.abs(totalMatrix.a), Math.abs(totalMatrix.d))
+				: 1;
 		return {
 			rect: precomposeRect,
-			scale,
+			scale: scale * filterScale,
 			pixelWidth: null,
 			pixelHeight: null,
 		};
