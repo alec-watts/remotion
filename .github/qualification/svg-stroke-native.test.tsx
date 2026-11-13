@@ -76,7 +76,7 @@ test.for(cases)(
 		if (markup === null)
 			throw new Error('Foreign-object source was not committed');
 		const font = await fetch(
-			new URL('../../../../example/public/bangers.woff2', import.meta.url),
+			new URL('../../../example/public/bangers.woff2', import.meta.url),
 		);
 		if (!font.ok)
 			throw new Error(`Font fixture request failed: ${font.status}`);
