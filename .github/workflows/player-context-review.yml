@@ -14,10 +14,10 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Verify unpatched paint cleanup source
+      - name: Verify paint cleanup candidate source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "affe98c55d1ec7dc32bd836ac1d79e9d686e7fddbf20de32a0ec252052e4ab17"
+          test "$actual" = "5a492bee26ae32d735b738a9b12421788c42e4bd458d749d9999bbb58ff4b5f9"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: html-paint-cleanup-baseline
+          name: html-paint-cleanup-candidate
           path: packages/core/test-results/
           if-no-files-found: error
           retention-days: 7
