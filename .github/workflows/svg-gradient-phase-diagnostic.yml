@@ -1,4 +1,4 @@
-name: SVG gradient timeout phase diagnostic
+name: SVG gradient timeout phase stress diagnostic
 on:
   push:
     branches: [codex/12934-gradient-timeout-phases]
@@ -27,12 +27,12 @@ jobs:
       - run: bunx turbo run make --filter=@remotion/web-renderer
       - run: cd packages/web-renderer && bun run lint
       - run: cd packages/web-renderer && bunx playwright install --with-deps
-      - name: Run the full renderer shard with unchanged timeout and assertions
-        run: bun run testwebrenderer --log-order=stream -- --shard=2/2 --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json
+      - name: Repeat the full renderer shard five times with unchanged timeout and assertions
+        run: bun run testwebrenderer --log-order=stream -- --shard=2/2 --repeats=4 --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-gradient-phase-diagnostic
+          name: svg-gradient-phase-stress-diagnostic
           include-hidden-files: true
           path: |
             packages/web-renderer/test/__results__/
