@@ -1,0 +1,55 @@
+name: SVG preferred stylesheet test isolation
+on:
+  push:
+    branches: [codex/13117-title-test-isolation]
+permissions:
+  contents: read
+jobs:
+  isolation:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Restore only the previous test placement in baseline
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          git fetch --no-tags --depth=1 origin 43a16ee69274ad0a428c08b3a3a4b340dcb3300a
+          if test "$ARM" = baseline; then
+            git restore --source=43a16ee69274ad0a428c08b3a3a4b340dcb3300a -- packages/web-renderer/src/test/svg-inactive-titled-font.test.tsx
+            rm packages/web-renderer/src/test/svg-exact-title-font.test.tsx
+          fi
+          mkdir -p packages/web-renderer/test/__results__/source
+          git rev-parse HEAD > packages/web-renderer/test/__results__/source/head.txt
+          git diff --name-status HEAD > packages/web-renderer/test/__results__/source/restored-paths.txt
+          git diff --exit-code HEAD -- packages/web-renderer/src/drawing package.json bun.lock
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Retain payload, original grid, media invalidation and ink bounds assertions
+        run: cd packages/web-renderer && bunx vitest src/test/svg-exact-title-font.test.tsx src/test/svg-inactive-titled-font.test.tsx src/test/svg-precompose-font.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/title-isolation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-title-test-isolation-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
