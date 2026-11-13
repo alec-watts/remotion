@@ -16,7 +16,7 @@ jobs:
       - name: Verify exact instrumented source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = ab975cae5fb9c3807dd759995c563082b268048b49cf94d2cfb481b03a78a35f
+          test "$actual" = 61f28516fb1f8ee70a54ad5778ebe1f87fe1ecf45268de1b12f58d89893c9717
       - uses: actions/setup-node@v6
         with:
           node-version: 25
