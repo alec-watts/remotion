@@ -4,6 +4,7 @@ import {
 	preserves3DChildren,
 	type TransformStyleCache,
 } from './drawing/calculate-transforms';
+import {getFilterCaptureViewport} from './drawing/filter-capture-viewport';
 import {parseFilterOutsets} from './drawing/filter-outsets';
 import {
 	clipPolygonToHalfPlanes,
@@ -247,12 +248,11 @@ const planPreserve3DPlanes = ({
 							transforms.precompositing.needsFilterPrecompositing,
 						)
 					: {left: 0, right: 0, top: 0, bottom: 0};
-				const filterViewport = new DOMRect(
-					parentRect.left - filterOutsets.right,
-					parentRect.top - filterOutsets.bottom,
-					parentRect.width + filterOutsets.left + filterOutsets.right,
-					parentRect.height + filterOutsets.top + filterOutsets.bottom,
-				);
+				const filterViewport = getFilterCaptureViewport({
+					viewport: parentRect,
+					filter: transforms.precompositing.needsFilterPrecompositing ?? 'none',
+					matrix: transforms.totalMatrix,
+				});
 				const bounds = getBiggestBoundingClientRect(
 					node,
 					true,
