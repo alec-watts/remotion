@@ -65,8 +65,9 @@ export const createSvgResourceMask = ({
 	);
 	const viewBox = svg.viewBox.baseVal;
 	const coverId = `remotion-mask-cover-${crypto.randomUUID()}`;
-	const defs = svg.ownerDocument.createElementNS(svg.namespaceURI, 'defs');
-	const cover = svg.ownerDocument.createElementNS(svg.namespaceURI, 'filter');
+	const namespace = 'http://www.w3.org/2000/svg';
+	const defs = svg.ownerDocument.createElementNS(namespace, 'defs');
+	const cover = svg.ownerDocument.createElementNS(namespace, 'filter');
 	cover.id = coverId;
 	cover.setAttribute('filterUnits', 'userSpaceOnUse');
 	cover.setAttribute('x', String(viewBox.width ? viewBox.x : 0));
@@ -76,7 +77,7 @@ export const createSvgResourceMask = ({
 		'height',
 		viewBox.height ? String(viewBox.height) : '100%',
 	);
-	const flood = svg.ownerDocument.createElementNS(svg.namespaceURI, 'feFlood');
+	const flood = svg.ownerDocument.createElementNS(namespace, 'feFlood');
 	flood.style.setProperty('flood-color', 'white', 'important');
 	flood.style.setProperty('flood-opacity', '1', 'important');
 	cover.appendChild(flood);
