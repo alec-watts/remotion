@@ -128,6 +128,7 @@ export const svgTitledPersistentOrder = (
 					setImportLoaded(true);
 				}
 			};
+
 			style.addEventListener('load', ready);
 			ready();
 			return () => style.removeEventListener('load', ready);
