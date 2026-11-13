@@ -25,7 +25,9 @@ test.for(
 			height: '300px',
 			backgroundColor: 'white',
 		});
-		host.innerHTML = nativeDom.markup;
+		// Preserve the authored composition wrapper (including perspective), while
+		// removing only the Player's surrounding DOM from this independent control.
+		host.innerHTML = nativeDom.compositionMarkup;
 		document.body.appendChild(host);
 		let plain: Blob;
 		try {

@@ -10,13 +10,18 @@ export const backfaceNativeCases = [
 	'nested-double-turn',
 	'flat-double-turn',
 	'hidden-parent-front-child',
+	'back-hidden-preserve',
+	'back-hidden-perspective',
+	'perspective-front',
 ] as const;
 
 export const backfaceNative = (
 	variant: (typeof backfaceNativeCases)[number],
 ) => {
 	let markup = '';
+	let compositionMarkup = '';
 	let ancestors: string[] = [];
+	let computed: Record<string, string> = {};
 	const Component = () => {
 		const frame = useCurrentFrame();
 		const nested =
@@ -24,22 +29,25 @@ export const backfaceNative = (
 			variant === 'flat-double-turn' ||
 			variant === 'hidden-parent-front-child';
 		const transform =
-			variant === 'reflect-x'
-				? 'scaleX(-1)'
-				: variant === 'reflect-z'
-					? 'scaleZ(-1)'
-					: variant === 'front'
-						? 'rotateY(0deg)'
-						: 'rotateY(180deg)';
+			variant === 'perspective-front'
+				? 'perspective(200px) translateX(-100px) rotateY(100deg)'
+				: variant === 'reflect-x'
+					? 'scaleX(-1)'
+					: variant === 'reflect-z'
+						? 'scaleZ(-1)'
+						: variant === 'front'
+							? 'rotateY(0deg)'
+							: 'rotateY(180deg)';
 		const style: CSSProperties = {
 			position: 'absolute',
-			left: 100 + frame,
+			left: (variant === 'perspective-front' ? 200 : 100) + frame,
 			top: 100,
 			width: 100,
 			height: 100,
 			backgroundColor: nested ? 'red' : 'blue',
 			transform,
-			transformOrigin: '50px 50px',
+			transformOrigin:
+				variant === 'perspective-front' ? '0px 0px' : '50px 50px',
 			backfaceVisibility:
 				variant === 'back-visible' || nested
 					? variant === 'hidden-parent-front-child'
@@ -47,15 +55,36 @@ export const backfaceNative = (
 						: 'visible'
 					: 'hidden',
 			transformStyle:
-				nested && variant !== 'flat-double-turn' ? 'preserve-3d' : 'flat',
+				(nested && variant !== 'flat-double-turn') ||
+				variant === 'back-hidden-preserve'
+					? 'preserve-3d'
+					: 'flat',
 		};
 		return (
-			<AbsoluteFill style={{backgroundColor: 'white'}}>
+			<AbsoluteFill
+				style={{
+					backgroundColor: 'white',
+					perspective: variant === 'back-hidden-perspective' ? '500px' : 'none',
+				}}
+			>
 				<div
 					style={style}
 					ref={(node) => {
 						if (!node) return;
 						markup = node.outerHTML;
+						compositionMarkup = node.parentElement!.outerHTML;
+						const style = getComputedStyle(node);
+						computed = Object.fromEntries(
+							[
+								'transform',
+								'transform-origin',
+								'transform-style',
+								'backface-visibility',
+								'-webkit-backface-visibility',
+								'perspective',
+								'will-change',
+							].map((name) => [name, style.getPropertyValue(name)]),
+						);
 						ancestors = [];
 						for (
 							let parent = node.parentElement;
@@ -84,7 +113,7 @@ export const backfaceNative = (
 		);
 	};
 	return {
-		getNativeMarkup: () => ({markup, ancestors}),
+		getNativeMarkup: () => ({markup, compositionMarkup, ancestors, computed}),
 		component: Component,
 		id: `backface-native-${variant}`,
 		width: 300,
