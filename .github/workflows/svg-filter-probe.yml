@@ -17,7 +17,7 @@ jobs:
       - name: Verify package inputs and unchanged producer
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "dfedcf54be09eddc806a4ed5a451d2146b04d664343243cd366af59a9f38240e"
+          test "$actual" = "b201eae26dbc453f597da502bee07be6f82073cc7ad10301dbc3711d1b76eaba"
           git fetch --no-tags --depth=1 origin 66613b6001396d88a2d57b4347772a564897ae7a
           git diff --exit-code 66613b6001396d88a2d57b4347772a564897ae7a -- packages/web-renderer/src/drawing packages/web-renderer/src/compose.ts packages/web-renderer/src/take-screenshot.ts
       - uses: actions/setup-node@v6
