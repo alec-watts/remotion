@@ -7,6 +7,7 @@ import {createCanvasGradient} from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
 import {createSvgClipMask} from './svg-clip-mask';
 import {createSvgResourceMask} from './svg-mask';
+import {svgMaskDiagnostics} from './svg-mask-diagnostics';
 
 export const getPrecomposeRectForMask = (element: HTMLElement | SVGElement) => {
 	const boundingRect = getBiggestBoundingClientRect(element);
@@ -31,6 +32,27 @@ export const handleMask = async ({
 }) => {
 	if (maskImageInfo.type === 'svg-resource') {
 		const svgMask = await createSvgResourceMask(maskImageInfo);
+		svgMaskDiagnostics.onMask?.({
+			scale,
+			maskRect: maskRect.toJSON(),
+			precomposeRect: precomposeRect.toJSON(),
+			contextTransform: tempContext.getTransform().toJSON(),
+			contextAlpha: tempContext.globalAlpha,
+			contextFilter: tempContext.filter,
+			canvas: {
+				width: tempContext.canvas.width,
+				height: tempContext.canvas.height,
+			},
+			image: {
+				width: svgMask.width,
+				height: svgMask.height,
+				naturalWidth: svgMask.naturalWidth,
+				naturalHeight: svgMask.naturalHeight,
+			},
+			referenceBox: maskImageInfo.referenceBox.toJSON(),
+			markup: new XMLSerializer().serializeToString(maskImageInfo.svg),
+		});
+
 		const mask = new OffscreenCanvas(
 			tempContext.canvas.width,
 			tempContext.canvas.height,

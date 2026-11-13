@@ -1,6 +1,7 @@
-import {expect, test} from 'vitest';
+import {expect, onTestFinished, test} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
+import {svgMaskDiagnostics} from '../drawing/svg-mask-diagnostics';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	svgRootMaskGeometry,
@@ -15,6 +16,11 @@ test.for(
 	const native = await captureNativeReference(composition, 0, {
 		omitBackground: false,
 	});
+	const maskTrace: Record<string, unknown>[] = [];
+	svgMaskDiagnostics.onMask = (data) => maskTrace.push(data);
+	onTestFinished(() => {
+		svgMaskDiagnostics.onMask = null;
+	});
 	const actual = await (
 		await renderStillOnWeb({
 			composition,
@@ -26,6 +32,10 @@ test.for(
 	).blob({format: 'png'});
 	const comparison = await compareNativePixels(native, actual);
 	const path = `test/__results__/svg-mask-geometry/${server.browser}/${mode}-${scale}`;
+	await server.commands.writeFile(
+		`${path}/mask-trace.json`,
+		JSON.stringify(maskTrace),
+	);
 	const hashes: string[] = [];
 	for (const [role, blob] of [
 		['reference', native],
