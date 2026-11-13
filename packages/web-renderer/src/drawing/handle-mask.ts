@@ -30,7 +30,10 @@ export const handleMask = async ({
 	internalState: InternalState;
 }) => {
 	if (maskImageInfo.type === 'svg-resource') {
-		const svgMask = await createSvgResourceMask(maskImageInfo);
+		const svgMask = await createSvgResourceMask(maskImageInfo, {
+			width: maskRect.width * scale,
+			height: maskRect.height * scale,
+		});
 		const mask = new OffscreenCanvas(
 			tempContext.canvas.width,
 			tempContext.canvas.height,

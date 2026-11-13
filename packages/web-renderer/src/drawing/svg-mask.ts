@@ -53,12 +53,10 @@ export const getSvgResourceMask = (
 	};
 };
 
-export const createSvgResourceMask = ({
-	svg,
-	id,
-	referenceBox,
-	fontSnapshot,
-}: SvgResourceMaskImageInfo) => {
+export const createSvgResourceMask = (
+	{svg, id, referenceBox, fontSnapshot}: SvgResourceMaskImageInfo,
+	rasterSize: {width: number; height: number},
+) => {
 	const white = svg.ownerDocument.createElementNS(
 		'http://www.w3.org/2000/svg',
 		'rect',
@@ -118,6 +116,19 @@ export const createSvgResourceMask = ({
 		['opacity', '1'],
 	])
 		svg.style.setProperty(property, value, 'important');
+
+	// Preserve the SVG user-space viewport while decoding at the actual layer
+	// density, avoiding a second bitmap enlargement for transformed masks.
+	const viewportWidth = Number.parseFloat(svg.style.width);
+	const viewportHeight = Number.parseFloat(svg.style.height);
+	if (!svg.hasAttribute('viewBox')) {
+		svg.setAttribute('viewBox', `0 0 ${viewportWidth} ${viewportHeight}`);
+	}
+
+	svg.setAttribute('width', String(rasterSize.width));
+	svg.setAttribute('height', String(rasterSize.height));
+	svg.style.setProperty('width', `${rasterSize.width}px`, 'important');
+	svg.style.setProperty('height', `${rasterSize.height}px`, 'important');
 
 	const additions = [defs, cover, flood, white];
 	return turnSvgIntoDrawable(svg, {
