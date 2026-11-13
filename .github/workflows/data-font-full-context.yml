@@ -1,0 +1,51 @@
+name: Data-font full-context qualification
+
+on:
+  push:
+    branches: [codex/data-font-full-context]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_COLOR: 1
+  TURBO_TELEMETRY_DISABLED: 1
+  TURBO_NO_UPDATE_NOTIFIER: 1
+
+jobs:
+  renderer:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify unchanged public source and test inputs
+        run: |
+          source_hash=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$source_hash" = 0f60e3d9a22438684c577b8fb3439184d0837428f51ab2e3e78476d1ee347b18
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run unchanged full renderer shard
+        run: bun run testwebrenderer --log-order=stream -- --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-font-full-context-${{ matrix.shard }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
