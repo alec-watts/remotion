@@ -85,6 +85,7 @@ export const svgRootMaskGeometry = (
 			</AbsoluteFill>
 		);
 	};
+
 	return {
 		component: Component,
 		id: `svg-root-mask-${mode}-${String(scale).replace('.', '-')}`,
