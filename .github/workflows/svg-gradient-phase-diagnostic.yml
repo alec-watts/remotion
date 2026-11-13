@@ -1,0 +1,42 @@
+name: SVG gradient timeout phase diagnostic
+on:
+  push:
+    branches: [codex/12934-gradient-timeout-phases]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify exact instrumented source
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = ab975cae5fb9c3807dd759995c563082b268048b49cf94d2cfb481b03a78a35f
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run the full renderer shard with unchanged timeout and assertions
+        run: bun run testwebrenderer --log-order=stream -- --shard=2/2 --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-gradient-phase-diagnostic
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
