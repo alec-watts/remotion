@@ -17,7 +17,7 @@ jobs:
       - name: Verify replacement candidate source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "a70c967dc87a6b6f7c6a87e71749f9f1de4d898849130e76d1884721a548014d"
+          test "$actual" = "3c5f60947049a1561ce8420d70c6cdbbba508797799ff6366f4549a507eab1f3"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
