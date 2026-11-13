@@ -544,7 +544,7 @@ export const Root: React.FC = () => {
 			<Composition {...svgCssImportFont} />
 			{[false, true].flatMap((firstRoboto) =>
 				[false, true].map((literal) => {
-					const fixture = svgTitledDataFont(firstRoboto, literal);
+					const fixture = svgTitledDataFont(firstRoboto, literal, false, false);
 					return <Composition key={fixture.id} {...fixture} />;
 				}),
 			)}

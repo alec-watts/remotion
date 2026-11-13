@@ -9,11 +9,29 @@ import {
 	countNativePixels,
 } from './native-reference';
 
-test.for([{firstRoboto: false}, {firstRoboto: true}])(
-	'keeps local titled data faces in their stylesheet set, Roboto=$firstRoboto',
-	async ({firstRoboto}) => {
-		const composition = svgTitledDataFont(firstRoboto, false);
-		const literal = svgTitledDataFont(firstRoboto, true);
+test.for(
+	[false, true].flatMap((firstRoboto) =>
+		[
+			{persistent: false, trailingCarrier: false},
+			{persistent: true, trailingCarrier: false},
+			{persistent: true, trailingCarrier: true},
+		].map((variant) => ({firstRoboto, ...variant})),
+	),
+)(
+	'keeps local titled data faces in their stylesheet set, Roboto=$firstRoboto persistent=$persistent trailing=$trailingCarrier',
+	async ({firstRoboto, persistent, trailingCarrier}) => {
+		const composition = svgTitledDataFont(
+			firstRoboto,
+			false,
+			persistent,
+			trailingCarrier,
+		);
+		const literal = svgTitledDataFont(
+			firstRoboto,
+			true,
+			persistent,
+			trailingCarrier,
+		);
 		const native = await captureNativeReference(composition, 0, {
 			omitBackground: false,
 		});
@@ -35,7 +53,7 @@ test.for([{firstRoboto: false}, {firstRoboto: true}])(
 		const nativeControlPixels = await countNativePixels(nativeControl, native);
 		const nativePixels = await compareNativePixels(native, actual);
 		const controlPixels = await countNativePixels(control, actual);
-		const path = `test/__results__/titled-data-font/${server.browser}/${firstRoboto}`;
+		const path = `test/__results__/titled-data-font/${server.browser}/${firstRoboto}-${persistent}-${trailingCarrier}`;
 		for (const [role, blob] of [
 			['native', native],
 			['native-control', nativeControl],

@@ -17,7 +17,12 @@ const sources = Promise.all(
 	}),
 );
 
-export const svgTitledDataFont = (firstRoboto: boolean, literal: boolean) => {
+export const svgTitledDataFont = (
+	firstRoboto: boolean,
+	literal: boolean,
+	persistent: boolean,
+	trailingCarrier: boolean,
+) => {
 	const Component = () => {
 		const {delayRender, continueRender, cancelRender} = useDelayRender();
 		const [handle] = useState(() =>
@@ -61,13 +66,17 @@ export const svgTitledDataFont = (firstRoboto: boolean, literal: boolean) => {
 		const inactive = data[firstRoboto ? 0 : 1];
 		return (
 			<AbsoluteFill style={{backgroundColor: 'white'}}>
+				{persistent ? (
+					<style>{`@font-face{font-family:"${family}";src:url("${inactive}")}`}</style>
+				) : null}
 				<svg width={320} height={100}>
 					<style
 						title={literal ? undefined : 'preferred-data-font'}
 					>{`@font-face{font-family:"${family}";src:url("${preferred}")} rect{fill:lime}`}</style>
 					{literal ? null : (
-						<style title="inactive-data-font">{`@font-face{font-family:"${family}";src:url("${inactive}")} rect{fill:red}`}</style>
+						<style title="inactive-data-font">{`@font-face{font-family:"${family}";src:url("${persistent ? preferred : inactive}")} rect{fill:red}`}</style>
 					)}
+					{trailingCarrier ? <style>{'rect {stroke:none}'}</style> : null}
 					<text x={8} y={60} fontFamily={family} fontSize={40} fill="black">
 						Title Font
 					</text>
@@ -79,7 +88,7 @@ export const svgTitledDataFont = (firstRoboto: boolean, literal: boolean) => {
 
 	return {
 		component: Component,
-		id: `svg-titled-data-${firstRoboto ? 'roboto' : 'bangers'}-${literal ? 'literal' : 'titled'}`,
+		id: `svg-titled-data-${firstRoboto ? 'roboto' : 'bangers'}-${literal ? 'literal' : 'titled'}-${persistent ? 'persistent' : 'local'}-${trailingCarrier ? 'carrier' : 'last-titled'}`,
 		width: 320,
 		height: 100,
 		durationInFrames: 1,
