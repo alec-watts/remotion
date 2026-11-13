@@ -1,4 +1,4 @@
-name: SVG gradient timeout phase stress diagnostic
+name: SVG gradient timeout phase stress diagnostic on Intel
 on:
   push:
     branches: [codex/12934-gradient-timeout-phases]
@@ -7,12 +7,16 @@ permissions:
 jobs:
   diagnostic:
     if: github.repository == 'alec-watts/remotion'
-    runs-on: macos-latest
+    runs-on: macos-26-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Record diagnostic host architecture
+        run: |
+          uname -m
+          sw_vers
       - name: Verify exact instrumented source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
@@ -32,7 +36,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-gradient-phase-stress-diagnostic
+          name: svg-gradient-phase-stress-intel-diagnostic
           include-hidden-files: true
           path: |
             packages/web-renderer/test/__results__/
