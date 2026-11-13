@@ -18,6 +18,15 @@ jobs:
           persist-credentials: false
       - name: Assert exact failing public source
         run: test "$(git rev-parse HEAD)" = a31b226f360e5ffadda4cc2f8a41bbf0ab30efcb
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: qualification-input
+          sparse-checkout: .github/qualification/svg-stroke-native.test.tsx
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Add diagnostic only; preserve all original tests and implementation
+        run: cp qualification-input/.github/qualification/svg-stroke-native.test.tsx packages/web-renderer/src/test/svg-stroke-native.test.tsx
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -26,9 +35,10 @@ jobs:
           bun-version: 1.4.3
       - run: bun ci
       - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
       - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
       - name: Isolate original failing files without changing references or timeouts
-        run: cd packages/web-renderer && bunx vitest src/test/native-large-font-reference-readiness.test.tsx src/test/native-reference.test.tsx src/test/svg-titled-font-carrier.test.tsx src/test/clip-path.test.tsx src/test/svg-precompose-font.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/font-failure-isolation.json
+        run: cd packages/web-renderer && bunx vitest src/test/native-large-font-reference-readiness.test.tsx src/test/native-reference.test.tsx src/test/svg-titled-font-carrier.test.tsx src/test/clip-path.test.tsx src/test/svg-precompose-font.test.tsx src/test/svg-stroke-native.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/font-failure-isolation.json
       - name: Retain original source and native evidence
         if: always()
         run: |
