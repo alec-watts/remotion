@@ -1,6 +1,48 @@
-import {expect, test} from 'vitest';
+import {afterEach, expect, test, vi} from 'vitest';
 import {page, server} from 'vitest/browser';
 import '../symbol-dispose';
+import {calculateTransforms} from '../drawing/calculate-transforms';
+import {getPrecomposeRectFor3DTransform} from '../drawing/handle-3d-transform';
+import {walkOverNode} from '../walk-over-node';
+
+vi.mock('../drawing/calculate-transforms', {spy: true});
+vi.mock('../drawing/handle-3d-transform', {spy: true});
+vi.mock('../walk-over-node', {spy: true});
+afterEach(() => vi.clearAllMocks());
+
+const nodeLabel = (node: Node) =>
+	node instanceof Element ? node.outerHTML.slice(0, 1000) : node.textContent;
+const planeTrace = () => ({
+	transforms: vi.mocked(calculateTransforms).mock.calls.map(([args], index) => {
+		const result = vi.mocked(calculateTransforms).mock.results[index];
+		const value = result.type === 'return' ? result.value : null;
+		return {
+			order: vi.mocked(calculateTransforms).mock.invocationCallOrder[index],
+			node: nodeLabel(args.element),
+			isolated: args.isolated,
+			experimental: args.experimental3DRendering,
+			preserves: value?.preserves3DChildren,
+			dimensions: value?.dimensions,
+			precompositing: value?.precompositing,
+			matrix: value ? Array.from(value.totalMatrix.toFloat64Array()) : null,
+		};
+	}),
+	captures: vi
+		.mocked(getPrecomposeRectFor3DTransform)
+		.mock.calls.map(([args], index) => ({
+			order: vi.mocked(getPrecomposeRectFor3DTransform).mock
+				.invocationCallOrder[index],
+			node: nodeLabel(args.element),
+			onlyOwnPlane: args.onlyOwnPlane,
+			matrix: Array.from(args.matrix.toFloat64Array()),
+			result: vi.mocked(getPrecomposeRectFor3DTransform).mock.results[index],
+		})),
+	draws: vi.mocked(walkOverNode).mock.calls.map(([args], index) => ({
+		order: vi.mocked(walkOverNode).mock.invocationCallOrder[index],
+		node: nodeLabel(args.node),
+		forceSubtreePrecompositing: args.forceSubtreePrecompositing,
+	})),
+});
 import {renderStillOnWeb} from '../render-still-on-web';
 import {backfaceNative, backfaceNativeCases} from './fixtures/backface-native';
 import {captureNativeReference, compareNativePixels} from './native-reference';
@@ -94,6 +136,10 @@ test.for(
 			).blob({format: 'png'});
 		const defaultOutput = await render(false);
 		const enabled = await render(true);
+		const trace =
+			variant === 'perspective-front-parent-3d' && frame === 0
+				? planeTrace()
+				: null;
 		const ordinary = await compareNativePixels(native, defaultOutput);
 		const experimental = await compareNativePixels(native, enabled);
 		const uiComparison = capture.ui
@@ -136,6 +182,7 @@ test.for(
 				userAgent: navigator.userAgent,
 				devicePixelRatio: window.devicePixelRatio,
 				nativeDom,
+				trace,
 				plainDomMismatchedPixels: plainComparison.mismatchedPixels,
 				uiMismatchedPixels: uiComparison?.mismatchedPixels ?? null,
 				repeatMismatchedPixels: repeatComparison?.mismatchedPixels ?? null,
