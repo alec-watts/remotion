@@ -15,6 +15,13 @@ export const testImage = async ({
 	threshold?: number;
 	allowedMismatchedPixelRatio?: number;
 }) => {
+	const phase = (name: string) => {
+		if (testId.startsWith('issue-10676-svg-gradient-stroke')) {
+			console.info('[gradient-image-phase]', testId, name, performance.now());
+		}
+	};
+
+	phase('start');
 	const img = document.createElement('img');
 	const url = URL.createObjectURL(blob);
 	img.src = url;
@@ -28,14 +35,18 @@ export const testImage = async ({
 
 	const {promise, resolve, reject} = withResolvers<void>();
 	img.onload = () => {
+		phase('load-event');
 		resolve();
 	};
 
 	img.onerror = () => {
+		phase('error-event');
 		reject(new Error('Image failed to load'));
 	};
 
+	phase('waiting-for-load');
 	await promise;
+	phase('screenshot-start');
 
 	await expect(page.getByTestId(testId)).toMatchScreenshot(testId, {
 		comparatorOptions: {
@@ -43,6 +54,7 @@ export const testImage = async ({
 			allowedMismatchedPixelRatio,
 		},
 	});
+	phase('screenshot-finished');
 };
 
 export const testCompositions = async ({
