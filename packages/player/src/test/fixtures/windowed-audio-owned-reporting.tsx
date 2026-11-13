@@ -6,6 +6,27 @@ import type {DelayRenderScope} from 'remotion';
 const main = async () => {
 	const mode = process.argv[2];
 	const failure = new Error('controlled metadata failure');
+	const delayPath = resolve(
+		__dirname,
+		'../../../../core/dist/cjs/delay-render.js',
+	);
+	const actualDelay = await import(delayPath);
+	const allocate = actualDelay.delayRenderInternal;
+	const allocations = new Map<
+		number,
+		{scope: DelayRenderScope; label: string | null}
+	>();
+	mock.module(delayPath, () => ({
+		...actualDelay,
+		delayRenderInternal: (options: {
+			scope: DelayRenderScope;
+			label: string | null;
+		}) => {
+			const handle = allocate(options);
+			allocations.set(handle, options);
+			return handle;
+		},
+	}));
 	const bunnyPath = Bun.resolveSync(
 		'mediabunny',
 		resolve(__dirname, '../../../../media-utils'),
@@ -55,7 +76,8 @@ const main = async () => {
 		resolve(__dirname, '../../../../core/dist/cjs/index.js'),
 	);
 	mock.module('remotion', () => core);
-	const {act, cleanup, render} = await import('@testing-library/react');
+	const {act, cleanup, render, waitFor} =
+		await import('@testing-library/react');
 	const {useLayoutEffect} = await import('react');
 	const {useDelayRender} = await import('remotion');
 	const {Player} = await import('../../Player.js');
@@ -119,18 +141,28 @@ const main = async () => {
 		</core.Internals.DelayRenderContextType.Provider>
 	);
 	const flush = () => new Promise<void>((done) => setTimeout(done, 0));
+	const metadataHolds = () =>
+		scope.remotion_delayRenderHandles.filter((handle) => {
+			const allocation = allocations.get(handle);
+			return (
+				allocation?.scope === scope &&
+				allocation.label?.startsWith('Waiting for audio metadata')
+			);
+		});
 	try {
 		const view = render(scene('http://localhost:3000/first.wav'));
 		await act(flush);
 		if (!mode.includes('constructor')) {
 			assert.equal(inputs.length, 1);
-			assert.equal(scope.remotion_delayRenderHandles.length, 2);
+			assert.equal(metadataHolds().length, 1);
+			assert(scope.remotion_delayRenderHandles.includes(siblingHandle!));
 			if (mode.includes('stale')) {
 				view.rerender(scene('http://localhost:3000/second.wav'));
 				await act(flush);
 				assert.equal(inputs.length, 2);
 				assert.equal(inputs[0].disposed, true);
-				assert.equal(scope.remotion_delayRenderHandles.length, 2);
+				assert.equal(metadataHolds().length, 1);
+				assert(scope.remotion_delayRenderHandles.includes(siblingHandle!));
 			}
 
 			if (mode.includes('unmount')) {
@@ -153,16 +185,23 @@ const main = async () => {
 
 		if (mode.includes('success') || mode.includes('stale'))
 			assert.equal(view.queryByRole('alert'), null);
-		else assert.equal(view.getByRole('alert').textContent, failure.message);
+		else
+			assert.equal(
+				view.getByRole('alert', {hidden: true}).textContent,
+				failure.message,
+			);
 		view.getByText('healthy sibling');
 		assert.equal(scope.remotion_cancelledError, undefined);
 		assert.equal(scope.remotion_cancelledErrorObject, undefined);
-		assert.deepEqual(scope.remotion_delayRenderHandles, [siblingHandle]);
+		assert.deepEqual(metadataHolds(), []);
+		assert(scope.remotion_delayRenderHandles.includes(siblingHandle!));
 		assert.equal(scope.remotion_renderReady, false);
 		assert.notEqual(releaseSibling, null);
 		(releaseSibling as unknown as () => void)();
-		assert.deepEqual(scope.remotion_delayRenderHandles, []);
-		assert.equal(scope.remotion_renderReady, true);
+		await waitFor(() => {
+			assert.deepEqual(scope.remotion_delayRenderHandles, []);
+			assert.equal(scope.remotion_renderReady, true);
+		});
 		view.unmount();
 		await act(flush);
 		process.stdout.write(

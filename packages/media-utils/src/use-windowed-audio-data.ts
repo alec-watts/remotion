@@ -122,6 +122,9 @@ export const useWindowedAudioData = ({
 			signal.addEventListener('abort', onAbort, {once: true});
 
 			try {
+				// Let the owning boundary commit before runtime setup can report a
+				// synchronous constructor failure; retain the hold across that turn.
+				await Promise.resolve();
 				if (signal.aborted) return;
 				input = new Input({
 					formats: ALL_FORMATS,
