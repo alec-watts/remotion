@@ -44,8 +44,18 @@ export const handleMask = async ({
 				maskRect.width * scale,
 				maskRect.height * scale,
 			);
-			tempContext.globalCompositeOperation = 'destination-in';
-			tempContext.drawImage(mask.canvas, 0, 0);
+			tempContext.save();
+			try {
+				// The mask bitmap is already in layer pixels. Apply it without
+				// repeating the content transform, alpha, or filter.
+				tempContext.resetTransform();
+				tempContext.globalAlpha = 1;
+				tempContext.filter = 'none';
+				tempContext.globalCompositeOperation = 'destination-in';
+				tempContext.drawImage(mask.canvas, 0, 0);
+			} finally {
+				tempContext.restore();
+			}
 		} finally {
 			mask.canvas.width = 0;
 			mask.canvas.height = 0;
