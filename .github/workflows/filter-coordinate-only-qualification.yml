@@ -22,10 +22,11 @@ jobs:
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
           test "$actual" = "4713c5a54fb364c71458f2cd17cc53320e3a5f4592e01e2d175a66463010b1fe"
+      - name: Fetch the public producer for both source audits
+        run: git fetch --no-tags --depth=1 origin a5f19eb436a13e1e752adac13cf7aa101f840291
       - name: Restore unchanged public clipping for the matched baseline
         if: matrix.producer == 'baseline'
         run: |
-          git fetch --no-tags --depth=1 origin a5f19eb436a13e1e752adac13cf7aa101f840291
           git show a5f19eb436a13e1e752adac13cf7aa101f840291:packages/web-renderer/src/compose.ts > packages/web-renderer/src/compose.ts
           git show a5f19eb436a13e1e752adac13cf7aa101f840291:packages/web-renderer/src/drawing/process-node.ts > packages/web-renderer/src/drawing/process-node.ts
       - uses: actions/setup-node@v6
