@@ -1,0 +1,48 @@
+name: Affine filter qualification
+
+on:
+  push:
+    branches: [codex/12686-affine-qualification]
+
+permissions:
+  contents: read
+
+jobs:
+  native-pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Restore integrated baseline producer
+        if: matrix.producer == 'baseline'
+        run: |
+          git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/compose.ts > packages/web-renderer/src/compose.ts
+          git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/drawing/process-node.ts > packages/web-renderer/src/drawing/process-node.ts
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Compare native pixels without tolerance
+        run: cd packages/web-renderer && bunx vitest src/test/affine-filter-input-review.test.tsx --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/affine.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: affine-filter-${{ matrix.producer }}-${{ github.run_attempt }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
