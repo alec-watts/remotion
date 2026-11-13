@@ -43,7 +43,7 @@ jobs:
       - run: cd packages/web-renderer && bun run lint
       - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
       - name: Preserve strict old and new font cohorts
-        run: cd packages/web-renderer && bunx vitest src/test/svg-exact-title-qualification-*.test.tsx src/test/svg-font-css-for-carrier.test.ts src/test/svg-persistent-font-order.test.tsx src/test/svg-titled-data-font.test.tsx src/test/svg-font-definition-review.test.tsx src/test/svg-precompose-font.test.tsx src/test/svg-inactive-titled-font.test.tsx src/test/svg-paint-resource-font.test.tsx src/test/svg-css-import-font.test.ts src/test/svg-css-url-font.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/exact-titles.json
+        run: cd packages/web-renderer && bunx vitest src/test/svg-exact-title-qualification-*.test.tsx src/test/svg-exact-title-canonical-export.test.tsx src/test/svg-font-css-for-carrier.test.ts src/test/svg-persistent-font-order.test.tsx src/test/svg-titled-data-font.test.tsx src/test/svg-font-definition-review.test.tsx src/test/svg-precompose-font.test.tsx src/test/svg-inactive-titled-font.test.tsx src/test/svg-paint-resource-font.test.tsx src/test/svg-css-import-font.test.ts src/test/svg-css-url-font.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/exact-titles.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
