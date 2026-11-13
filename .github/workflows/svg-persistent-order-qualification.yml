@@ -23,7 +23,7 @@ jobs:
           ARM: ${{ matrix.arm }}
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = 242415e56573c759e5b8485a9d140d5978941778221e6f13cf36859343040228
+          test "$actual" = 0ba3fd193fbd39b20a42248e66f4d32ee43277c39e3328e0e57487b8a1c8f892
           git fetch --no-tags --depth=1 origin bd1a1332fa26bab7a3a3e2ff5da5fad9106c39f6
           if test "$ARM" = baseline; then
             git restore --source=bd1a1332fa26bab7a3a3e2ff5da5fad9106c39f6 -- packages/web-renderer/src/drawing/svg-font-css-for-carrier.ts packages/web-renderer/src/drawing/turn-svg-into-drawable.ts packages/web-renderer/src/test/svg-font-css-for-carrier.test.ts
