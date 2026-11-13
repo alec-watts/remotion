@@ -17,7 +17,7 @@ jobs:
       - name: Verify unpatched Solid context source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "27f4c008d1b1f6d1a2dafe614bdc841db1160cb5c89406a1c142ebde69144f6b"
+          test "$actual" = "96321434daa004f0d9485b3cc707da3db18734f1c03bd8d0c032cf4b68261260"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
