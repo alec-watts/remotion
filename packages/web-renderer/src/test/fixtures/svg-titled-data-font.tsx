@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {AbsoluteFill, useDelayRender} from 'remotion';
 
 const sources = Promise.all(
@@ -118,6 +118,20 @@ export const svgTitledPersistentOrder = (
 			mode !== 'import-last' || literal,
 		);
 		const family = `Persistent order ${mode} ${firstRoboto ? 'Roboto' : 'Bangers'}`;
+		const importedStyle = useRef<SVGStyleElement>(null);
+		useLayoutEffect(() => {
+			const style = importedStyle.current;
+			if (style === null) return;
+			const ready = () => {
+				const rule = style.sheet?.cssRules[0];
+				if (rule instanceof CSSImportRule && rule.styleSheet?.cssRules.length) {
+					setImportLoaded(true);
+				}
+			};
+			style.addEventListener('load', ready);
+			ready();
+			return () => style.removeEventListener('load', ready);
+		}, [data]);
 		useEffect(() => {
 			let active = true;
 			sources
@@ -169,7 +183,7 @@ export const svgTitledPersistentOrder = (
 					)}
 					{literal ? null : mode === 'import-last' ? (
 						<style
-							onLoad={() => setImportLoaded(true)}
+							ref={importedStyle}
 						>{`@import url("data:text/css,${encodeURIComponent(face(middle))}");`}</style>
 					) : (
 						<style>{face(middle)}</style>
@@ -188,6 +202,7 @@ export const svgTitledPersistentOrder = (
 			</AbsoluteFill>
 		);
 	};
+
 	return {
 		component: Component,
 		id: `svg-persistent-order-${mode}-${firstRoboto ? 'roboto' : 'bangers'}-${literal ? 'literal' : 'authored'}`,
