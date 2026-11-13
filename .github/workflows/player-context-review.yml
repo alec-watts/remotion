@@ -17,7 +17,7 @@ jobs:
       - name: Verify paint cleanup candidate source
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = "5a492bee26ae32d735b738a9b12421788c42e4bd458d749d9999bbb58ff4b5f9"
+          test "$actual" = "e9b03d15b135e7953d6a23baed63b34a435934fa62610ec4826f5a16ef242949"
       - uses: actions/setup-node@v6
         with:
           node-version: 26
