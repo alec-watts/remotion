@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {getFilterCaptureViewport} from '../drawing/filter-capture-viewport';
+import {getPrecomposedLayerGeometry} from '../drawing/get-precomposed-layer-geometry';
 import {clipSourceRectToViewport} from '../drawing/get-pretransform-rect';
 
 const viewport = () => new DOMRect(0, 0, 300, 300);
@@ -21,6 +22,40 @@ test.each([
 			}),
 		),
 	).toEqual(entry.expected);
+});
+
+test.each([2, -2])(
+	'captures filtered axis scale %s before final resampling',
+	(a) => {
+		const result = getPrecomposedLayerGeometry({
+			precomposeRect: new DOMRect(-100, 100, 200, 50),
+			totalMatrix: matrix(a) as DOMMatrix,
+			parentRect: viewport(),
+			scale: 1,
+			is3DPrecomposition: false,
+			rasterizeFilterAtProjectedScale: true,
+		});
+		expect(result.scale).toBe(2);
+		expect(rectangle(result.rect)).toEqual([-100, 100, 200, 50]);
+	},
+);
+
+test('leaves the default and perspective sampling policies unchanged', () => {
+	const options = {
+		precomposeRect: new DOMRect(-100, 100, 200, 50),
+		totalMatrix: matrix(2) as DOMMatrix,
+		parentRect: viewport(),
+		scale: 1,
+		is3DPrecomposition: false,
+	};
+	expect(getPrecomposedLayerGeometry(options).scale).toBe(1);
+	expect(
+		getPrecomposedLayerGeometry({
+			...options,
+			is3DPrecomposition: true,
+			rasterizeFilterAtProjectedScale: true,
+		}).scale,
+	).toBe(1);
 });
 
 test('retains both axes of a skewed vertical shadow', () => {
