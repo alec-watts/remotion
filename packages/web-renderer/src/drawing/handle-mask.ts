@@ -9,6 +9,15 @@ import {createSvgClipMask} from './svg-clip-mask';
 import {createSvgResourceMask} from './svg-mask';
 import {svgMaskDiagnostics} from './svg-mask-diagnostics';
 
+const rectDiagnostics = (
+	rect: Pick<DOMRect, 'x' | 'y' | 'width' | 'height'>,
+) => ({
+	x: rect.x,
+	y: rect.y,
+	width: rect.width,
+	height: rect.height,
+});
+
 export const getPrecomposeRectForMask = (element: HTMLElement | SVGElement) => {
 	const boundingRect = getBiggestBoundingClientRect(element);
 
@@ -34,8 +43,8 @@ export const handleMask = async ({
 		const svgMask = await createSvgResourceMask(maskImageInfo);
 		svgMaskDiagnostics.onMask?.({
 			scale,
-			maskRect: maskRect.toJSON(),
-			precomposeRect: precomposeRect.toJSON(),
+			maskRect: rectDiagnostics(maskRect),
+			precomposeRect: rectDiagnostics(precomposeRect),
 			contextTransform: tempContext.getTransform().toJSON(),
 			contextAlpha: tempContext.globalAlpha,
 			contextFilter: tempContext.filter,
@@ -49,7 +58,7 @@ export const handleMask = async ({
 				naturalWidth: svgMask.naturalWidth,
 				naturalHeight: svgMask.naturalHeight,
 			},
-			referenceBox: maskImageInfo.referenceBox.toJSON(),
+			referenceBox: rectDiagnostics(maskImageInfo.referenceBox),
 			markup: new XMLSerializer().serializeToString(maskImageInfo.svg),
 		});
 
