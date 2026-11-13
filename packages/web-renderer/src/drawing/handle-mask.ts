@@ -67,9 +67,22 @@ export const handleMask = async ({
 			tempContext.canvas.height,
 		).getContext('2d');
 		if (!mask) throw new Error('Could not create SVG mask context');
+		const source = new OffscreenCanvas(
+			svgMask.naturalWidth,
+			svgMask.naturalHeight,
+		).getContext('2d');
+		if (!source) {
+			mask.canvas.width = 0;
+			mask.canvas.height = 0;
+			throw new Error('Could not create SVG mask source context');
+		}
+
 		try {
+			// Resolve SVG resource coordinates in its intrinsic viewport before
+			// resizing the resulting bitmap into the precomposition layer.
+			source.drawImage(svgMask, 0, 0);
 			mask.drawImage(
-				svgMask,
+				source.canvas,
 				(maskRect.left - precomposeRect.left) * scale,
 				(maskRect.top - precomposeRect.top) * scale,
 				maskRect.width * scale,
@@ -88,6 +101,8 @@ export const handleMask = async ({
 				tempContext.restore();
 			}
 		} finally {
+			source.canvas.width = 0;
+			source.canvas.height = 0;
 			mask.canvas.width = 0;
 			mask.canvas.height = 0;
 		}
