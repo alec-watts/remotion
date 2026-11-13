@@ -978,12 +978,12 @@ for (const behavior of [
 								onInit={
 									behavior === 'replaced-init'
 										? async () => {
-												await paint;
+												if (owner === 0) await paint;
 												return () => undefined;
 											}
 										: undefined
 								}
-								onPaint={() => paint}
+								onPaint={() => (owner === 0 ? paint : undefined)}
 							>
 								<div>paint</div>
 							</HtmlInCanvas>
@@ -1013,11 +1013,16 @@ for (const behavior of [
 			if (replaced) {
 				expect(scope.remotion_delayRenderHandles.length).toBeGreaterThan(1);
 				const transfers = transferControlToOffscreenCalls;
+				const retiredHandles = scope.remotion_delayRenderHandles.filter(
+					(handle) => handle !== siblingHandle,
+				);
 				owner = 1;
 				view.rerender(scene(50));
 				expect(view.container.querySelector('canvas')).toBe(canvas);
 				expect(transferControlToOffscreenCalls).toBe(transfers);
-				expect(scope.remotion_delayRenderHandles).toEqual([siblingHandle]);
+				for (const handle of retiredHandles)
+					expect(scope.remotion_delayRenderHandles).not.toContain(handle);
+				expect(scope.remotion_delayRenderHandles).toContain(siblingHandle);
 			}
 
 			const pendingHandles = scope.remotion_delayRenderHandles.length;
@@ -1044,6 +1049,15 @@ for (const behavior of [
 			) {
 				expect(scope.remotion_delayRenderHandles.length).toBe(pendingHandles);
 				expect(scope.remotion_renderReady).toBe(false);
+			}
+
+			if (replaced) {
+				// The replacement may allocate its own initial-paint hold. Complete
+				// that healthy paint without releasing another component's hold.
+				canvas.dispatchEvent(new Event('paint'));
+				await waitFor(() =>
+					expect(scope.remotion_delayRenderHandles).toEqual([siblingHandle]),
+				);
 			}
 
 			if (behavior === 'success' || replaced)
