@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, candidate]
+        arm: [public, skip, candidate]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -23,10 +23,12 @@ jobs:
           ARM: ${{ matrix.arm }}
         run: |
           actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
-          test "$actual" = 9534104659b1a56cee26b143ae9b789349a8a4b01d78586d233a3ba697a5db16
-          git fetch --no-tags --depth=1 origin 4cae19ac1ccfac56be931e6ed285082a1b335a54
-          if test "$ARM" = baseline; then
+          test "$actual" = 61ff988d0090cba304c13b66cc7f015c5fc6374bc4ae055bf9577d79a6d5b398
+          git fetch --no-tags --depth=1 origin 4cae19ac1ccfac56be931e6ed285082a1b335a54 97cadb4e51a1077c62b3992f0d1eb239bea5da35
+          if test "$ARM" = public; then
             git restore --source=4cae19ac1ccfac56be931e6ed285082a1b335a54 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
+          elif test "$ARM" = skip; then
+            git restore --source=97cadb4e51a1077c62b3992f0d1eb239bea5da35 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
           fi
       - uses: actions/setup-node@v6
         with:
