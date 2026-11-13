@@ -1,0 +1,64 @@
+name: WebKit backface screenshot control
+
+on:
+  push:
+    branches: [codex/12686-headed-backface-control]
+
+permissions:
+  contents: read
+
+jobs:
+  compare-browser-modes:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps webkit
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Retain headless WebKit comparisons
+        id: headless
+        continue-on-error: true
+        run: cd packages/web-renderer && bunx vitest src/test/backface-native.test.tsx --project=webkit --browser.headless=true --run --reporter=default --reporter=json --outputFile=./test/__results__/backface-headless.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backface-native-headless
+          path: packages/web-renderer/test/__results__/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Keep the headed result directory fresh
+        if: always()
+        run: |
+          if [ -d packages/web-renderer/test/__results__ ]; then
+            mv packages/web-renderer/test/__results__ packages/web-renderer/test/__headless_results__
+          fi
+      - name: Retain headed WebKit comparisons
+        id: headed
+        continue-on-error: true
+        run: cd packages/web-renderer && bunx vitest src/test/backface-native.test.tsx --project=webkit --browser.headless=false --run --reporter=default --reporter=json --outputFile=./test/__results__/backface-headed.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backface-native-headed
+          path: packages/web-renderer/test/__results__/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve both original test verdicts
+        if: always()
+        env:
+          HEADLESS_OUTCOME: ${{ steps.headless.outcome }}
+          HEADED_OUTCOME: ${{ steps.headed.outcome }}
+        run: |
+          test "$HEADLESS_OUTCOME" = success
+          test "$HEADED_OUTCOME" = success
