@@ -1,15 +1,21 @@
 import {NoReactInternals} from 'remotion/no-react';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	svgDefinitionModes,
+	svgPaintResourceFont,
 	svgDefinitionFont,
 	svgDefinitionFontUrl,
 	svgWildcardStyleModes,
 	svgWildcardStyle,
 } from './fixtures/svg-font-definition-review';
-import {countNativePixels} from './native-reference';
+import {
+	captureNativeReference,
+	compareNativePixels,
+	countNativePixels,
+} from './native-reference';
 import {testCompositions} from './utils';
 
 test('preserves wildcard style selectors', async () => {
@@ -72,5 +78,58 @@ test.for(
 		} finally {
 			fetchFont.mockRestore();
 		}
+	},
+);
+
+test.for(
+	(['pattern', 'mask'] as const).flatMap((kind) =>
+		[false, true].map((inDefs) => ({kind, inDefs})),
+	),
+)(
+	'preserves external font size in $kind resource, defs=$inDefs',
+	async ({kind, inDefs}) => {
+		const composition = svgPaintResourceFont({kind, inDefs, literal: false});
+		const native = await captureNativeReference(composition, 0, {
+			omitBackground: false,
+		});
+		const options = {
+			frame: 0,
+			inputProps: {},
+			licenseKey: 'free-license',
+			allowHtmlInCanvas: false,
+		} as const;
+		const actual = await (
+			await renderStillOnWeb({...options, composition})
+		).blob({format: 'png'});
+		const control = await (
+			await renderStillOnWeb({
+				...options,
+				composition: svgPaintResourceFont({kind, inDefs, literal: true}),
+			})
+		).blob({format: 'png'});
+		const controlPixels = await countNativePixels(control, actual);
+		const nativePixels = await compareNativePixels(native, actual);
+		const path = `test/__results__/paint-resource-font/${server.browser}/${kind}-${inDefs}`;
+		for (const [name, blob] of [
+			['native', native],
+			['actual', actual],
+			['control', control],
+		] as const) {
+			const bytes = new Uint8Array(await blob.arrayBuffer());
+			let binary = '';
+			for (const byte of bytes) binary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				`${path}/${name}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(
+			`${path}/comparison.json`,
+			JSON.stringify({controlPixels, nativePixels}),
+		);
+		expect.soft(controlPixels.mismatchedPixels).toBe(0);
+		expect(nativePixels.mismatchedPixels).toBe(0);
 	},
 );
