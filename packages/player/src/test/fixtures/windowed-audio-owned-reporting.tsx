@@ -6,7 +6,11 @@ import type {DelayRenderScope} from 'remotion';
 const main = async () => {
 	const mode = process.argv[2];
 	const failure = new Error('controlled metadata failure');
-	const bunny = await import('mediabunny');
+	const bunnyPath = Bun.resolveSync(
+		'mediabunny',
+		resolve(__dirname, '../../../../media-utils'),
+	);
+	const bunny = await import(bunnyPath);
 	const inputs: ControlledInput[] = [];
 	class ControlledInput {
 		disposed = false;
@@ -46,7 +50,7 @@ const main = async () => {
 		}
 	}
 
-	mock.module('mediabunny', () => ({...bunny, Input: ControlledInput}));
+	mock.module(bunnyPath, () => ({...bunny, Input: ControlledInput}));
 	const core = require(
 		resolve(__dirname, '../../../../core/dist/cjs/index.js'),
 	);
