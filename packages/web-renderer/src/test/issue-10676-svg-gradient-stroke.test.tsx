@@ -4,19 +4,28 @@ import {renderMediaOnWeb} from '../render-media-on-web';
 import {renderStillOnWeb} from '../render-still-on-web';
 import '../symbol-dispose';
 import {issue10676SvgGradientStroke} from './fixtures/issue-10676-svg-gradient-stroke';
+import {makeRendererPhaseLog} from './renderer-phase-log';
 import {testImage} from './utils';
 
 test('preserves SVG gradient strokes in still and media renders', async (t) => {
+	const phase = makeRendererPhaseLog(
+		'svg-gradient',
+		t.task.file.projectName ?? null,
+	);
+
+	phase('start');
 	const frameToTest = 80;
 	await page.viewport(320, 180);
-	const still = await (
-		await renderStillOnWeb({
-			licenseKey: 'free-license',
-			composition: issue10676SvgGradientStroke,
-			frame: frameToTest,
-			inputProps: {},
-		})
-	).blob({format: 'png'});
+	phase('viewport-ready');
+	const renderedStill = await renderStillOnWeb({
+		licenseKey: 'free-license',
+		composition: issue10676SvgGradientStroke,
+		frame: frameToTest,
+		inputProps: {},
+	});
+	phase('still-rendered');
+	const still = await renderedStill.blob({format: 'png'});
+	phase('still-encoded');
 
 	await testImage({
 		blob: still,
@@ -24,12 +33,15 @@ test('preserves SVG gradient strokes in still and media renders', async (t) => {
 		threshold: 0.02,
 	});
 
+	phase('still-compared');
+
 	if (t.task.file.projectName === 'webkit') {
 		return;
 	}
 
 	let mediaFrame: Blob | null = null;
 	let renderedFrameCount = 0;
+	phase('media-start');
 	await renderMediaOnWeb({
 		licenseKey: 'free-license',
 		composition: issue10676SvgGradientStroke,
@@ -53,6 +65,7 @@ test('preserves SVG gradient strokes in still and media renders', async (t) => {
 		},
 	});
 
+	phase('media-rendered');
 	if (!mediaFrame) {
 		throw new Error('Expected renderMediaOnWeb() to produce a frame');
 	}
@@ -62,4 +75,5 @@ test('preserves SVG gradient strokes in still and media renders', async (t) => {
 		testId: 'issue-10676-svg-gradient-stroke-media',
 		threshold: 0.02,
 	});
+	phase('media-compared');
 });

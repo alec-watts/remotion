@@ -1,0 +1,64 @@
+name: Player renderer timeout phase diagnostic
+on:
+  push:
+    branches: [codex/12934-renderer-timeout-phases]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [candidate, previous, main]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Record source and host
+        run: |
+          mkdir -p diagnostic-evidence
+          git rev-parse HEAD > diagnostic-evidence/source.txt
+          uname -m > diagnostic-evidence/architecture.txt
+          sw_vers > diagnostic-evidence/os.txt
+          git ls-tree -r HEAD -- packages/web-renderer > diagnostic-evidence/renderer-tree.txt
+      - name: Restore comparison producer
+        env:
+          PRODUCER: ${{ matrix.producer }}
+        run: |
+          if [ "$PRODUCER" = previous ]; then
+            git restore --source=690fefcf3285c299c71f4430a56ab44d296bd6cc -- packages/core/src/internals.ts packages/media-utils/src/use-windowed-audio-data.ts packages/transitions/src/html-in-canvas-presentation.tsx
+          elif [ "$PRODUCER" = main ]; then
+            git restore --source=54ebe19186936aa45cd9cc0892b636239972d720 -- packages/core packages/player packages/media-utils packages/transitions
+          fi
+          git diff --name-status HEAD > diagnostic-evidence/producer-paths.txt
+          git diff HEAD > diagnostic-evidence/producer.patch
+          shasum -a 256 packages/core/src/internals.ts packages/media-utils/src/use-windowed-audio-data.ts packages/transitions/src/html-in-canvas-presentation.tsx > diagnostic-evidence/producer-hashes.txt
+          git diff --exit-code HEAD -- packages/web-renderer package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run original full shard once with unchanged limits and assertions
+        run: bun run testwebrenderer --log-order=stream -- --shard=2/2 --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: player-renderer-phases-${{ matrix.producer }}
+          include-hidden-files: true
+          path: |
+            diagnostic-evidence/
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7

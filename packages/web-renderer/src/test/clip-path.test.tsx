@@ -9,12 +9,19 @@ import {clipPathDescendantFilterObjectBox} from './fixtures/clip-path-descendant
 import {clipPathPolygonFillRules} from './fixtures/clip-path-polygon-fill-rules';
 import {clipPathRectangleDescendantFilter} from './fixtures/clip-path-rectangle-descendant-filter';
 import {clipScaledFilter} from './fixtures/clip-path-rectangle-union';
+import {makeRendererPhaseLog} from './renderer-phase-log';
 import {testCompositions, testImage} from './utils';
 
 test.for([clipPathShapes, clipPathReferences])(
 	'renders $id',
-	async (composition) => {
+	async (composition, t) => {
+		const phase = makeRendererPhaseLog(
+			composition.id,
+			t.task.file.projectName ?? null,
+		);
+		phase('start');
 		await page.viewport(composition.width, composition.height);
+		phase('viewport-ready');
 		const still = await renderStillOnWeb({
 			composition,
 			frame: composition.durationInFrames - 1,
@@ -22,10 +29,14 @@ test.for([clipPathShapes, clipPathReferences])(
 			licenseKey: 'free-license',
 			allowHtmlInCanvas: false,
 		});
+		phase('still-rendered');
+		const blob = await still.blob({format: 'png'});
+		phase('still-encoded');
 		await testImage({
-			blob: await still.blob({format: 'png'}),
+			blob,
 			testId: composition.id,
 		});
+		phase('still-compared');
 	},
 );
 

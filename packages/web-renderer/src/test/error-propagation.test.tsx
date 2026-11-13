@@ -4,6 +4,7 @@ import {expect, test} from 'vitest';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import {renderStillOnWeb} from '../render-still-on-web';
 import '../symbol-dispose';
+import {makeRendererPhaseLog} from './renderer-phase-log';
 
 class UseEffectError extends Error {}
 class FrameRenderError extends Error {}
@@ -119,9 +120,15 @@ test('should unwrap generic React wrapper errors and keep useful stack', async (
 	});
 });
 
-test('should propagate errors thrown on a specific frame', async () => {
+test('should propagate errors thrown on a specific frame', async (t) => {
+	const phase = makeRendererPhaseLog(
+		'frame-render-error',
+		t.task.file.projectName ?? null,
+	);
+	phase('start');
 	const ThrowsOnFrame5: React.FC = () => {
 		const frame = useCurrentFrame();
+		if (frame === 0 || frame === 5) phase(`render-frame-${frame}`);
 		if (frame === 5) {
 			throw new FrameRenderError('Error on frame 5');
 		}
@@ -143,14 +150,21 @@ test('should propagate errors thrown on a specific frame', async () => {
 			inputProps: {},
 		}),
 	).rejects.toThrow(FrameRenderError);
+	phase('expected-error-received');
 });
 
-test('should propagate errors thrown in useEffect on a specific frame', async () => {
+test('should propagate errors thrown in useEffect on a specific frame', async (t) => {
+	const phase = makeRendererPhaseLog(
+		'frame-effect-error',
+		t.task.file.projectName ?? null,
+	);
+	phase('start');
 	const ThrowsInUseEffectOnFrame3: React.FC = () => {
 		const frame = useCurrentFrame();
 
 		useEffect(() => {
 			if (frame === 3) {
+				phase('effect-frame-3');
 				throw new UseEffectOnFrameError('useEffect error on frame 3');
 			}
 		}, [frame]);
@@ -172,6 +186,7 @@ test('should propagate errors thrown in useEffect on a specific frame', async ()
 			inputProps: {},
 		}),
 	).rejects.toThrow(UseEffectOnFrameError);
+	phase('expected-error-received');
 });
 
 test('should propagate errors thrown during initial render', async () => {
