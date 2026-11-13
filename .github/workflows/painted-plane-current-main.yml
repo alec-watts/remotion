@@ -1,0 +1,54 @@
+name: Painted plane current-main qualification
+on:
+  push:
+    branches: [codex/12686-painted-plane-main]
+permissions:
+  contents: read
+jobs:
+  renderer:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [candidate, capture-padding-control]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify candidate source identity
+        run: |
+          actual=$(git ls-tree -r -z HEAD -- packages package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml | shasum -a 256 | cut -d ' ' -f 1)
+          test "$actual" = "dc32ddb0369944000e5d45eb2219c0c9f647eff909bb764fa7eae42dcc7cc563"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Reintroduce capture padding only in the plane planner
+        if: matrix.producer == 'capture-padding-control'
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p = Path('packages/web-renderer/src/compose.ts')
+          text = p.read_text()
+          assert text.count('includeCapturePadding: false') == 1
+          p.write_text(text.replace('includeCapturePadding: false', 'includeCapturePadding: null'))
+          PYCODE
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Qualify current-main drawing and explicit nullable contracts
+        run: cd packages/web-renderer && bunx vitest src/test/preserve-3d-depth.test.tsx src/test/painted-plane-bounds.test.tsx src/test/outline.test.tsx src/test/inline-scale.test.tsx src/test/3d-grid-sampler.test.ts src/test/filter.test.tsx src/test/clip-path.test.tsx src/test/transforms.test.tsx src/test/input-props.test.tsx src/test/html-in-canvas.test.tsx src/test/inset-shadow-lifecycle.test.ts --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/painted-plane-current-main.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: painted-plane-current-main-${{ matrix.producer }}-${{ github.run_attempt }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
