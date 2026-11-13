@@ -1,0 +1,244 @@
+{
+	"sourceRun": 43405011247,
+	"artifactId": 14027555286,
+	"cases": [
+		{
+			"variant": "back-hidden",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "a2b05860653854da4358607f3d2be87607aa615e6e4e876267b44f9dc8b10454",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-hidden",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "4645151d7094df0d1728ae1935d8c3f40dbc43c77b7fe21534b54865685f94b5",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "back-hidden-layer",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: transform; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "54a9b0db599d313bc94503cfc4476e602944a7a52d185abbb4542921d720591f",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-hidden-layer",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: transform; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "66b37bdc58c7f0f7290775d4c642bb7c749f899fd8c6c48b56a60fdecf21b783",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "back-hidden-parent-3d",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: preserve-3d;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "015b047db668b24ef22f5d87b6c2b2b8317f6087245f836acfef1db8a745e047",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-hidden-parent-3d",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: preserve-3d;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "3985b5462ec35580d46fddcaa1395d2edcf5a6eed27a47038a2744de9d69812e",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "back-hidden-perspective",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: 500px; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "7f99a995d9505bcb6c971d368c06574ac39cda56427969121abebfdc4179e152",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-hidden-perspective",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: 500px; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "b4abc78194414ddc4bdfd44665725e2884c5cf56e79ecd4d50c33926e3910cd7",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "back-hidden-preserve",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: preserve-3d;\"></div></div>",
+			"markupSha256": "ac81d03244c0b4c5b908725e86cde4b121ac1a6befadf8acbae42b1e64fcad02",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-hidden-preserve",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: preserve-3d;\"></div></div>",
+			"markupSha256": "0ebaac47f29dcf49d33e6e695e17543ad2a27e81c1eec1b765b57f7b2785a428",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "back-visible",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: flat;\"></div></div>",
+			"markupSha256": "ea738922bd2de848cd16df0ef90be6ee344911cc19725fef13a3274fc95ca434",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "back-visible",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: flat;\"></div></div>",
+			"markupSha256": "7957605e5a32760747cdc392625530da7ad6d5d29cc278594f5fec20c3e40f45",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "flat-double-turn",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: flat;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "e4092722c3da05623259c9d38d980f29b52b5a4b094d358baa84f92f71ebb73c",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "flat-double-turn",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: flat;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "9aa026ccaa8b2749d4d6233b48cfb7865930181ef05f00a519881975473d28ee",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "front",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(0deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "0a16dcf23176922fc6532a22e77719e0e5ac4d141a186c8e1c5e4351a6479d10",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "front",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: rotateY(0deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "41ee48973cab5d7ede03f1e939f7bd6573637d146a50823db96438c47701a019",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "hidden-parent-front-child",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: preserve-3d;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "1fa653dbe4a2c930da7e6a9fb7437d1829c0c401e77e728d9302d9b851155c48",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "hidden-parent-front-child",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: preserve-3d;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "39bd75f5f5ad7898fa46b42874e100c9b82ad077bc9b820aba9de04fa6d4d4df",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "matrix-back",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: matrix3d(1, 0, 1, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 0, 0, 1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "cc4ad97c0c8c6e5cf4f9ee164c8eb01c00b3cb34a5e13f49b243e062ed64b764",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "matrix-back",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: matrix3d(1, 0, 1, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 0, 0, 1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "3f66f7c681f14af13b5814cf26cd31411dd865bbd1eea06c1294a552dbbd14e2",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "matrix-front",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: matrix3d(1, 0, -1, 0, 0, 1, 0, 0, 2, 0, -1, 0, 0, 0, 0, 1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "d9e2d7f9678de33a7069454a4108d9db380095b970888a8d4b8898f54272b711",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "matrix-front",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: matrix3d(1, 0, -1, 0, 0, 1, 0, 0, 2, 0, -1, 0, 0, 0, 0, 1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "25d76804ddb9256853d450d3008788fe53b21170f9b35ac3f301317f96ce7a18",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "nested-double-turn",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: preserve-3d;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "150d423228e0b4933bebf0f5b4a5ab9f47388bb565d7d88c9dcac0296c366a35",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "nested-double-turn",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: red; transform: rotateY(180deg); transform-origin: 50px 50px; will-change: auto; backface-visibility: visible; transform-style: preserve-3d;\"><div style=\"width: 100px; height: 100px; background-color: blue; transform: rotateY(180deg); transform-origin: 50px 50px; backface-visibility: hidden;\"></div></div></div>",
+			"markupSha256": "5d20523c66e044827a7fe930e0f5e78e349e8dd746b1a647525abf963c19b68f",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "perspective-front",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 200px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "a48aea8a4336f894ac81d14616ed8d7b42c8fa16a4a3686171e15c5d7653776f",
+			"originalNativePngSha256": "74bcef20478e00783f75c68e76eab6f94a8f4ad0d283433e23d8629ffcb12696"
+		},
+		{
+			"variant": "perspective-front",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 201px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "b2b6ca0734bb95c2051dbff768fcb50ed14bca0d74556f7f5cd32bc3c2614517",
+			"originalNativePngSha256": "487ba1f7f06c2c5a108ebfc08801fd5cce0d991c343ec5e74de212aa33d88bf9"
+		},
+		{
+			"variant": "perspective-front-layer",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 200px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: transform; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "0869fad000d2e917ff8471d4262e4e3bb7c516a08afdc71a50e2a301f3f4319c",
+			"originalNativePngSha256": "74bcef20478e00783f75c68e76eab6f94a8f4ad0d283433e23d8629ffcb12696"
+		},
+		{
+			"variant": "perspective-front-layer",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 201px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: transform; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "c0a4c820cc5cda603f3e3e53ea57a28f5dccf0286351bebad4c971ba13469d27",
+			"originalNativePngSha256": "487ba1f7f06c2c5a108ebfc08801fd5cce0d991c343ec5e74de212aa33d88bf9"
+		},
+		{
+			"variant": "perspective-front-parent-3d",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: preserve-3d;\"><div style=\"position: absolute; left: 200px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "904c10ea9ce119b84027a41d5eab67948f38080d5acca714fc53ccafc3d8da54",
+			"originalNativePngSha256": "74bcef20478e00783f75c68e76eab6f94a8f4ad0d283433e23d8629ffcb12696"
+		},
+		{
+			"variant": "perspective-front-parent-3d",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: preserve-3d;\"><div style=\"position: absolute; left: 201px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: perspective(200px) translateX(-100px) rotateY(100deg); transform-origin: 0px 0px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "ca1d06cfe7f46b48c511b9f48c97a54fda599af6969f7ad2e45a886d133f509d",
+			"originalNativePngSha256": "487ba1f7f06c2c5a108ebfc08801fd5cce0d991c343ec5e74de212aa33d88bf9"
+		},
+		{
+			"variant": "reflect-x",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: scaleX(-1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "feaf0cc5837b1681c716d1ba06e40056e7a77a540f915abfdfe5b4f3324417e8",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "reflect-x",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: scaleX(-1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "beefe6c327c692609deb993739ddd00eb3d642a7d4a14834b4beb038525565a7",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		},
+		{
+			"variant": "reflect-z",
+			"frame": 0,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 100px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: scaleZ(-1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "6f84ef6dd007fd02ac725a13f098f88b51133b7e79689a5ce75a52a1e9ed2686",
+			"originalNativePngSha256": "b1b1f080ba164b725cfa9417c854e3a003e5bb62ec65d07583dba6b4733727ae"
+		},
+		{
+			"variant": "reflect-z",
+			"frame": 1,
+			"markup": "<div style=\"position: absolute; inset: 0px; width: 100%; height: 100%; display: flex; flex-direction: column; background-color: white; perspective: none; transform-style: flat;\"><div style=\"position: absolute; left: 101px; top: 100px; width: 100px; height: 100px; background-color: blue; transform: scaleZ(-1); transform-origin: 50px 50px; will-change: auto; backface-visibility: hidden; transform-style: flat;\"></div></div>",
+			"markupSha256": "d4cfe1943327d489e1841911ef8594e27f856db52517e0a81be567055ef500c9",
+			"originalNativePngSha256": "eca660e899be3f0c83e44f08b8c9f9beb2f342dd5566686f3c18f4b51325bc31"
+		}
+	]
+}

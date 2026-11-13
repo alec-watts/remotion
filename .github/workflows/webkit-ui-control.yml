@@ -1,0 +1,35 @@
+name: WebKit UI process snapshot control
+
+on:
+  push:
+    branches: [codex/12686-webkit-ui-control]
+
+permissions:
+  contents: read
+
+jobs:
+  compare-capture-paths:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps webkit
+      - run: node .github/scripts/webkit-ui-control.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-ui-process-control
+          path: webkit-ui-control-results/
+          if-no-files-found: error
+          retention-days: 7
