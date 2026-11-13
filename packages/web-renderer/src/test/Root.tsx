@@ -293,6 +293,11 @@ import {
 } from './fixtures/svg-registered-cdata-font';
 import {svgRootOpacity} from './fixtures/svg-root-opacity';
 import {
+	persistentOrderModes,
+	svgTitledDataFont,
+	svgTitledPersistentOrder,
+} from './fixtures/svg-titled-data-font';
+import {
 	svgTitledFontMediaCache,
 	svgTitledFontCarrier,
 	svgTitledFontModes,
@@ -786,6 +791,31 @@ export const Root: React.FC = () => {
 					/>
 				)),
 			)}
+			<Folder name="SVG-persistent-font-order">
+				{[false, true]
+					.flatMap((firstRoboto) =>
+						[false, true].flatMap((literal) => [
+							...persistentOrderModes.map((mode) =>
+								svgTitledPersistentOrder(mode, firstRoboto, literal),
+							),
+							...[
+								{persistent: false, trailingCarrier: false},
+								{persistent: true, trailingCarrier: false},
+								{persistent: true, trailingCarrier: true},
+							].map(({persistent, trailingCarrier}) =>
+								svgTitledDataFont(
+									firstRoboto,
+									literal,
+									persistent,
+									trailingCarrier,
+								),
+							),
+						]),
+					)
+					.map((fixture) => (
+						<Composition key={fixture.id} {...fixture} />
+					))}
+			</Folder>
 		</>
 	);
 };
