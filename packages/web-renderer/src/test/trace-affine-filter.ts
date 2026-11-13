@@ -33,6 +33,7 @@ export const traceAffineFilter = async (
 			canvas.height,
 		);
 	};
+
 	const spy = vi
 		.spyOn(OffscreenCanvasRenderingContext2D.prototype, 'drawImage')
 		.mockImplementation(function (
