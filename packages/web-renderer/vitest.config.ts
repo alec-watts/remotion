@@ -3,6 +3,7 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import {playwright} from '@vitest/browser-playwright';
 import {defineConfig} from 'vitest/config';
+import {captureWebKitUi} from './test/capture-webkit-ui';
 
 type Truthy<T> = T extends false | '' | 0 | null | undefined ? never : T;
 
@@ -15,6 +16,7 @@ export default defineConfig({
 		include: ['src/test/**/*.test.{ts,tsx}'],
 		maxWorkers: process.env.CI ? 1 : 5,
 		browser: {
+			commands: {captureWebKitUi},
 			enabled: true,
 			provider: playwright(),
 			instances: [

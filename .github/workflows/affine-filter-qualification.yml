@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -30,6 +30,7 @@ jobs:
       - name: Restore integrated baseline producer
         if: matrix.producer == 'baseline'
         run: |
+          git fetch --no-tags --depth=1 origin 36a10a879237a54f83fdcb659021d9a724f5b127
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/compose.ts > packages/web-renderer/src/compose.ts
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/drawing/process-node.ts > packages/web-renderer/src/drawing/process-node.ts
           git show 36a10a879237a54f83fdcb659021d9a724f5b127:packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts > packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts

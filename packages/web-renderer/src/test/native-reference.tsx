@@ -26,6 +26,7 @@ export const captureNativeReference = async (
 		omitBackground = true,
 		screenshotTimeout,
 	}: {omitBackground?: boolean; screenshotTimeout?: number} = {},
+	onCapture: ((host: HTMLElement) => Promise<void>) | null = null,
 ) => {
 	const host = document.createElement('div');
 	host.dataset.testid = `${fixture.id}-native-${frame}`;
@@ -146,6 +147,7 @@ export const captureNativeReference = async (
 			});
 		const base64 =
 			typeof screenshot === 'string' ? screenshot : screenshot.base64;
+		if (onCapture) await onCapture(host);
 		return new Blob(
 			[Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))],
 			{type: 'image/png'},

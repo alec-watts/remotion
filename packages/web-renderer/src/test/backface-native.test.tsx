@@ -13,9 +13,34 @@ test.for(
 	'matches native backface painting for $variant frame=$frame',
 	async ({variant, frame}) => {
 		const composition = backfaceNative(variant);
-		const native = await captureNativeReference(composition, frame, {
-			omitBackground: false,
-		});
+		const capture = {ui: null as Blob | null, repeat: null as Blob | null};
+		const native = await captureNativeReference(
+			composition,
+			frame,
+			{
+				omitBackground: false,
+			},
+			server.browser === 'webkit'
+				? async (host) => {
+						const commands = server.commands as typeof server.commands & {
+							captureWebKitUi: (
+								testId: string,
+							) => Promise<{ui: string; repeat: string}>;
+						};
+						const result = await commands.captureWebKitUi(host.dataset.testid!);
+						for (const name of ['ui', 'repeat'] as const) {
+							capture[name] = new Blob(
+								[
+									Uint8Array.from(atob(result[name]), (char) =>
+										char.charCodeAt(0),
+									),
+								],
+								{type: 'image/png'},
+							);
+						}
+					}
+				: null,
+		);
 		const nativeDom = composition.getNativeMarkup();
 		const host = document.createElement('div');
 		host.dataset.testid = `plain-backface-${variant}-${frame}`;
@@ -71,12 +96,24 @@ test.for(
 		const enabled = await render(true);
 		const ordinary = await compareNativePixels(native, defaultOutput);
 		const experimental = await compareNativePixels(native, enabled);
+		const uiComparison = capture.ui
+			? await compareNativePixels(capture.ui, enabled)
+			: null;
+		const repeatComparison = capture.repeat
+			? await compareNativePixels(native, capture.repeat)
+			: null;
 		const path = `test/__results__/backface-evidence/${server.browser}/${variant}-${frame}`;
 		for (const [name, blob] of [
 			['native', native],
 			['plain-dom', plain],
 			['default', defaultOutput],
 			['enabled', enabled],
+			...(capture.ui && capture.repeat
+				? ([
+						['ui-process', capture.ui],
+						['native-after-ui', capture.repeat],
+					] as const)
+				: []),
 		] as const) {
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer()))
@@ -100,6 +137,8 @@ test.for(
 				devicePixelRatio: window.devicePixelRatio,
 				nativeDom,
 				plainDomMismatchedPixels: plainComparison.mismatchedPixels,
+				uiMismatchedPixels: uiComparison?.mismatchedPixels ?? null,
+				repeatMismatchedPixels: repeatComparison?.mismatchedPixels ?? null,
 				defaultMismatchedPixels: ordinary.mismatchedPixels,
 				enabledMismatchedPixels: experimental.mismatchedPixels,
 			}),
@@ -107,5 +146,12 @@ test.for(
 		expect(ordinary.mismatchedPixels, 'default output').toBe(0);
 		expect(experimental.mismatchedPixels, 'experimental output').toBe(0);
 		expect(plainComparison.mismatchedPixels, 'Player versus plain DOM').toBe(0);
+		if (uiComparison)
+			expect(uiComparison.mismatchedPixels, 'UI-process output').toBe(0);
+		if (repeatComparison)
+			expect(
+				repeatComparison.mismatchedPixels,
+				'snapshot after UI capture',
+			).toBe(0);
 	},
 );
