@@ -644,6 +644,7 @@ const HtmlInCanvasContent = forwardRef<
 			const owner = {reportRenderError, retired: false};
 			paintOwnerRef.current = owner;
 			const paintReleases = pendingPaintReleases.current;
+			const paintTargets = paintingTargets.current;
 			return () => {
 				owner.retired = true;
 				if (initializingOwnerRef.current === owner) {
@@ -653,8 +654,8 @@ const HtmlInCanvasContent = forwardRef<
 
 				for (const release of paintReleases) release();
 				const target = paintTargetRef.current;
-				if (target && paintingTargets.current.get(target)?.owner === owner)
-					paintingTargets.current.delete(target);
+				if (target && paintTargets.get(target)?.owner === owner)
+					paintTargets.delete(target);
 			};
 		}, [reportRenderError]);
 
