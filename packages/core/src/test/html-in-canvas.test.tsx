@@ -958,6 +958,7 @@ for (const behavior of [
 			const originalOwner = (error: Error) => {
 				if (owner === 0) reported.push(error);
 			};
+
 			const replacementOwner = (error: Error) => reported.push(error);
 			const scene = (width: number) => (
 				<Internals.DelayRenderContextType.Provider value={scope}>
