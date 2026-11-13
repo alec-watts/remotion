@@ -1,5 +1,5 @@
-import {expect, test} from 'bun:test';
-import {parseSingleSourceFontUrl} from '../src/drawing/parse-single-source-font-url';
+import {expect, test} from 'vitest';
+import {parseSingleSourceFontUrl} from '../drawing/parse-single-source-font-url';
 
 test.each([
 	['url("font.woff2")', 'font.woff2'],
