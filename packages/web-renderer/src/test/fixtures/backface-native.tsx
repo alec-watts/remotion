@@ -13,6 +13,8 @@ export const backfaceNativeCases = [
 	'back-hidden-preserve',
 	'back-hidden-perspective',
 	'perspective-front',
+	'matrix-front',
+	'matrix-back',
 ] as const;
 
 export const backfaceNative = (
@@ -29,15 +31,19 @@ export const backfaceNative = (
 			variant === 'flat-double-turn' ||
 			variant === 'hidden-parent-front-child';
 		const transform =
-			variant === 'perspective-front'
-				? 'perspective(200px) translateX(-100px) rotateY(100deg)'
-				: variant === 'reflect-x'
-					? 'scaleX(-1)'
-					: variant === 'reflect-z'
-						? 'scaleZ(-1)'
-						: variant === 'front'
-							? 'rotateY(0deg)'
-							: 'rotateY(180deg)';
+			variant === 'matrix-front'
+				? 'matrix3d(1,0,-1,0, 0,1,0,0, 2,0,-1,0, 0,0,0,1)'
+				: variant === 'matrix-back'
+					? 'matrix3d(1,0,1,0, 0,1,0,0, 2,0,1,0, 0,0,0,1)'
+					: variant === 'perspective-front'
+						? 'perspective(200px) translateX(-100px) rotateY(100deg)'
+						: variant === 'reflect-x'
+							? 'scaleX(-1)'
+							: variant === 'reflect-z'
+								? 'scaleZ(-1)'
+								: variant === 'front'
+									? 'rotateY(0deg)'
+									: 'rotateY(180deg)';
 		const style: CSSProperties = {
 			position: 'absolute',
 			left: (variant === 'perspective-front' ? 200 : 100) + frame,
@@ -85,6 +91,9 @@ export const backfaceNative = (
 								'will-change',
 							].map((name) => [name, style.getPropertyValue(name)]),
 						);
+						const matrix = new DOMMatrixReadOnly(style.transform);
+						computed.forwardM33 = String(matrix.m33);
+						computed.inverseM33 = String(matrix.inverse().m33);
 						ancestors = [];
 						for (
 							let parent = node.parentElement;
