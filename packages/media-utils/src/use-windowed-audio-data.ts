@@ -97,42 +97,48 @@ export const useWindowedAudioData = ({
 		};
 	}, [audioUtils]);
 
-	const {delayRender, continueRender, cancelRender} = useDelayRender();
+	const {delayRender, continueRender} = useDelayRender();
+	const reportRenderError = Internals.useReportRenderError();
 
 	const fetchMetadata = useCallback(
 		async (signal: AbortSignal) => {
-			const handle = delayRender(
+			let handle: number | null = delayRender(
 				`Waiting for audio metadata with src="${src}" to be loaded`,
 			);
 			const cont = () => {
-				continueRender(handle);
+				if (handle !== null) {
+					continueRender(handle);
+					handle = null;
+				}
 			};
 
 			signal.addEventListener('abort', cont, {once: true});
 
-			const input = new Input({
-				formats: ALL_FORMATS,
-				source: new UrlSource(src, {
-					handleUnhandledError: (error) => {
-						Internals.Log.warn(
-							{logLevel: 'info', tag: '@remotion/media-utils'},
-							`A speculative fetch for "${src}" failed:`,
-							error,
-						);
-					},
-					...(initialRequestInit
-						? {requestInit: initialRequestInit}
-						: undefined),
-				}),
-			});
-
+			let input: Input | null = null;
 			const onAbort = () => {
-				input.dispose();
+				input?.dispose();
 			};
 
 			signal.addEventListener('abort', onAbort, {once: true});
 
 			try {
+				if (signal.aborted) return;
+				input = new Input({
+					formats: ALL_FORMATS,
+					source: new UrlSource(src, {
+						handleUnhandledError: (error) => {
+							Internals.Log.warn(
+								{logLevel: 'info', tag: '@remotion/media-utils'},
+								`A speculative fetch for "${src}" failed:`,
+								error,
+							);
+						},
+						...(initialRequestInit
+							? {requestInit: initialRequestInit}
+							: undefined),
+					}),
+				});
+
 				const durationInSeconds = await input.computeDuration();
 
 				const audioTrack = await input.getPrimaryAudioTrack();
@@ -174,7 +180,7 @@ export const useWindowedAudioData = ({
 
 				const isMatroska = format === MATROSKA || format === WEBM;
 
-				if (isMounted.current) {
+				if (isMounted.current && !signal.aborted) {
 					setAudioUtils({
 						input,
 						track: audioTrack,
@@ -186,16 +192,15 @@ export const useWindowedAudioData = ({
 						isMatroska,
 					});
 				}
-
-				continueRender(handle);
 			} catch (err) {
 				if (err instanceof InputDisposedError) {
-					continueRender(handle);
 					return;
 				}
 
-				cancelRender(err);
+				input?.dispose();
+				reportRenderError(err);
 			} finally {
+				cont();
 				signal.removeEventListener('abort', cont);
 				signal.removeEventListener('abort', onAbort);
 			}
@@ -204,7 +209,7 @@ export const useWindowedAudioData = ({
 			src,
 			delayRender,
 			continueRender,
-			cancelRender,
+			reportRenderError,
 			channelIndex,
 			initialRequestInit,
 		],
@@ -398,10 +403,10 @@ export const useWindowedAudioData = ({
 				return;
 			}
 
-			cancelRender(err);
+			reportRenderError(err);
 		});
 	}, [
-		cancelRender,
+		reportRenderError,
 		fetchAndSetWaveformData,
 		audioUtils,
 		windowsToFetch,
