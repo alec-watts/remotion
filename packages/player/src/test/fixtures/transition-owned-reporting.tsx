@@ -54,6 +54,7 @@ const main = async () => {
 			this.width = width;
 			this.height = height;
 		}
+
 		getContext() {
 			return {
 				canvas: this,
@@ -72,6 +73,7 @@ const main = async () => {
 		configurable: true,
 		value: class {
 			observe() {}
+			unobserve() {}
 			disconnect() {}
 		},
 	});
@@ -83,7 +85,7 @@ const main = async () => {
 			drawElementImage: () => undefined,
 			clearRect: () => undefined,
 		} as unknown as CanvasRenderingContext2D;
-	} as typeof HTMLCanvasElement.prototype.getContext;
+	} as unknown as typeof HTMLCanvasElement.prototype.getContext;
 	HTMLCanvasElement.prototype.requestPaint = () => undefined;
 	HTMLCanvasElement.prototype.captureElementImage = () =>
 		({
@@ -343,6 +345,6 @@ const main = async () => {
 };
 
 main().catch((error: unknown) => {
-	process.stderr.write(String(error) + '\n');
+	process.stderr.write(Bun.inspect(error, {depth: 6}) + '\n');
 	process.exitCode = 1;
 });
