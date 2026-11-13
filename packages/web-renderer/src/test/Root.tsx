@@ -2,6 +2,11 @@
 import React from 'react';
 import {Composition, Folder} from 'remotion';
 import {accumulatedTransforms} from './fixtures/accumulated-transforms';
+import {
+	affineFilterInputReview,
+	filterInputReviewCases,
+} from './fixtures/affine-filter-input-review';
+import {makeScaledShadowFixture} from './fixtures/affine-filter-stress';
 import {backfaceVisibilityMask} from './fixtures/backface-visibility-mask';
 import {backgroundBlendMode} from './fixtures/background-blend-mode';
 import {backgroundColor} from './fixtures/background-color';
@@ -311,6 +316,30 @@ import {whiteSpaceCollapsing2} from './fixtures/whitespace-collapsing-2';
 export const Root: React.FC = () => {
 	return (
 		<>
+			<Folder name="Filter-input-coordinates">
+				{filterInputReviewCases.flatMap((variant) =>
+					[false, true].map((preserve) => {
+						const composition = affineFilterInputReview(variant, preserve);
+						return <Composition key={composition.id} {...composition} />;
+					}),
+				)}
+				{(
+					[
+						'fractional',
+						'rounded',
+						'blurred',
+						'textured',
+						'scaled',
+						'reflected',
+						'negative',
+					] as const
+				).flatMap((variant) =>
+					[false, true].map((preserve) => {
+						const composition = makeScaledShadowFixture(variant, preserve);
+						return <Composition key={composition.id} {...composition} />;
+					}),
+				)}
+			</Folder>
 			<Composition {...svgDataMimeLowercase} />
 			<Composition {...svgDataMimeUppercase} />
 			<Composition {...svgDataMimeCoverLowercase} />
