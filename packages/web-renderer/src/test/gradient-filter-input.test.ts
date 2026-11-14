@@ -6,16 +6,15 @@ import {
 } from '../drawing/parse-linear-gradient';
 import {makeInternalState} from '../internal-state';
 import '../symbol-dispose';
+import {
+	filteredGradientCases,
+	filteredGradientModes,
+} from './fixtures/gradient-filter-input';
 
 test.for(
-	[
-		{side: 'left', rect: [-50, 10, 100, 20], matrix: [1, 0, 0, 1, 0, 0]},
-		{side: 'right', rect: [10, 10, 100, 20], matrix: [1, 0, 0, 1, 0, 0]},
-		{side: 'top', rect: [10, -50, 40, 70], matrix: [1, 0, 0, 1, 0, 0]},
-		{side: 'bottom', rect: [10, 20, 40, 70], matrix: [1, 0, 0, 1, 0, 0]},
-		{side: 'scaled', rect: [-25, 5, 50, 10], matrix: [2, 0, 0, 2, 0, 0]},
-		{side: 'reflected', rect: [-20, 5, 50, 10], matrix: [-2, 0, 0, 2, 10, 0]},
-	].flatMap((scene) => ['solid', 'hard'].map((mode) => ({...scene, mode}))),
+	filteredGradientCases.flatMap((scene) =>
+		filteredGradientModes.map((mode) => ({...scene, mode})),
+	),
 )(
 	'preserves filtered $mode gradient input across the $side boundary',
 	({rect, matrix, mode}) => {
@@ -31,7 +30,7 @@ test.for(
 		try {
 			for (const [index, canvas] of canvases.entries()) {
 				const context = canvas.getContext('2d', {willReadFrequently: true})!;
-				context.setTransform(new DOMMatrix(matrix));
+				context.setTransform(new DOMMatrix([...matrix]));
 				context.filter = 'blur(6px)';
 				const fillOptions = {
 					contextToDraw: context,

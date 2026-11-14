@@ -85,6 +85,11 @@ import {filterImage} from './fixtures/filter-image';
 import {flexContainer} from './fixtures/flex-container';
 import {flexPositionedScaled} from './fixtures/flex-positioned-scaled';
 import {
+	filteredGradientCases,
+	filteredGradientModes,
+	gradientFilterInput,
+} from './fixtures/gradient-filter-input';
+import {
 	gradientMaskPixelModes,
 	gradientMaskPixelStops,
 } from './fixtures/gradient-mask-pixel-stops';
@@ -635,6 +640,14 @@ export const Root: React.FC = () => {
 			{gradientPaintModes.map((mode) => (
 				<Composition key={mode} {...gradientPaintContext(mode)} />
 			))}
+			{filteredGradientCases.flatMap(({side}) =>
+				filteredGradientModes.map((mode) => (
+					<Composition
+						key={`${side}-${mode}`}
+						{...gradientFilterInput(side, mode)}
+					/>
+				)),
+			)}
 			{gradientPixelModes.map((mode) => (
 				<Composition key={mode} {...gradientPixelStops(mode)} />
 			))}

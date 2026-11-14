@@ -1,0 +1,51 @@
+name: Gradient filter-input qualification
+on:
+  push:
+    branches: [codex/13312-gradient-input-qualification]
+permissions:
+  contents: read
+jobs:
+  pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch the current-main baseline
+        run: git fetch --no-tags --depth=1 origin 11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c
+      - name: Restore only the previous fill producer and its call signatures
+        if: matrix.producer == 'baseline'
+        run: git restore --source=11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c -- packages/web-renderer/src/drawing/get-linear-gradient-fill.ts packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/handle-mask.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Record exact source differences
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          git diff --name-only > packages/web-renderer/test/__results__/producer-differences.txt
+          git diff --exit-code 11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c -- packages/web-renderer/src/drawing/parse-linear-gradient.ts packages/web-renderer/src/drawing/draw-background.ts
+      - name: Compare all strict inputs, native frames and retained controls
+        run: cd packages/web-renderer && bunx vitest src/test/gradient-filter-input.test.ts src/test/gradient-input-native-qualification.test.tsx src/test/gradient-pixel-stops.test.tsx src/test/gradient-mask-pixel-stops.test.tsx src/test/parse-linear-gradient.test.tsx src/test/canvas-context-options.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/gradient-input.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gradient-input-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
