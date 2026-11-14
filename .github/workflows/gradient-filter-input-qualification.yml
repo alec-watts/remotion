@@ -2,6 +2,9 @@ name: Gradient filter-input qualification
 on:
   push:
     branches: [codex/13312-gradient-input-qualification]
+  pull_request:
+    types: [opened, synchronize]
+    branches: [codex/linear-gradient-pixel-stops]
 permissions:
   contents: read
 jobs:
