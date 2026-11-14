@@ -75,6 +75,9 @@ test.for(
 					platform: server.platform,
 					runtime: server.version,
 					userAgent: navigator.userAgent,
+					offscreenCanvasFilters:
+						'filter' in OffscreenCanvasRenderingContext2D.prototype,
+					htmlCanvasFilters: 'filter' in CanvasRenderingContext2D.prototype,
 					devicePixelRatio: window.devicePixelRatio,
 					mismatchedPixels: result.mismatchedPixels,
 					maxChannelDelta: result.maxChannelDelta,

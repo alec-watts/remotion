@@ -23,7 +23,7 @@ jobs:
         run: git fetch --no-tags --depth=1 origin 11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c
       - name: Restore only the previous fill producer and its filter grouping
         if: matrix.producer == 'baseline'
-        run: git restore --source=11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c -- packages/web-renderer/src/drawing/get-linear-gradient-fill.ts packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts
+        run: git restore --source=11e4e6c78957b5f26f4c145acfb568ad8cdfaf5c -- packages/web-renderer/src/drawing/get-linear-gradient-fill.ts packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts packages/web-renderer/src/drawing/process-node.ts
       - uses: actions/setup-node@v6
         with:
           node-version: 26
