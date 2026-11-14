@@ -78,6 +78,7 @@ export const handleMask = async ({
 			const fill = getLinearGradientFill({
 				contextToDraw: tempContext,
 				rect: cssRect,
+				paintRect: cssRect,
 				gradientInfo: maskImageInfo.gradientInfo,
 				offsetLeft: 0,
 				offsetTop: 0,
