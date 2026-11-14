@@ -1,5 +1,6 @@
 import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
+import '../symbol-dispose';
 import type * as InternalStateModule from '../internal-state';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
