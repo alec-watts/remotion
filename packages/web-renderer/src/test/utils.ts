@@ -71,6 +71,8 @@ export const testCompositions = async ({
 	testId: string;
 	scale: number | null;
 }) => {
+	const gridPhase = makeRendererPhaseLog(testId, null);
+	gridPhase('grid-start');
 	const renderScale = scale ?? 1;
 	const width = Math.max(...cases.map(({composition}) => composition.width));
 	const maxHeight = Math.max(
@@ -87,6 +89,7 @@ export const testCompositions = async ({
 			),
 	);
 	await page.viewport(Math.max(1280, width), Math.max(720, maxHeight));
+	gridPhase('grid-viewport-ready');
 	const sheet = new OffscreenCanvas(
 		cellWidth * columns,
 		rowHeights.reduce((sum, height) => sum + height, 0),
@@ -107,6 +110,7 @@ export const testCompositions = async ({
 			});
 			phase('grid-case-rendered');
 			const canvas = await still.canvas();
+			phase('grid-case-canvas-ready');
 			try {
 				context.drawImage(
 					canvas,
@@ -119,17 +123,24 @@ export const testCompositions = async ({
 				canvas.width = 0;
 				canvas.height = 0;
 			}
+
+			phase('grid-case-copied');
 		}
 
+		gridPhase('grid-cases-complete');
 		await page.viewport(
 			Math.max(1280, sheet.width),
 			Math.max(720, sheet.height),
 		);
+		gridPhase('grid-comparison-viewport-ready');
+		const blob = await sheet.convertToBlob({type: 'image/png'});
+		gridPhase('grid-encoded');
 		await testImage({
-			blob: await sheet.convertToBlob({type: 'image/png'}),
+			blob,
 			testId,
 			allowedMismatchedPixelRatio: 0,
 		});
+		gridPhase('grid-compared');
 	} finally {
 		sheet.width = 0;
 		sheet.height = 0;
