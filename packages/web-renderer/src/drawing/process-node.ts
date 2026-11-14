@@ -166,6 +166,10 @@ export const processNode = async ({
 		}
 
 		const is3DPrecomposition = precompositing.needs3DTransformViaWebGL;
+		const usesSvgCssFilter =
+			precompositing.needsFilterPrecompositing !== null &&
+			!precompositing.needsFilterPrecompositing.includes('url(') &&
+			!('filter' in OffscreenCanvasRenderingContext2D.prototype);
 
 		const {
 			rect: layerRect,
@@ -178,6 +182,7 @@ export const processNode = async ({
 			parentRect,
 			scale,
 			is3DPrecomposition,
+			rasterizeAtDeviceScale: !usesSvgCssFilter,
 		});
 
 		const tempContext = await createLayer({
@@ -244,10 +249,7 @@ export const processNode = async ({
 				layerScale,
 			);
 			let filteredImage: HTMLImageElement | null = null;
-			if (
-				!('filter' in OffscreenCanvasRenderingContext2D.prototype) &&
-				!filter.includes('url(')
-			) {
+			if (usesSvgCssFilter) {
 				const blob = await tempContext.canvas.convertToBlob({
 					type: 'image/png',
 				});

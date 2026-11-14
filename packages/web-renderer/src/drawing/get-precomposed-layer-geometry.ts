@@ -4,14 +4,17 @@ export const getPrecomposedLayerGeometry = ({
 	parentRect,
 	scale,
 	is3DPrecomposition,
+	rasterizeAtDeviceScale,
 }: {
 	precomposeRect: DOMRect;
 	totalMatrix: DOMMatrix;
 	parentRect: DOMRect;
 	scale: number;
 	is3DPrecomposition: boolean;
+	rasterizeAtDeviceScale: boolean;
 }) => {
 	if (
+		!rasterizeAtDeviceScale ||
 		is3DPrecomposition ||
 		totalMatrix.b !== 0 ||
 		totalMatrix.c !== 0 ||
