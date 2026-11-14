@@ -36,6 +36,7 @@ export const handleMask = async ({
 			precomposeRect,
 			width: tempContext.canvas.width,
 			height: tempContext.canvas.height,
+			scale,
 			internalState,
 		});
 		const masked = new OffscreenCanvas(
