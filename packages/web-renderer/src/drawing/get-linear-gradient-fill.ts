@@ -25,7 +25,12 @@ export const getLinearGradientFill = ({
 		offsetLeft,
 		offsetTop,
 	});
-	if (hasInterpolation) return gradient;
+	if (
+		hasInterpolation ||
+		(typeof contextToDraw.filter === 'string' &&
+			contextToDraw.filter !== 'none')
+	)
+		return gradient;
 	const options = getCanvasContextOptions(internalState, true);
 	if (options.willReadFrequently) {
 		const canvas = new OffscreenCanvas(
