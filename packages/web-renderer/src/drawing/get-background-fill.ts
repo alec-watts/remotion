@@ -232,7 +232,6 @@ export const getBackgroundFill = async ({
 			return getLinearGradientFill({
 				contextToDraw,
 				rect: backgroundImageRect,
-				paintRect: boundingRect,
 				gradientInfo,
 				offsetLeft,
 				offsetTop,

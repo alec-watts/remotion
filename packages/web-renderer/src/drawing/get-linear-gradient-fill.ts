@@ -6,7 +6,6 @@ import {createCanvasGradient} from './parse-linear-gradient';
 export const getLinearGradientFill = ({
 	contextToDraw,
 	rect,
-	paintRect,
 	gradientInfo,
 	offsetLeft,
 	offsetTop,
@@ -14,7 +13,6 @@ export const getLinearGradientFill = ({
 }: {
 	contextToDraw: OffscreenCanvasRenderingContext2D;
 	rect: DOMRect;
-	paintRect: DOMRect;
 	gradientInfo: LinearGradientInfo;
 	offsetLeft: number;
 	offsetTop: number;
@@ -27,45 +25,23 @@ export const getLinearGradientFill = ({
 		offsetLeft,
 		offsetTop,
 	});
-	if (hasInterpolation) return gradient;
+	if (
+		hasInterpolation ||
+		(typeof contextToDraw.filter === 'string' &&
+			contextToDraw.filter !== 'none')
+	)
+		return gradient;
 	const options = getCanvasContextOptions(internalState, true);
 	if (options.willReadFrequently) {
-		const transform = contextToDraw.getTransform();
-		let left = 0;
-		let top = 0;
-		let right = contextToDraw.canvas.width;
-		let bottom = contextToDraw.canvas.height;
-		if (
-			typeof contextToDraw.filter === 'string' &&
-			contextToDraw.filter !== 'none'
-		) {
-			// Filters can read painted input outside the output viewport. Extend
-			// the bitmap on integer device coordinates to preserve its sample phase.
-			for (const [x, y] of [
-				[paintRect.left, paintRect.top],
-				[paintRect.right, paintRect.top],
-				[paintRect.right, paintRect.bottom],
-				[paintRect.left, paintRect.bottom],
-			]) {
-				const point = new DOMPoint(
-					x - offsetLeft,
-					y - offsetTop,
-				).matrixTransform(transform);
-				left = Math.min(left, Math.floor(point.x));
-				top = Math.min(top, Math.floor(point.y));
-				right = Math.max(right, Math.ceil(point.x));
-				bottom = Math.max(bottom, Math.ceil(point.y));
-			}
-		}
-
-		const canvas = new OffscreenCanvas(right - left, bottom - top);
+		const canvas = new OffscreenCanvas(
+			contextToDraw.canvas.width,
+			contextToDraw.canvas.height,
+		);
 		try {
 			const context = canvas.getContext('2d', options);
 			if (!context) throw new Error('Could not get linear gradient context');
-			const rasterTransform = new DOMMatrix()
-				.translate(-left, -top)
-				.multiply(transform);
-			context.setTransform(rasterTransform);
+			const transform = contextToDraw.getTransform();
+			context.setTransform(transform);
 			context.fillStyle = createCanvasGradient({
 				ctx: context,
 				rect,
@@ -73,7 +49,7 @@ export const getLinearGradientFill = ({
 				offsetLeft,
 				offsetTop,
 			}).gradient;
-			const inverse = rasterTransform.inverse();
+			const inverse = transform.inverse();
 			context.beginPath();
 			for (const [index, [x, y]] of [
 				[0, 0],
@@ -89,7 +65,7 @@ export const getLinearGradientFill = ({
 			context.closePath();
 			context.fill();
 			const pattern = contextToDraw.createPattern(canvas, 'no-repeat');
-			pattern?.setTransform(transform.inverse().translate(left, top));
+			pattern?.setTransform(transform.inverse());
 			return pattern;
 		} finally {
 			canvas.width = 0;
