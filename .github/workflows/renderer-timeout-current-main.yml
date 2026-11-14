@@ -1,0 +1,62 @@
+name: Renderer timeout phases against matched producers
+on:
+  push:
+    branches: [codex/renderer-timeout-current-main]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [main, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Record comparison producer
+        env:
+          PRODUCER: ${{ matrix.producer }}
+        run: |
+          mkdir -p diagnostic-evidence
+          git rev-parse HEAD > diagnostic-evidence/source.txt
+          if [ "$PRODUCER" = candidate ]; then
+            git restore --source=4c2f87fc820cab33e96ecfc86015e6637f163373 -- packages/core packages/player packages/media-utils packages/transitions
+          fi
+          git diff --name-status HEAD > diagnostic-evidence/producer-paths.txt
+          git diff HEAD > diagnostic-evidence/producer.patch
+          git diff --exit-code HEAD -- packages/web-renderer package.json bun.lock turbo.json .github/scripts .github/workflows/push.yml
+          shasum -a 256 packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/src/test/utils.ts > diagnostic-evidence/test-hashes.txt
+          uname -m > diagnostic-evidence/architecture.txt
+          sw_vers > diagnostic-evidence/os.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run complete renderer suite with original assertions and deadlines
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run testwebrenderer --log-order=stream -- --reporter=default --reporter=json --outputFile=./test/__results__/browser-tests.json 2>&1 | tee diagnostic-evidence/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renderer-phases-${{ matrix.producer }}
+          include-hidden-files: true
+          path: |
+            diagnostic-evidence/
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7

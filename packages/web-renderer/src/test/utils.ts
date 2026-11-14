@@ -3,6 +3,7 @@ import {expect, onTestFinished} from 'vitest';
 import {page} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {withResolvers} from '../with-resolvers';
+import {makeRendererPhaseLog} from './renderer-phase-log';
 
 export const testImage = async ({
 	blob,
@@ -15,6 +16,8 @@ export const testImage = async ({
 	threshold?: number;
 	allowedMismatchedPixelRatio?: number;
 }) => {
+	const phase = makeRendererPhaseLog(testId, null);
+	phase('image-start');
 	const img = document.createElement('img');
 	const url = URL.createObjectURL(blob);
 	img.src = url;
@@ -36,6 +39,7 @@ export const testImage = async ({
 	};
 
 	await promise;
+	phase('image-loaded');
 
 	await expect(page.getByTestId(testId)).toMatchScreenshot(testId, {
 		comparatorOptions: {
@@ -43,6 +47,7 @@ export const testImage = async ({
 			allowedMismatchedPixelRatio,
 		},
 	});
+	phase('image-compared');
 };
 
 export const testCompositions = async ({
@@ -90,6 +95,8 @@ export const testCompositions = async ({
 		const context = sheet.getContext('2d')!;
 		// Separate renders keep SVG stylesheets and resource IDs from affecting other cases.
 		for (const [index, {composition, frame}] of cases.entries()) {
+			const phase = makeRendererPhaseLog(`${testId}:${composition.id}`, null);
+			phase('grid-case-start');
 			const still = await renderStillOnWeb({
 				composition,
 				frame,
@@ -98,6 +105,7 @@ export const testCompositions = async ({
 				allowHtmlInCanvas: false,
 				scale: renderScale,
 			});
+			phase('grid-case-rendered');
 			const canvas = await still.canvas();
 			try {
 				context.drawImage(
