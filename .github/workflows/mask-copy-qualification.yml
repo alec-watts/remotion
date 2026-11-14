@@ -1,7 +1,7 @@
-name: Layered mask copy qualification
+name: SVG image mask qualification
 on:
   push:
-    branches: [codex/13134-mask-copy-qualification]
+    branches: [codex/13134-svg-mask-image-qualification]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, candidate]
+        arm: [baseline, identity, candidate]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -21,14 +21,16 @@ jobs:
         env:
           ARM: ${{ matrix.arm }}
         run: |
-          git fetch --no-tags --depth=1 origin 886e6f2337e52ca0b48ee5b2920ad313b3ca2fe6
+          git fetch --no-tags --depth=1 origin 886e6f2337e52ca0b48ee5b2920ad313b3ca2fe6 1a98e835718a394bf9350dccce13b78927980d7f
           if test "$ARM" = baseline; then
-            git restore --source=886e6f2337e52ca0b48ee5b2920ad313b3ca2fe6 -- packages/web-renderer/src/drawing/handle-mask.ts
+            git restore --source=886e6f2337e52ca0b48ee5b2920ad313b3ca2fe6 -- packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts
+          elif test "$ARM" = identity; then
+            git restore --source=1a98e835718a394bf9350dccce13b78927980d7f -- packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts
           fi
           mkdir -p packages/web-renderer/test/__results__/source
           git rev-parse HEAD > packages/web-renderer/test/__results__/source/head.txt
           git diff --name-status HEAD > packages/web-renderer/test/__results__/source/restored-paths.txt
-          shasum -a 256 packages/web-renderer/src/drawing/handle-mask.ts > packages/web-renderer/test/__results__/source/producer.txt
+          shasum -a 256 packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts > packages/web-renderer/test/__results__/source/producer.txt
           git diff --exit-code HEAD -- packages/web-renderer/src/test package.json bun.lock
       - uses: actions/setup-node@v6
         with:
@@ -45,7 +47,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-copy-${{ matrix.arm }}
+          name: svg-image-mask-${{ matrix.arm }}
           include-hidden-files: true
           path: |
             packages/web-renderer/test/__results__/
