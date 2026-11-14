@@ -2,6 +2,9 @@ name: SVG image mask qualification
 on:
   push:
     branches: [codex/13134-mask-copy-qualification]
+  pull_request:
+    branches: [codex/css-gradient-mask-layers]
+    types: [opened, synchronize]
 permissions:
   contents: read
 jobs:
