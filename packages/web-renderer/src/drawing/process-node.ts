@@ -7,6 +7,7 @@ import {
 	type TransformStyleCache,
 } from './calculate-transforms';
 import {getWiderRectAndExpand} from './clamp-rect-to-parent-bounds';
+import {createSvgFilterFromCss} from './css-filter-to-svg';
 import {doRectsIntersect} from './do-rects-intersect';
 import {drawElement} from './draw-element';
 import type {DrawFn} from './drawn-fn';
@@ -269,7 +270,20 @@ export const processNode = async ({
 				image.setAttribute('width', String(tempContext.canvas.width));
 				image.setAttribute('height', String(tempContext.canvas.height));
 				image.setAttribute('href', data);
-				image.style.filter = filter;
+				const resource = createSvgFilterFromCss({
+					filter,
+					width: tempContext.canvas.width,
+					height: tempContext.canvas.height,
+					color: computedStyle.color,
+					ownerDocument: element.ownerDocument,
+				});
+				if (resource) {
+					svg.appendChild(resource);
+					image.setAttribute('filter', 'url(#' + resource.id + ')');
+				} else {
+					image.style.filter = filter;
+				}
+
 				svg.appendChild(image);
 				filteredImage = await turnSvgIntoDrawable(svg);
 			}

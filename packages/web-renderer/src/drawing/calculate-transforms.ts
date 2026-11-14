@@ -14,11 +14,16 @@ import {parseTransformOrigin} from './parse-transform-origin';
  * not to individual draw operations.
  */
 const filterRequiresPrecompositing = (filter: string): string | null => {
-	if (!filter || filter === 'none') {
+	if (!filter || filter === 'none' || filter === 'opacity(1)') {
 		return null;
 	}
 
-	if (filter.includes('drop-shadow') || filter.includes('blur(')) {
+	if (
+		filter.includes('drop-shadow') ||
+		filter.includes('blur(') ||
+		(typeof OffscreenCanvasRenderingContext2D !== 'undefined' &&
+			!('filter' in OffscreenCanvasRenderingContext2D.prototype))
+	) {
 		return filter;
 	}
 
