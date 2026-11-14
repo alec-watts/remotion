@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
@@ -7,6 +7,22 @@ import {
 	gradientFilterInput,
 } from './fixtures/gradient-filter-input';
 import {captureNativeReference, compareNativePixels} from './native-reference';
+
+// Exercise the affected capability branch with real canvas pixels in every
+// engine, including engines whose default gradient probe does not select it.
+vi.mock('../internal-state', async (importOriginal) => {
+	const original = await importOriginal<typeof import('../internal-state')>();
+	return {
+		...original,
+		makeInternalState: (
+			...args: Parameters<typeof original.makeInternalState>
+		) => {
+			const state = original.makeInternalState(...args);
+			state.canvasContextState.willReadFrequently = true;
+			return state;
+		},
+	};
+});
 
 // Fork-only qualification: retain every strict reference, including passing cases.
 test.for(
