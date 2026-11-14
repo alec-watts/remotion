@@ -1,5 +1,6 @@
 import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
+import type * as InternalStateModule from '../internal-state';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	filteredGradientCases,
@@ -11,7 +12,7 @@ import {captureNativeReference, compareNativePixels} from './native-reference';
 // Exercise the affected capability branch with real canvas pixels in every
 // engine, including engines whose default gradient probe does not select it.
 vi.mock('../internal-state', async (importOriginal) => {
-	const original = await importOriginal<typeof import('../internal-state')>();
+	const original = await importOriginal<typeof InternalStateModule>();
 	return {
 		...original,
 		makeInternalState: (
