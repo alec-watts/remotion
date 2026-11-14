@@ -1,0 +1,57 @@
+name: SVG root-mask qualification
+on:
+  push:
+    branches: [codex/svg-root-mask-drawable]
+  pull_request:
+    types: [opened, synchronize]
+    branches: [codex/svg-css-url-fonts]
+permissions:
+  contents: read
+jobs:
+  pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch the unchanged public routing producer
+        run: git fetch --no-tags --depth=1 origin 5f620a8c30321d590ed20c758d0a53811d5f117d
+      # The new pure URL classifier and all tests remain identical in both arms.
+      # The public caller never invokes that classifier, retaining its old route.
+      - name: Restore only the public caller
+        if: matrix.producer == 'baseline'
+        run: git restore --source=5f620a8c30321d590ed20c758d0a53811d5f117d -- packages/web-renderer/src/drawing/calculate-transforms.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Record exact producer and test sources
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          git diff --name-only > packages/web-renderer/test/__results__/producer-differences.txt
+          git hash-object packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/mask-image.ts packages/web-renderer/src/test/svg-font-definition-review.test.tsx packages/web-renderer/src/test/svg-mask-reference.test.ts > packages/web-renderer/test/__results__/source-blobs.txt
+          git diff --exit-code 5f620a8c30321d590ed20c758d0a53811d5f117d -- packages/web-renderer/src/test/fixtures/svg-font-definition-review.tsx
+      - name: Compare all original definition-resource cases and owned-mask controls
+        run: cd packages/web-renderer && bunx vitest src/test/svg-font-definition-review.test.tsx src/test/svg-mask-reference.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/svg-root-mask.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-root-mask-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
