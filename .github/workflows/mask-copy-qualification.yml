@@ -1,7 +1,7 @@
 name: SVG image mask qualification
 on:
   push:
-    branches: [codex/13134-svg-mask-image-qualification]
+    branches: [codex/13134-mask-copy-qualification]
 permissions:
   contents: read
 jobs:

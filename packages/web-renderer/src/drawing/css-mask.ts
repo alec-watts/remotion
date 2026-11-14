@@ -72,9 +72,16 @@ export const createCssMask = async ({
 		svg.appendChild(target);
 		Object.assign(target.style, maskImageInfo.style, {
 			maskImage: images.join(', '),
-			// HTML border-box coordinates correspond to this SVG viewport.
-			maskOrigin: 'view-box',
-			maskClip: 'view-box',
+			// The previous HTML target has no padding/border of its own. Its
+			// reference box is this SVG viewport; retain no-clip and layer order.
+			maskOrigin: maskImageInfo.style.maskOrigin.replace(
+				/\b(?:border|padding|content|margin|fill|stroke)-box\b/g,
+				'view-box',
+			),
+			maskClip: maskImageInfo.style.maskClip.replace(
+				/\b(?:border|padding|content|margin|fill|stroke)-box\b/g,
+				'view-box',
+			),
 		});
 
 		const drawable = await turnSvgIntoDrawable(svg);
