@@ -4,7 +4,7 @@ on:
     branches: [codex/13312-gradient-input-qualification]
   pull_request:
     types: [opened, synchronize]
-    branches: [codex/linear-gradient-pixel-stops]
+    branches: [codex/gradient-input-baseline-11e4]
 permissions:
   contents: read
 jobs:
