@@ -10,7 +10,7 @@ import {parseTransformOrigin} from './parse-transform-origin';
 
 /**
  * CSS filters that affect children and require precompositing.
- * drop-shadow must be applied to the composite of parent + children,
+ * Spatial filters apply to the composite of parent + children,
  * not to individual draw operations.
  */
 const filterRequiresPrecompositing = (filter: string): string | null => {
@@ -18,9 +18,7 @@ const filterRequiresPrecompositing = (filter: string): string | null => {
 		return null;
 	}
 
-	// Check for drop-shadow filter - this requires precompositing
-	// because the shadow should be based on the composite alpha of parent + children
-	if (filter.includes('drop-shadow')) {
+	if (filter.includes('drop-shadow') || filter.includes('blur(')) {
 		return filter;
 	}
 
