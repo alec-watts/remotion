@@ -347,16 +347,20 @@ export const processNode = async ({
 				);
 				svg.setAttribute('width', String(tempContext.canvas.width));
 				svg.setAttribute('height', String(tempContext.canvas.height));
-				const image = element.ownerDocument.createElementNS(
+				const foreignObject = element.ownerDocument.createElementNS(
 					'http://www.w3.org/2000/svg',
-					'image',
+					'foreignObject',
 				);
-				image.setAttribute('width', String(tempContext.canvas.width));
-				image.setAttribute('height', String(tempContext.canvas.height));
-				image.setAttribute('href', data);
-				svg.style.filter = filter;
-
-				svg.appendChild(image);
+				foreignObject.setAttribute('width', String(tempContext.canvas.width));
+				foreignObject.setAttribute('height', String(tempContext.canvas.height));
+				const image = element.ownerDocument.createElement('img');
+				image.width = tempContext.canvas.width;
+				image.height = tempContext.canvas.height;
+				image.src = data;
+				image.style.display = 'block';
+				image.style.filter = filter;
+				foreignObject.appendChild(image);
+				svg.appendChild(foreignObject);
 				filteredImage = await turnSvgIntoDrawable(svg);
 			}
 
