@@ -70,7 +70,9 @@ export const createCssMask = async ({
 		image.setAttribute('preserveAspectRatio', 'none');
 		target.appendChild(image);
 		svg.appendChild(target);
-		Object.assign(target.style, maskImageInfo.style, {
+		// Apply the mask inside the logical viewport so view-box uses the mask
+		// rectangle rather than the padded outer canvas viewport.
+		Object.assign(image.style, maskImageInfo.style, {
 			maskImage: images.join(', '),
 			// The previous HTML target has no padding/border of its own. Its
 			// reference box is this SVG viewport; retain no-clip and layer order.
