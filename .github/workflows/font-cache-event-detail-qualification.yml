@@ -17,6 +17,7 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+      - run: git fetch --no-tags --depth=1 origin 6f27a8a6ff47c911deab75f5d47c8cc628ca0386
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -29,15 +30,17 @@ jobs:
       - name: Preserve producer and repeated-test inputs
         run: |
           mkdir -p packages/web-renderer/test/__results__/font-cache-events
+          git show 6f27a8a6ff47c911deab75f5d47c8cc628ca0386:packages/web-renderer/src/test/font-fingerprint-cache-browser.test.ts > packages/web-renderer/test/__results__/font-cache-events/original-test.ts
+          git diff 6f27a8a6ff47c911deab75f5d47c8cc628ca0386 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/font-cache-events/producer.patch
           cp packages/web-renderer/src/test/font-fingerprint-cache-browser.test.ts packages/web-renderer/test/__results__/font-cache-events/executed-test.ts
           shasum -a 256 packages/web-renderer/src/drawing/font-fingerprint-cache.ts packages/web-renderer/src/drawing/fingerprint-css-font-groups.ts packages/web-renderer/src/test/fixtures/svg-use-data-font.tsx packages/web-renderer/src/test/fixtures/svg-titled-font-groups.tsx > packages/web-renderer/test/__results__/font-cache-events/source-inputs.txt
       - run: cd packages/web-renderer && bunx playwright install --with-deps
-      - name: Exercise all original cache assertions with native event details
-        run: cd packages/web-renderer && bunx vitest src/test/font-fingerprint-cache-browser.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/font-cache-events/results.json
+      - name: Exercise the repeated cache assertions in the full original suite
+        run: bun run testwebrenderer --log-order=stream -- --reporter=default --reporter=json --outputFile=./test/__results__/font-cache-events/full-suite.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: font-cache-events
+          name: font-cache-events-full-suite
           path: |
             packages/web-renderer/test/__results__/
             packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
