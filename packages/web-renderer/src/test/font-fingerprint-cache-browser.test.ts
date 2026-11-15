@@ -1,6 +1,7 @@
 import {expect, test} from 'vitest';
 import {fingerprintCssFontGroups} from '../drawing/fingerprint-css-font-groups';
 import {renderFramesOnWeb, renderStillOnWeb} from '../render-still-on-web';
+import {withResolvers} from '../with-resolvers';
 import {svgTitledFontCache} from './fixtures/svg-titled-font-groups';
 import {svgUseFontData} from './fixtures/svg-use-data-font';
 import {createFontFailureRecorder} from './font-failure-recorder';
@@ -45,8 +46,30 @@ test(
 		};
 
 		const initialFontEvents: string[] = [];
-		const onInitialFontEvent = (event: Event) =>
+		const initialEventDetails: {
+			type: string;
+			faces: {family: string; status: string}[];
+		}[] = [];
+		const sourceCompletion = withResolvers<void>();
+		const onInitialFontEvent = (event: Event) => {
 			initialFontEvents.push(event.type);
+			const faces = Array.from((event as FontFaceSetLoadEvent).fontfaces ?? []);
+			initialEventDetails.push({
+				type: event.type,
+				faces: faces.map((face) => ({
+					family: face.family,
+					status: face.status,
+				})),
+			});
+			if (
+				(event.type === 'loadingdone' || event.type === 'loadingerror') &&
+				faces.some(
+					(face) => face.family.replace(/^['"]|['"]$/g, '') === 'Review',
+				)
+			)
+				sourceCompletion.resolve();
+		};
+
 		for (const type of ['loading', 'loadingdone', 'loadingerror'])
 			owner.fonts.addEventListener(type, onInitialFontEvent);
 		try {
@@ -68,12 +91,24 @@ test(
 					stage: 'loaded',
 					loadingStatus,
 					initialFontEvents,
+					initialEventDetails,
 					status: owner.fonts.status,
 				}),
 			);
-			// Some native font sets report loading and become ready without firing
-			// loadingdone. Qualify actual ready/status/event stability across native
-			// frames instead of depending on an event that may never arrive.
+			if (
+				loadingStatus === 'loading' ||
+				initialFontEvents.includes('loading')
+			) {
+				const onAbort = () => sourceCompletion.reject(t.signal.reason);
+				t.signal.addEventListener('abort', onAbort, {once: true});
+				try {
+					if (t.signal.aborted) throw t.signal.reason;
+					await sourceCompletion.promise;
+				} finally {
+					t.signal.removeEventListener('abort', onAbort);
+				}
+			}
+
 			const checkpoints: {
 				events: number;
 				status: FontFaceSetLoadStatus;
@@ -120,6 +155,7 @@ test(
 				JSON.stringify({
 					loadingStatus,
 					initialFontEvents,
+					initialEventDetails,
 					checkpoints,
 					settled,
 				}),
