@@ -171,18 +171,29 @@ export const processNode = async ({
 
 		const is3DPrecomposition = precompositing.needs3DTransformViaWebGL;
 
+		const usesSvgCssFilter =
+			precompositing.needsFilterPrecompositing !== null &&
+			!precompositing.needsFilterPrecompositing.includes('url(') &&
+			!('filter' in OffscreenCanvasRenderingContext2D.prototype);
 		const {
 			rect: layerRect,
 			scale: layerScale,
 			pixelWidth: layerPixelWidth,
 			pixelHeight: layerPixelHeight,
-		} = getPrecomposedLayerGeometry({
-			precomposeRect,
-			totalMatrix,
-			parentRect,
-			scale,
-			is3DPrecomposition,
-		});
+		} = usesSvgCssFilter
+			? {
+					rect: precomposeRect,
+					scale,
+					pixelWidth: null,
+					pixelHeight: null,
+				}
+			: getPrecomposedLayerGeometry({
+					precomposeRect,
+					totalMatrix,
+					parentRect,
+					scale,
+					is3DPrecomposition,
+				});
 
 		const tempContext = await createLayer({
 			transparent: true,
