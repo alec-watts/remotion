@@ -1,10 +1,11 @@
-name: Native rounded clipping public regression qualification
+name: Rounded clipping and background interaction qualification
 on:
   push:
     branches: [codex/native-rounded-clipping-qualification]
     paths:
       - '.github/workflows/native-rounded-clipping-qualification.yml'
       - '.github/scripts/qualify-native-rounded-test.py'
+      - '.github/scripts/qualify-rounded-background.py'
       - 'packages/web-renderer/src/drawing/border-radius.ts'
       - 'packages/web-renderer/src/test/border-radius.test.tsx'
       - 'packages/web-renderer/src/test/fixtures/border-radius.tsx'
@@ -39,22 +40,27 @@ jobs:
           bun-version: 1.4.3
       - run: bun ci
       - name: Extract the unchanged public regression body and add artifact recording
-        run: python3 .github/scripts/qualify-native-rounded-test.py
-      - run: bunx oxfmt packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx --write
+        run: |
+          python3 .github/scripts/qualify-native-rounded-test.py
+          python3 .github/scripts/qualify-rounded-background.py
+      - run: bunx oxfmt packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx packages/web-renderer/src/test/background-clip.test.tsx --write
       - run: bunx turbo run make --filter=@remotion/web-renderer
-      - run: cd packages/web-renderer && bunx eslint src/test/native-rounded-clipping-qualification.test.tsx --fix && bun run lint
+      - run: cd packages/web-renderer && bunx eslint src/test/native-rounded-clipping-qualification.test.tsx src/test/background-clip.test.tsx --fix && bun run lint
       - name: Preserve exact inputs and producer
         run: |
+          cp -R packages/web-renderer/src/test/__screenshots__/background-clip.test.tsx packages/web-renderer/test/__results__/background-goldens
+          cp packages/web-renderer/src/test/background-clip.test.tsx packages/web-renderer/test/__results__/executed-background-test.tsx
+          shasum -a 256 packages/web-renderer/src/test/background-clip.test.tsx packages/web-renderer/src/test/fixtures/text/background-clip-text.tsx > packages/web-renderer/test/__results__/background-inputs.txt
           cp packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx packages/web-renderer/test/__results__/executed-test.tsx
           shasum -a 256 packages/web-renderer/src/test/border-radius.test.tsx packages/web-renderer/src/test/fixtures/border-radius.tsx packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx > packages/web-renderer/test/__results__/public-inputs.txt
           git diff b0c3781e6acc736aeaf2102511068094032ea061 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/producer.patch
       - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
       - name: Execute the public regression against the matched producers
-        run: cd packages/web-renderer && bunx vitest src/test/native-rounded-clipping-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/rounded-public.json
+        run: cd packages/web-renderer && bunx vitest src/test/native-rounded-clipping-qualification.test.tsx src/test/background-clip.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/rounded-public.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rounded-public-${{ matrix.os }}-${{ matrix.producer }}
+          name: rounded-background-${{ matrix.os }}-${{ matrix.producer }}
           path: |
             packages/web-renderer/test/__results__/
             packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
