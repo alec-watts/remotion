@@ -105,7 +105,13 @@ for (const [index, filter] of functions.entries()) {
 			max: number | null;
 			error: string | null;
 		}[] = [];
-		for (const target of ['root', 'group', 'image']) {
+		for (const target of [
+			'root',
+			'group',
+			'image',
+			'html-image',
+			'html-group',
+		]) {
 			const canvas = new OffscreenCanvas(64, 32);
 			const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 			svg.setAttribute('width', '64');
@@ -122,9 +128,43 @@ for (const [index, filter] of functions.entries()) {
 				group.setAttribute('style', 'filter:' + filter);
 				group.appendChild(image);
 				svg.appendChild(group);
-			} else {
+			} else if (target === 'image') {
 				image.setAttribute('style', 'filter:' + filter);
 				svg.appendChild(image);
+			} else {
+				const foreignObject = document.createElementNS(
+					svg.namespaceURI,
+					'foreignObject',
+				);
+				foreignObject.setAttribute('width', '64');
+				foreignObject.setAttribute('height', '32');
+				const html = document.createElementNS(
+					'http://www.w3.org/1999/xhtml',
+					'div',
+				);
+				html.setAttribute('style', 'width:64px;height:32px;line-height:0');
+				const htmlImage = document.createElementNS(
+					'http://www.w3.org/1999/xhtml',
+					'img',
+				);
+				htmlImage.setAttribute('src', source.url);
+				htmlImage.setAttribute('style', 'display:block;width:64px;height:32px');
+
+				if (target === 'html-image') {
+					htmlImage.setAttribute(
+						'style',
+						'display:block;width:64px;height:32px;filter:' + filter,
+					);
+				} else {
+					html.setAttribute(
+						'style',
+						'width:64px;height:32px;line-height:0;filter:' + filter,
+					);
+				}
+
+				html.appendChild(htmlImage);
+				foreignObject.appendChild(html);
+				svg.appendChild(foreignObject);
 			}
 
 			try {
