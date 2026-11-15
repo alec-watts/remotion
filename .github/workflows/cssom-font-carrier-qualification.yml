@@ -1,0 +1,52 @@
+name: CSSOM font carrier qualification
+on:
+  push:
+    branches: [codex/13117-cssom-carrier-qualification]
+permissions:
+  contents: read
+jobs:
+  fonts:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [baseline, candidate]
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch exact public baseline
+        run: git fetch --no-tags --depth=1 origin a2efc2c498cdfde3ec3f06dbee67ae4ae6b54fd1
+      - name: Restore only the old font carrier producer
+        if: matrix.producer == 'baseline'
+        run: git restore --source=a2efc2c498cdfde3ec3f06dbee67ae4ae6b54fd1 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Record producer and test identities
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          git diff a2efc2c498cdfde3ec3f06dbee67ae4ae6b54fd1 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts > packages/web-renderer/test/__results__/producer.patch
+          shasum -a 256 packages/web-renderer/src/test/svg-titled-font-carrier.test.tsx packages/web-renderer/src/test/fixtures/svg-persistent-font-order.tsx packages/web-renderer/src/test/cssom-font-order-native-qualification.test.tsx > packages/web-renderer/test/__results__/test-identities.txt
+      - name: Retain font carrier and source-state controls
+        run: cd packages/web-renderer && bunx vitest src/test/svg-titled-font-carrier.test.tsx src/test/svg-exact-title-font.test.tsx src/test/svg-cssom-empty-selector.test.tsx src/test/svg-precompose-font.test.tsx src/test/cssom-font-order-native-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/cssom-font-carrier.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cssom-font-carrier-${{ matrix.os }}-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
