@@ -21,6 +21,8 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+      - name: Fetch exact shadow producer
+        run: git fetch --no-tags --depth=1 origin 76c715bade287f1e451633a620b65978632afc17
       - uses: actions/setup-node@v6
         with:
           node-version: 26
