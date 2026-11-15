@@ -64,10 +64,14 @@ export const getBiggestBoundingClientRect = (
 
 	while (true) {
 		const computedStyle = getComputedStyle(treeWalker.currentNode as Element);
-		const outlineWidth = includePaintOutsets
+		const hasPaintedOutline =
+			includePaintOutsets &&
+			computedStyle.outlineStyle !== 'none' &&
+			computedStyle.outlineStyle !== 'hidden';
+		const outlineWidth = hasPaintedOutline
 			? parseOutlineWidth(computedStyle.outlineWidth)
 			: 0;
-		const outlineOffset = includePaintOutsets
+		const outlineOffset = hasPaintedOutline
 			? parseOutlineOffset(computedStyle.outlineOffset)
 			: 0;
 		const rect = (treeWalker.currentNode as Element).getBoundingClientRect();
