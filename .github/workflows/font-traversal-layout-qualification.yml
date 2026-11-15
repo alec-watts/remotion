@@ -1,0 +1,53 @@
+name: SVG traversal layout qualification
+on:
+  push:
+    branches: [codex/font-traversal-layout-qualification]
+    paths:
+      - '.github/workflows/font-traversal-layout-qualification.yml'
+      - 'packages/web-renderer/src/test/svg-repeated-use.test.tsx'
+permissions:
+  contents: read
+jobs:
+  traversal:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - run: git fetch --no-tags --depth=1 origin 6f27a8a6ff47c911deab75f5d47c8cc628ca0386
+      - name: Restore the existing hidden-layout harness
+        if: matrix.producer == 'baseline'
+        run: git restore --source=6f27a8a6ff47c911deab75f5d47c8cc628ca0386 -- packages/web-renderer/src/test/svg-repeated-use.test.tsx
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - name: Preserve exact traversal inputs
+        run: |
+          mkdir -p packages/web-renderer/validation/traversal-inputs
+          cp packages/web-renderer/src/test/svg-repeated-use.test.tsx packages/web-renderer/validation/traversal-inputs/executed-test.tsx
+          shasum -a 256 packages/web-renderer/src/drawing/turn-svg-into-drawable.ts packages/web-renderer/src/drawing/fingerprint-css-font-groups.ts packages/web-renderer/src/drawing/font-fingerprint-cache.ts packages/web-renderer/src/test/fixtures/svg-repeated-use.tsx packages/web-renderer/src/test/fixtures/svg-use-data-font.tsx > packages/web-renderer/validation/traversal-inputs/source-inputs.txt
+          git diff 6f27a8a6ff47c911deab75f5d47c8cc628ca0386 -- packages/web-renderer/src > packages/web-renderer/validation/traversal-inputs/harness.patch
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Execute every original traversal assertion
+        run: cd packages/web-renderer && bunx vitest src/test/svg-repeated-use.test.tsx --run --reporter=default --reporter=json --outputFile=./validation/traversal-inputs/results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: traversal-${{ matrix.os }}-${{ matrix.producer }}
+          path: packages/web-renderer/validation/
+          if-no-files-found: error
+          retention-days: 7

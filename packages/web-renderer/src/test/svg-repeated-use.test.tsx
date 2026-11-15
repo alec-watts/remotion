@@ -12,7 +12,7 @@ test(
 	{timeout: 90000},
 	async () => {
 		const host = document.createElement('div');
-		host.style.visibility = 'hidden';
+		host.style.display = 'none';
 		document.body.appendChild(host);
 		const root = createRoot(host);
 		const Component = svgRepeatedUse.component;
@@ -118,7 +118,7 @@ test(
 		style.textContent = `@font-face{font-family:"${family}";src:url("${data}")}`;
 		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 		// This measures font discovery rather than browser painting of a million paths.
-		svg.style.visibility = 'hidden';
+		svg.style.display = 'none';
 		svg.innerHTML = `<defs><g id="shared-positive">${Array.from({length: 1000}, () => '<path d="M0 0h1v1Z"/>').join('')}<text font-size="0">Label</text></g>${Array.from({length: 1000}, (_, index) => `<g id="wrapper-${index}"><use href="#shared-positive"/></g>`).join('')}</defs>${Array.from({length: 1000}, (_, index) => `<use href="#wrapper-${index}" style="font-family:${family}"/>`).join('')}`;
 		document.head.appendChild(style);
 		document.body.appendChild(svg);
