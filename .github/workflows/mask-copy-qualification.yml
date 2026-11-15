@@ -1,0 +1,60 @@
+name: SVG image mask qualification
+on:
+  push:
+    branches: [codex/13134-mask-image-current-main]
+permissions:
+  contents: read
+jobs:
+  mask:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, identity, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Restore only the original mask copy in baseline
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          git fetch --no-tags --depth=1 origin 6bdebe7b2e5212432c24a35fa8c09c5fde15c707 89a07a9c6bdd5d5038ed5521d4500a1a0d008b2b
+          if test "$ARM" = baseline; then
+            git restore --source=6bdebe7b2e5212432c24a35fa8c09c5fde15c707 -- packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts
+          elif test "$ARM" = identity; then
+            git restore --source=89a07a9c6bdd5d5038ed5521d4500a1a0d008b2b -- packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts
+          fi
+          mkdir -p packages/web-renderer/test/__results__/source
+          git rev-parse HEAD > packages/web-renderer/test/__results__/source/head.txt
+          git diff --name-status HEAD > packages/web-renderer/test/__results__/source/restored-paths.txt
+          shasum -a 256 packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/css-mask.ts > packages/web-renderer/test/__results__/source/producer.txt
+          git diff --exit-code HEAD -- packages/web-renderer/src/test package.json bun.lock
+      - name: Record exact fixture and comparison inputs
+        run: |
+          shasum -a 256 packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/mask-gradient-layers.test.tsx packages/web-renderer/src/test/native-reference.ts packages/web-renderer/vitest.config.ts bun.lock > packages/web-renderer/test/__results__/source/test-inputs.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Keep strict native fractional edges and existing mask snapshots
+        run: cd packages/web-renderer && bunx vitest src/test/mask-copy-qualification.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image.test.tsx src/test/mask-image-url.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/backface-visibility-mask.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-copy.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-image-mask-${{ matrix.arm }}
+          include-hidden-files: true
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/.vitest/attachments/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: warn
+          retention-days: 7
