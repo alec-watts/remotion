@@ -1,5 +1,5 @@
 import type {CSSProperties} from 'react';
-import {AbsoluteFill} from 'remotion';
+import {AbsoluteFill, useCurrentFrame} from 'remotion';
 import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
@@ -104,7 +104,10 @@ for (const sample of cases) {
 		for (const target of [
 			'renderer',
 			'producer-clip',
+			'producer-clip-cover',
+			'producer-fill',
 			'roundrect-clip',
+			'roundrect-clip-cover',
 			'roundrect-fill',
 			'html-svg',
 		]) {
@@ -171,7 +174,11 @@ for (const sample of cases) {
 						context.translate(sample.left, sample.top);
 						context.scale(sample.scale, sample.scale);
 						context.fillStyle = sample.color;
-						if (target === 'producer-clip') {
+						if (
+							target === 'producer-clip' ||
+							target === 'producer-clip-cover' ||
+							target === 'producer-fill'
+						) {
 							drawRoundedRectPath({
 								ctx: context,
 								x: 0,
@@ -180,8 +187,19 @@ for (const sample of cases) {
 								height,
 								borderRadius: radius,
 							});
-							context.clip();
-							context.fillRect(0, 0, width, height);
+							if (
+								target === 'producer-clip' ||
+								target === 'producer-clip-cover'
+							) {
+								context.clip();
+								if (target.endsWith('-cover')) {
+									context.fillRect(-1, -1, width + 2, height + 2);
+								} else {
+									context.fillRect(0, 0, width, height);
+								}
+							} else {
+								context.fill();
+							}
 						} else {
 							context.beginPath();
 							context.roundRect(
@@ -196,9 +214,16 @@ for (const sample of cases) {
 									radius.bottomLeft,
 								].map((r) => ({x: r.horizontal, y: r.vertical})),
 							);
-							if (target === 'roundrect-clip') {
+							if (
+								target === 'roundrect-clip' ||
+								target === 'roundrect-clip-cover'
+							) {
 								context.clip();
-								context.fillRect(0, 0, width, height);
+								if (target.endsWith('-cover')) {
+									context.fillRect(-1, -1, width + 2, height + 2);
+								} else {
+									context.fillRect(0, 0, width, height);
+								}
 							} else {
 								context.fill();
 							}
@@ -264,7 +289,54 @@ for (const sample of cases) {
 	});
 }
 
+const roundedShadows = [
+	{radius: '4px', shadow: '4px 6px 0 8px blue', background: '#eee'},
+	{
+		radius: '999px',
+		shadow: '-4px 6px 6px rgba(0,0,255,.5)',
+		background: '#eee',
+	},
+	{radius: '24px / 12px', shadow: '-4px -6px 0 -2px blue', background: '#eee'},
+	{
+		radius: '4px 12px 20px 8px / 8px 20px 12px 4px',
+		shadow: '6px 4px 8px 4px blue',
+		background: 'rgba(240,240,240,.5)',
+	},
+];
+const RoundedShadowComponent = () => {
+	const frame = useCurrentFrame();
+	return (
+		<AbsoluteFill style={{backgroundColor: 'white'}}>
+			{roundedShadows.map((sample, index) => (
+				<div
+					key={sample.radius}
+					style={{
+						position: 'absolute',
+						left: 30 + (index % 2) * 160 + frame * 4,
+						top: 30 + Math.floor(index / 2) * 130,
+						width: 100,
+						height: 80,
+						borderRadius: sample.radius,
+						boxShadow: sample.shadow,
+						backgroundColor: sample.background,
+					}}
+				/>
+			))}
+		</AbsoluteFill>
+	);
+};
+
+const roundedShadowComposition = {
+	component: RoundedShadowComponent,
+	id: 'rounded-shadow-interactions',
+	width: 360,
+	height: 280,
+	fps: 30,
+	durationInFrames: 2,
+};
+
 for (const composition of [
+	roundedShadowComposition,
 	boxShadowSpreadInset,
 	boxShadowSpreadInsetAlpha,
 	boxShadowInsetReview,
