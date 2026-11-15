@@ -31,7 +31,7 @@ jobs:
         if: matrix.producer == 'baseline'
         run: |
           git restore --source=54ecd7a88fbe7330d6ed6f51b87b669b701d38a5 -- packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/process-node.ts
-          rm packages/web-renderer/src/drawing/css-filter-to-svg.ts
+          if test -f packages/web-renderer/src/drawing/css-filter-to-svg.ts; then rm packages/web-renderer/src/drawing/css-filter-to-svg.ts; fi
       - name: Verify unchanged geometry, font producer and fixtures
         run: git diff --exit-code 54ecd7a88fbe7330d6ed6f51b87b669b701d38a5 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts packages/web-renderer/src/drawing/get-precomposed-layer-geometry.ts packages/web-renderer/src/drawing/get-svg-paint-bounds.ts packages/web-renderer/src/get-biggest-bounding-client-rect.ts packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx
       - uses: actions/setup-node@v6
