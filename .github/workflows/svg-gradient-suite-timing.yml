@@ -1,0 +1,57 @@
+name: SVG gradient full-suite timing
+on:
+  push:
+    branches: [codex/svg-gradient-suite-timing]
+    paths:
+      - '.github/workflows/svg-gradient-suite-timing.yml'
+      - 'packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx'
+permissions:
+  contents: read
+jobs:
+  suite:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        producer: [main, rounded]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - run: git fetch --no-tags --depth=1 origin b0c3781e6acc736aeaf2102511068094032ea061 d77776aacb8066d6ee73c4b5e0d291f97425d169
+      - name: Restore only main's rounded clip producer
+        if: matrix.producer == 'main'
+        run: git restore --source=b0c3781e6acc736aeaf2102511068094032ea061 -- packages/web-renderer/src/drawing/border-radius.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - name: Preserve exact tests, configuration and producer
+        run: |
+          mkdir -p packages/web-renderer/test/__results__/gradient-inputs
+          cp packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/test/__results__/gradient-inputs/executed-test.tsx
+          git show d77776aacb8066d6ee73c4b5e0d291f97425d169:packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/original-test.tsx
+          shasum -a 256 packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/src/test/fixtures/issue-10676-svg-gradient-stroke.tsx packages/web-renderer/vitest.config.ts packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/test/border-radius.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/source-inputs.txt
+          git diff b0c3781e6acc736aeaf2102511068094032ea061 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/gradient-inputs/producer.patch
+          git diff d77776aacb8066d6ee73c4b5e0d291f97425d169 -- packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/instrumentation.patch
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run the entire unchanged renderer suite with timing records
+        run: bun run testwebrenderer --log-order=stream -- --reporter=default --reporter=json --outputFile=./test/__results__/gradient-suite.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gradient-suite-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/react18-tests/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
