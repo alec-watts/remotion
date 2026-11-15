@@ -14,7 +14,7 @@ import {parseTransformOrigin} from './parse-transform-origin';
  * not to individual draw operations.
  */
 const filterRequiresPrecompositing = (filter: string): string | null => {
-	if (!filter || filter === 'none') {
+	if (!filter || filter === 'none' || filter === 'opacity(1)') {
 		return null;
 	}
 
