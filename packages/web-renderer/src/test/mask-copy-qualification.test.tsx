@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -42,16 +42,31 @@ const qualifyMaskCopy = async ({
 		frame,
 		{omitBackground: !opaqueReference},
 	);
-	const actual = await (
-		await renderStillOnWeb({
-			licenseKey: 'free-license',
-			composition,
-			frame,
-			scale,
-			inputProps: {},
-			allowHtmlInCanvas: false,
-		})
-	).blob({format: 'png'});
+	const serializedSvgs: string[] = [];
+	const serialize = XMLSerializer.prototype.serializeToString;
+	const observer = vi
+		.spyOn(XMLSerializer.prototype, 'serializeToString')
+		.mockImplementation(function (this: XMLSerializer, root: Node) {
+			const serialized = serialize.call(this, root);
+			if (root instanceof SVGSVGElement) serializedSvgs.push(serialized);
+			return serialized;
+		});
+	let actual: Blob;
+	try {
+		actual = await (
+			await renderStillOnWeb({
+				licenseKey: 'free-license',
+				composition,
+				frame,
+				scale,
+				inputProps: {},
+				allowHtmlInCanvas: false,
+			})
+		).blob({format: 'png'});
+	} finally {
+		observer.mockRestore();
+	}
+
 	const pixels = await countNativePixels(reference, actual);
 	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}`;
 	for (const [role, blob] of [
@@ -66,6 +81,10 @@ const qualifyMaskCopy = async ({
 			btoa(binary),
 			'base64',
 		);
+	}
+
+	for (const [index, svg] of serializedSvgs.entries()) {
+		await server.commands.writeFile(`${path}/serialized-${index}.svg`, svg);
 	}
 
 	await server.commands.writeFile(
