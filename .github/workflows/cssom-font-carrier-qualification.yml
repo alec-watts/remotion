@@ -38,9 +38,9 @@ jobs:
         run: |
           mkdir -p packages/web-renderer/test/__results__
           git diff a2efc2c498cdfde3ec3f06dbee67ae4ae6b54fd1 -- packages/web-renderer/src/drawing/turn-svg-into-drawable.ts > packages/web-renderer/test/__results__/producer.patch
-          shasum -a 256 packages/web-renderer/src/test/svg-titled-font-carrier.test.tsx packages/web-renderer/src/test/fixtures/svg-persistent-font-order.tsx packages/web-renderer/src/test/cssom-font-order-native-qualification.test.tsx > packages/web-renderer/test/__results__/test-identities.txt
+          shasum -a 256 packages/web-renderer/src/test/svg-cssom-font-carrier.test.tsx packages/web-renderer/src/test/fixtures/svg-persistent-font-order.tsx packages/web-renderer/src/test/cssom-font-order-native-qualification.test.tsx > packages/web-renderer/test/__results__/test-identities.txt
       - name: Retain font carrier and source-state controls
-        run: cd packages/web-renderer && bunx vitest src/test/svg-titled-font-carrier.test.tsx src/test/svg-exact-title-font.test.tsx src/test/svg-cssom-empty-selector.test.tsx src/test/svg-precompose-font.test.tsx src/test/cssom-font-order-native-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/cssom-font-carrier.json
+        run: cd packages/web-renderer && bunx vitest src/test/svg-cssom-font-carrier.test.tsx src/test/svg-titled-font-carrier.test.tsx src/test/svg-exact-title-font.test.tsx src/test/svg-cssom-empty-selector.test.tsx src/test/svg-precompose-font.test.tsx src/test/cssom-font-order-native-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/cssom-font-carrier.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
