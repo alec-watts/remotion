@@ -2,6 +2,12 @@ name: CSS filter SVG fallback qualification
 on:
   push:
     branches: [codex/css-filter-svg-fallback-qualification]
+    paths:
+      - 'packages/web-renderer/src/drawing/**'
+      - 'packages/web-renderer/src/test/css-filter-fallback-native-qualification.test.tsx'
+      - 'packages/web-renderer/src/test/svg-precompose-native-diagnostic.test.tsx'
+      - 'packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx'
+      - 'packages/web-renderer/src/test/native-reference.tsx'
 permissions:
   contents: read
 jobs:
@@ -45,9 +51,9 @@ jobs:
           mkdir -p packages/web-renderer/src/test/__screenshots__/svg-precompose-native-diagnostic.test.tsx
           cp packages/web-renderer/src/test/__screenshots__/svg-precompose-font.test.tsx/*.png packages/web-renderer/src/test/__screenshots__/svg-precompose-native-diagnostic.test.tsx/
           git diff 54ecd7a88fbe7330d6ed6f51b87b669b701d38a5 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/producer.patch
-          shasum -a 256 packages/web-renderer/src/test/css-filter-fallback-native-qualification.test.tsx packages/web-renderer/src/test/svg-precompose-native-diagnostic.test.tsx packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx > packages/web-renderer/test/__results__/test-identities.txt
+          shasum -a 256 packages/web-renderer/src/test/svg-filter-color-stage-qualification.test.tsx packages/web-renderer/src/test/css-filter-fallback-native-qualification.test.tsx packages/web-renderer/src/test/svg-precompose-native-diagnostic.test.tsx packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx > packages/web-renderer/test/__results__/test-identities.txt
       - name: Record each original grid cell with native and explicit font controls
-        run: cd packages/web-renderer && bunx vitest src/test/svg-precompose-native-diagnostic.test.tsx src/test/css-filter-fallback-native-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/precompose-native.json
+        run: cd packages/web-renderer && bunx vitest src/test/svg-precompose-native-diagnostic.test.tsx src/test/css-filter-fallback-native-qualification.test.tsx src/test/svg-filter-color-stage-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/precompose-native.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
