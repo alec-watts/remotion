@@ -352,6 +352,17 @@ export const processNode = async ({
 					ownerDocument: element.ownerDocument,
 				});
 				if (resource) {
+					const input = element.ownerDocument.createElementNS(
+						'http://www.w3.org/2000/svg',
+						'feImage',
+					);
+					input.setAttribute('href', data);
+					input.setAttribute('x', '0');
+					input.setAttribute('y', '0');
+					input.setAttribute('width', String(tempContext.canvas.width));
+					input.setAttribute('height', String(tempContext.canvas.height));
+					input.setAttribute('preserveAspectRatio', 'none');
+					resource.prepend(input);
 					svg.appendChild(resource);
 					image.setAttribute('filter', 'url(#' + resource.id + ')');
 				} else {
