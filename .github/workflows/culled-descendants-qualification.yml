@@ -1,0 +1,52 @@
+name: Culled masked descendants qualification
+on:
+  push:
+    branches: [codex/13416-cull-descendants-qualification]
+permissions:
+  contents: read
+jobs:
+  pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch exact public baseline
+        run: git fetch --no-tags --depth=1 origin 25db87fd4d349560e290879b7a0f951127a497c8
+      - name: Restore only the previous culling producer
+        if: matrix.producer == 'baseline'
+        run: git restore --source=25db87fd4d349560e290879b7a0f951127a497c8 -- packages/web-renderer/src/drawing/process-node.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Record producer and fixture identity
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          git diff 25db87fd4d349560e290879b7a0f951127a497c8 -- packages/web-renderer/src/drawing/process-node.ts > packages/web-renderer/test/__results__/producer.patch
+          shasum -a 256 packages/web-renderer/src/test/mask-image.test.tsx packages/web-renderer/src/test/fixtures/mask-image.tsx > packages/web-renderer/test/__results__/culling-test-hashes.txt
+      - name: Retain existing masks and both strict native controls
+        run: cd packages/web-renderer && bunx vitest src/test/mask-image.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/culled-descendants.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: culled-descendants-${{ matrix.os }}-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
