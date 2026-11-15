@@ -20,6 +20,13 @@ record = '''
         userAgent: navigator.userAgent, devicePixelRatio, frame: 0, scale: SCALE,
         width: backgroundClipText.width * SCALE, height: backgroundClipText.height * SCALE,
     }, null, 2));
+    const control = await (await renderStillOnWeb({
+        licenseKey: 'free-license', composition: backgroundClipText, frame: 0,
+        inputProps: {}, scale: SCALE,
+    })).blob({format: 'png'});
+    let controlData = '';
+    for (const byte of new Uint8Array(await control.arrayBuffer())) controlData += String.fromCharCode(byte);
+    await server.commands.writeFile(directory + '/control.png', btoa(controlData), 'base64');
 '''
 native = '''
     const reference = await captureNativeReference(backgroundClipText, 0, {omitBackground: false});

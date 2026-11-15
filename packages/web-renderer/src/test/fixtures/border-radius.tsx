@@ -88,7 +88,7 @@ const NativeRoundedClipComponent = () => {
 		<AbsoluteFill style={{backgroundColor: 'white'}}>
 			{nativeRoundedClipCases.map((sample, index) => (
 				<div
-					key={sample.radius + sample.color}
+					key={sample.radius + sample.color + sample.nativeInset}
 					style={{
 						position: 'absolute',
 						left: 20 + (index % 3) * 180 + frame * 4,
