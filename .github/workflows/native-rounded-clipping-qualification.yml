@@ -1,0 +1,62 @@
+name: Native rounded clipping public regression qualification
+on:
+  push:
+    branches: [codex/native-rounded-clipping-qualification]
+    paths:
+      - '.github/workflows/native-rounded-clipping-qualification.yml'
+      - '.github/scripts/qualify-native-rounded-test.py'
+      - 'packages/web-renderer/src/drawing/border-radius.ts'
+      - 'packages/web-renderer/src/test/border-radius.test.tsx'
+      - 'packages/web-renderer/src/test/fixtures/border-radius.tsx'
+      - 'packages/web-renderer/src/test/Root.tsx'
+permissions:
+  contents: read
+jobs:
+  pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        producer: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch exact main producer
+        run: git fetch --no-tags --depth=1 origin b0c3781e6acc736aeaf2102511068094032ea061
+      - name: Restore only the previous rounded clip
+        if: matrix.producer == 'baseline'
+        run: git restore --source=b0c3781e6acc736aeaf2102511068094032ea061 -- packages/web-renderer/src/drawing/border-radius.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - name: Extract the unchanged public regression body and add artifact recording
+        run: python3 .github/scripts/qualify-native-rounded-test.py
+      - run: bunx oxfmt packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx --write
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bunx eslint src/test/native-rounded-clipping-qualification.test.tsx --fix && bun run lint
+      - name: Preserve exact inputs and producer
+        run: |
+          cp packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx packages/web-renderer/test/__results__/executed-test.tsx
+          shasum -a 256 packages/web-renderer/src/test/border-radius.test.tsx packages/web-renderer/src/test/fixtures/border-radius.tsx packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/src/test/native-rounded-clipping-qualification.test.tsx > packages/web-renderer/test/__results__/public-inputs.txt
+          git diff b0c3781e6acc736aeaf2102511068094032ea061 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/producer.patch
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Execute the public regression against the matched producers
+        run: cd packages/web-renderer && bunx vitest src/test/native-rounded-clipping-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/rounded-public.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rounded-public-${{ matrix.os }}-${{ matrix.producer }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
