@@ -4,6 +4,7 @@ import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
+import {renderStillOnWeb} from '../render-still-on-web';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const makeSource = async () => {
@@ -222,5 +223,107 @@ for (const [index, filter] of functions.entries()) {
 			expect(result.error, result.target).toBeNull();
 			expect(result.wrong, result.target).toBe(0);
 		}
+	});
+}
+
+for (const scale of [0.75, 1, 2]) {
+	test(`native compositor image contrast scale ${scale}`, async () => {
+		const source = await makeSource();
+		const Component = () => {
+			const {delayRender, continueRender, cancelRender} = useDelayRender();
+			const [handle] = useState(() =>
+				delayRender('Loading compositor color pattern'),
+			);
+			useEffect(() => () => continueRender(handle), [continueRender, handle]);
+			return (
+				<AbsoluteFill style={{backgroundColor: 'white'}}>
+					<div
+						style={{
+							position: 'absolute',
+							left: 32,
+							top: 32,
+							transform: `scale(${scale})`,
+							transformOrigin: '0 0',
+						}}
+					>
+						<img
+							src={source.url}
+							style={{
+								display: 'block',
+								width: 64,
+								height: 32,
+								filter: 'contrast(140%)',
+							}}
+							onLoad={() => continueRender(handle)}
+							onError={() =>
+								cancelRender(new Error('Compositor pattern image failed'))
+							}
+						/>
+					</div>
+				</AbsoluteFill>
+			);
+		};
+
+		const composition = {
+			component: Component,
+			id: 'image-contrast-scale-' + scale,
+			width: 192,
+			height: 128,
+			fps: 30,
+			durationInFrames: 1,
+		};
+		const reference = await captureNativeReference(composition, 0, {
+			omitBackground: false,
+		});
+		const actual = await (
+			await renderStillOnWeb({
+				licenseKey: 'free-license',
+				composition,
+				frame: 0,
+				inputProps: {},
+				allowHtmlInCanvas: false,
+			})
+		).blob({format: 'png'});
+		const comparison = await compareNativePixels(reference, actual);
+		const directory =
+			'test/__results__/css-filter-image-compositor/' +
+			server.browser +
+			'/' +
+			scale;
+		for (const [name, blob] of [
+			['reference', reference],
+			['actual', actual],
+			['diff', comparison.diff],
+		] as const) {
+			let bytes = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				bytes += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				directory + '/' + name + '.png',
+				btoa(bytes),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(
+			directory + '/comparison.json',
+			JSON.stringify(
+				{
+					browser: server.browser,
+					platform: server.platform,
+					userAgent: navigator.userAgent,
+					devicePixelRatio,
+					scale,
+					filter: 'contrast(140%)',
+					width: 192,
+					height: 128,
+					mismatchedPixels: comparison.mismatchedPixels,
+					maxChannelDelta: comparison.maxChannelDelta,
+				},
+				null,
+				2,
+			),
+		);
+		expect(comparison.mismatchedPixels).toBe(0);
 	});
 }

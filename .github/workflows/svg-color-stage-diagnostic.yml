@@ -1,4 +1,4 @@
-name: SVG color stage diagnostic
+name: HTML CSS filter compositor diagnostic
 on:
   push:
     branches: [codex/css-filter-svg-fallback-qualification]
@@ -17,11 +17,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-latest]
+        producer: [svg-root, html]
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
           persist-credentials: false
+      - name: Fetch exact SVG-root filter producer
+        run: git fetch --no-tags --depth=1 origin 800d0ee0ebec56efc0eea834909a7a59b943f715
+      - name: Restore only the SVG-root filter stage
+        if: matrix.producer == 'svg-root'
+        run: git restore --source=800d0ee0ebec56efc0eea834909a7a59b943f715 -- packages/web-renderer/src/drawing/process-node.ts
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -35,13 +41,14 @@ jobs:
       - name: Retain exact stage test identity
         run: |
           mkdir -p packages/web-renderer/test/__results__
+          git diff 800d0ee0ebec56efc0eea834909a7a59b943f715 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/producer.patch
           shasum -a 256 packages/web-renderer/src/test/svg-css-filter-color-stage-qualification.test.tsx packages/web-renderer/src/test/svg-filter-color-stage-qualification.test.tsx packages/web-renderer/src/drawing/turn-svg-into-drawable.ts > packages/web-renderer/test/__results__/color-stage-hashes.txt
       - name: Compare source colors through identity filter stages
         run: cd packages/web-renderer && bunx vitest src/test/svg-filter-color-stage-qualification.test.tsx src/test/svg-css-filter-color-stage-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/color-stage.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-color-stages-${{ matrix.os }}
+          name: svg-color-stages-${{ matrix.os }}-${{ matrix.producer }}
           path: |
             packages/web-renderer/test/__results__/
             packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
