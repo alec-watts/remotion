@@ -4,6 +4,7 @@ on:
     branches: [codex/svg-gradient-suite-timing]
     paths:
       - '.github/workflows/svg-gradient-suite-timing.yml'
+      - '.github/scripts/pin-gradient-chrome.py'
       - 'packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx'
 permissions:
   contents: read
@@ -28,6 +29,12 @@ jobs:
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
+      - name: Snapshot Chrome so background updates cannot change either arm
+        run: |
+          ditto "/Applications/Google Chrome.app" "$RUNNER_TEMP/Remotion Diagnostic Chrome.app"
+          echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$RUNNER_TEMP/Remotion Diagnostic Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          find "$RUNNER_TEMP/Remotion Diagnostic Chrome.app" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/remotion-chrome.sha256"
+      - run: python3 .github/scripts/pin-gradient-chrome.py
       - run: bun ci
       - run: bunx turbo run make --filter=@remotion/web-renderer
       - run: cd packages/web-renderer && bun run lint
@@ -47,6 +54,9 @@ jobs:
               git restore --source=d77776aacb8066d6ee73c4b5e0d291f97425d169 -- packages/web-renderer/src/drawing/border-radius.ts
             fi
             mkdir -p "qualification/$diagnostic_producer" packages/web-renderer/test/__results__/gradient-inputs
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-chrome.sha256"
+            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > "qualification/$diagnostic_producer/chrome-version.txt"
+            cp "$RUNNER_TEMP/remotion-chrome.sha256" "qualification/$diagnostic_producer/chrome.sha256"
             node -e 'const os=require("node:os");process.stdout.write(JSON.stringify({cpu:os.cpus()[0].model,cores:os.cpus().length,memory:os.totalmem()}))' > "qualification/$diagnostic_producer/runner.json"
             cp packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/test/__results__/gradient-inputs/executed-test.tsx
             git show d77776aacb8066d6ee73c4b5e0d291f97425d169:packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/original-test.tsx
@@ -65,6 +75,7 @@ jobs:
               mv packages/react18-tests/test/__results__ "qualification/$diagnostic_producer/react18-tests"
             fi
           done
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-chrome.sha256"
           exit "$diagnostic_failed"
       - uses: actions/upload-artifact@v4
         if: always()
