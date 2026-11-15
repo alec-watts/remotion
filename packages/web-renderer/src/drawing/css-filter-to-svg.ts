@@ -150,6 +150,7 @@ export const createSvgFilterFromCss = ({
 			return null;
 		}
 
+		primitive.setAttribute('color-interpolation-filters', 'sRGB');
 		resource.appendChild(primitive);
 	}
 
