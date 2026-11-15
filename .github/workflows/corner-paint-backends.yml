@@ -1,0 +1,47 @@
+name: Rounded corner paint backend diagnostic
+on:
+  push:
+    branches: [codex/shadow-corner-backends]
+    paths:
+      - 'packages/web-renderer/src/test/corner-paint-backends.test.tsx'
+      - '.github/workflows/corner-paint-backends.yml'
+permissions:
+  contents: read
+jobs:
+  corners:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Preserve test and producer identities
+        run: |
+          mkdir -p packages/web-renderer/test/__results__
+          shasum -a 256 packages/web-renderer/src/test/corner-paint-backends.test.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/src/drawing/draw-rounded.ts packages/web-renderer/src/drawing/border-radius.ts > packages/web-renderer/test/__results__/corner-identities.txt
+          git diff 76c715bade287f1e451633a620b65978632afc17 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/producer.patch
+      - name: Compare native CSS corners with existing and native canvas paths
+        run: cd packages/web-renderer && bunx vitest src/test/corner-paint-backends.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/corner-paint.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corner-paint-${{ matrix.os }}
+          path: packages/web-renderer/test/__results__/
+          if-no-files-found: error
+          retention-days: 7
