@@ -163,6 +163,44 @@ export const drawBackground = async ({
 			return;
 		}
 
+		if (
+			typeof CanvasGradient !== 'undefined' &&
+			fill instanceof CanvasGradient
+		) {
+			const gradientCanvas = new OffscreenCanvas(
+				target.canvas.width,
+				target.canvas.height,
+			);
+			using _gradient = {
+				[Symbol.dispose]: () => {
+					gradientCanvas.width = 0;
+					gradientCanvas.height = 0;
+				},
+			};
+			const gradientContext = gradientCanvas.getContext('2d', {
+				willReadFrequently: true,
+			});
+			if (!gradientContext)
+				throw new Error('Could not create gradient raster context');
+			gradientContext.setTransform(target.getTransform());
+			gradientContext.fillStyle = fill;
+			gradientContext.fillRect(
+				boundingRect.left - originX,
+				boundingRect.top - originY,
+				boundingRect.width,
+				boundingRect.height,
+			);
+			target.save();
+			try {
+				target.resetTransform();
+				target.drawImage(gradientCanvas, 0, 0);
+			} finally {
+				target.restore();
+			}
+
+			return;
+		}
+
 		const previous = target.fillStyle;
 		target.fillStyle = fill;
 		target.fillRect(

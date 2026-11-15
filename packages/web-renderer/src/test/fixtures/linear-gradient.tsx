@@ -116,3 +116,16 @@ export const linearGradient = {
 	fps: 25,
 	durationInFrames: 1,
 } as const;
+
+export const linearGradientHardStops = {
+	component: () => (
+		<AbsoluteFill
+			style={{backgroundImage: 'linear-gradient(90deg, blue 50%, red 50%)'}}
+		/>
+	),
+	id: 'linear-gradient-hard-stops',
+	width: 100,
+	height: 40,
+	fps: 25,
+	durationInFrames: 1,
+} as const;

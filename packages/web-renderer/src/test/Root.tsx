@@ -116,7 +116,10 @@ import {
 	issue12604PrecomposedFractional,
 } from './fixtures/issue-12604-scaled-precompose-text';
 import {lineHeight} from './fixtures/line-height';
-import {linearGradient} from './fixtures/linear-gradient';
+import {
+	linearGradient,
+	linearGradientHardStops,
+} from './fixtures/linear-gradient';
 import {manyLayers} from './fixtures/many-layers';
 import {maskImage} from './fixtures/mask-image';
 import {
@@ -491,6 +494,7 @@ export const Root: React.FC = () => {
 				<Composition {...maskImageUrlCalcPosition} />
 				<Composition {...backfaceVisibilityMask} />
 				<Composition {...linearGradient} />
+				<Composition {...linearGradientHardStops} />
 				<Composition {...gradientTransparentKeyword} />
 				<Composition {...issue9736BackgroundPosition} />
 			</Folder>
