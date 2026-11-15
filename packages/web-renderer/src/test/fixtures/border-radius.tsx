@@ -43,12 +43,18 @@ export const borderRadius = {
 } as const;
 
 export const nativeRoundedClipCases = [
-	{radius: '0px', color: 'blue', nativeRadii: [0, 0, 0, 0]},
-	{radius: '4px', color: 'blue', nativeRadii: [4, 4, 4, 4]},
-	{radius: '999px', color: 'blue', nativeRadii: [40, 40, 40, 40]},
+	{radius: '0px', color: 'blue', nativeInset: 0, nativeRadii: [0, 0, 0, 0]},
+	{radius: '4px', color: 'blue', nativeInset: 0, nativeRadii: [4, 4, 4, 4]},
+	{
+		radius: '999px',
+		color: 'blue',
+		nativeInset: 0,
+		nativeRadii: [40, 40, 40, 40],
+	},
 	{
 		radius: '24px / 12px',
 		color: 'blue',
+		nativeInset: 0,
 		nativeRadii: [
 			[24, 12],
 			[24, 12],
@@ -59,6 +65,7 @@ export const nativeRoundedClipCases = [
 	{
 		radius: '4px 12px 20px 8px / 8px 20px 12px 4px',
 		color: 'blue',
+		nativeInset: 0,
 		nativeRadii: [
 			[4, 8],
 			[12, 20],
@@ -66,7 +73,13 @@ export const nativeRoundedClipCases = [
 			[8, 4],
 		],
 	},
-	{radius: '4px', color: 'rgba(0,0,255,0.5)', nativeRadii: [4, 4, 4, 4]},
+	{
+		radius: '4px',
+		color: 'rgba(0,0,255,0.5)',
+		nativeInset: 0,
+		nativeRadii: [4, 4, 4, 4],
+	},
+	{radius: '4px', color: 'blue', nativeInset: 10.25, nativeRadii: [0, 0, 0, 0]},
 ] as const;
 
 const NativeRoundedClipComponent = () => {
@@ -82,6 +95,9 @@ const NativeRoundedClipComponent = () => {
 						top: 20 + Math.floor(index / 3) * 120,
 						width: 100,
 						height: 80,
+						boxSizing: 'border-box',
+						padding: sample.nativeInset,
+						backgroundClip: sample.nativeInset ? 'content-box' : 'border-box',
 						borderRadius: sample.radius,
 						backgroundColor: sample.color,
 					}}
@@ -95,7 +111,7 @@ export const nativeRoundedClipping = {
 	component: NativeRoundedClipComponent,
 	id: 'native-rounded-clipping',
 	width: 540,
-	height: 240,
+	height: 360,
 	fps: 30,
 	durationInFrames: 2,
 } as const;
