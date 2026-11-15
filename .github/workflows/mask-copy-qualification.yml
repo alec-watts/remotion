@@ -34,7 +34,7 @@ jobs:
           git diff --exit-code HEAD -- packages/web-renderer/src/test package.json bun.lock
       - name: Record exact fixture and comparison inputs
         run: |
-          shasum -a 256 packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/mask-gradient-layers.test.tsx packages/web-renderer/src/test/native-reference.ts packages/web-renderer/vitest.config.ts bun.lock > packages/web-renderer/test/__results__/source/test-inputs.txt
+          shasum -a 256 packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/mask-gradient-layers.test.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > packages/web-renderer/test/__results__/source/test-inputs.txt
       - uses: actions/setup-node@v6
         with:
           node-version: 26
