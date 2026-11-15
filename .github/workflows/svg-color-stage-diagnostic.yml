@@ -4,6 +4,7 @@ on:
     branches: [codex/css-filter-svg-fallback-qualification]
     paths:
       - 'packages/web-renderer/src/test/svg-filter-color-stage-qualification.test.tsx'
+      - 'packages/web-renderer/src/test/svg-css-filter-color-stage-qualification.test.tsx'
       - '.github/workflows/svg-color-stage-diagnostic.yml'
 permissions:
   contents: read
@@ -34,9 +35,9 @@ jobs:
       - name: Retain exact stage test identity
         run: |
           mkdir -p packages/web-renderer/test/__results__
-          shasum -a 256 packages/web-renderer/src/test/svg-filter-color-stage-qualification.test.tsx packages/web-renderer/src/drawing/turn-svg-into-drawable.ts > packages/web-renderer/test/__results__/color-stage-hashes.txt
+          shasum -a 256 packages/web-renderer/src/test/svg-css-filter-color-stage-qualification.test.tsx packages/web-renderer/src/test/svg-filter-color-stage-qualification.test.tsx packages/web-renderer/src/drawing/turn-svg-into-drawable.ts > packages/web-renderer/test/__results__/color-stage-hashes.txt
       - name: Compare source colors through identity filter stages
-        run: cd packages/web-renderer && bunx vitest src/test/svg-filter-color-stage-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/color-stage.json
+        run: cd packages/web-renderer && bunx vitest src/test/svg-filter-color-stage-qualification.test.tsx src/test/svg-css-filter-color-stage-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/color-stage.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
