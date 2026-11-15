@@ -7,6 +7,7 @@ import {
 	type TransformStyleCache,
 } from './calculate-transforms';
 import {getWiderRectAndExpand} from './clamp-rect-to-parent-bounds';
+import {createSvgFilterFromCss} from './css-filter-to-svg';
 import {doRectsIntersect} from './do-rects-intersect';
 import {drawElement} from './draw-element';
 import type {DrawFn} from './drawn-fn';
@@ -31,7 +32,10 @@ import {roundToExpandRect} from './round-to-expand-rect';
 import {scaleRect} from './scale-rect';
 import {setTransform} from './transform';
 import {transformDOMRect} from './transform-rect-with-matrix';
-import type {SvgFontSnapshots} from './turn-svg-into-drawable';
+import {
+	turnSvgIntoDrawable,
+	type SvgFontSnapshots,
+} from './turn-svg-into-drawable';
 
 export type ProcessNodeReturnValue =
 	| {type: 'continue'; cleanupAfterChildren: null | (() => void)}
@@ -309,17 +313,64 @@ export const processNode = async ({
 		}
 
 		if (precompositing.needsFilterPrecompositing && !svgFilteredLayer) {
+			const filter = scaleFilterLengths(
+				precompositing.needsFilterPrecompositing,
+				layerScale,
+			);
+			let filteredImage: HTMLImageElement | null = null;
+			if (
+				!('filter' in OffscreenCanvasRenderingContext2D.prototype) &&
+				!filter.includes('url(')
+			) {
+				const blob = await tempContext.canvas.convertToBlob({
+					type: 'image/png',
+				});
+				const data = await new Promise<string>((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onload = () => resolve(reader.result as string);
+					reader.onerror = () => reject(reader.error);
+					reader.readAsDataURL(blob);
+				});
+				const svg = element.ownerDocument.createElementNS(
+					'http://www.w3.org/2000/svg',
+					'svg',
+				);
+				svg.setAttribute('width', String(tempContext.canvas.width));
+				svg.setAttribute('height', String(tempContext.canvas.height));
+				const image = element.ownerDocument.createElementNS(
+					'http://www.w3.org/2000/svg',
+					'image',
+				);
+				image.setAttribute('width', String(tempContext.canvas.width));
+				image.setAttribute('height', String(tempContext.canvas.height));
+				image.setAttribute('href', data);
+				const resource = createSvgFilterFromCss({
+					filter,
+					width: tempContext.canvas.width,
+					height: tempContext.canvas.height,
+					color: computedStyle.color,
+					ownerDocument: element.ownerDocument,
+				});
+				if (resource) {
+					svg.appendChild(resource);
+					image.setAttribute('filter', 'url(#' + resource.id + ')');
+				} else {
+					image.style.filter = filter;
+				}
+
+				svg.appendChild(image);
+				filteredImage = await turnSvgIntoDrawable(svg);
+			}
+
 			tempContext.save();
 			tempContext.resetTransform();
 			tempContext.globalAlpha = 1;
 			tempContext.globalCompositeOperation = 'copy';
 			applyFilterToDrawOperation({
 				context: tempContext,
-				filter: scaleFilterLengths(
-					precompositing.needsFilterPrecompositing,
-					layerScale,
-				),
-				drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
+				filter: filteredImage ? 'none' : filter,
+				drawFn: () =>
+					tempContext.drawImage(filteredImage ?? tempContext.canvas, 0, 0),
 			});
 			tempContext.restore();
 		}

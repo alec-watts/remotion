@@ -20,7 +20,11 @@ const filterRequiresPrecompositing = (filter: string): string | null => {
 
 	// Check for drop-shadow filter - this requires precompositing
 	// because the shadow should be based on the composite alpha of parent + children
-	if (filter.includes('drop-shadow')) {
+	if (
+		filter.includes('drop-shadow') ||
+		(!('filter' in OffscreenCanvasRenderingContext2D.prototype) &&
+			!filter.includes('url('))
+	) {
 		return filter;
 	}
 
