@@ -11,163 +11,200 @@ import {
 } from './native-reference';
 import '../symbol-dispose';
 
-test('warm candidate data avoids native FontFace construction and candidate readbacks', async (t) => {
-	const failure = createFontFailureRecorder(t);
-	const urls = await svgUseFontData;
-	const frame = document.createElement('iframe');
-	document.body.appendChild(frame);
-	const owner = frame.contentDocument!;
-	const win = owner.defaultView!;
-	const nativeFace = win.FontFace;
-	const nativeRead = win.CanvasRenderingContext2D.prototype.getImageData;
-	let constructors = 0;
-	let readbacks = 0;
-	const fontEvents: string[] = [];
-	const onFontEvent = (event: Event) => fontEvents.push(event.type);
-	const initialFontEvents: string[] = [];
-	const onInitialFontEvent = (event: Event) =>
-		initialFontEvents.push(event.type);
-	for (const type of ['loading', 'loadingdone', 'loadingerror'])
-		owner.fonts.addEventListener(type, onInitialFontEvent);
-	try {
-		const style = owner.createElement('style');
-		style.textContent = `@font-face{font-family:Review;src:url("${urls[0]}")}`;
-		owner.head.appendChild(style);
-		const text = owner.createElement('span');
-		text.style.cssText =
-			'font:36px Review;writing-mode:horizontal-tb;text-transform:none';
-		text.textContent = 'Review font';
-		owner.body.appendChild(text);
-		const sourceLoad = owner.fonts.load('36px Review');
-		const loadingStatus = owner.fonts.status;
-		await sourceLoad;
-		await owner.fonts.ready;
-		await failure.record(
-			`validation/font-fingerprint-cache/${t.task.file.projectName}/initial-font-readiness.json`,
-			JSON.stringify({
-				stage: 'loaded',
-				loadingStatus,
-				initialFontEvents,
-				status: owner.fonts.status,
-			}),
-		);
-		// Some native font sets report loading and become ready without firing
-		// loadingdone. Qualify actual ready/status/event stability across native
-		// frames instead of depending on an event that may never arrive.
-		const checkpoints: {
-			events: number;
-			status: FontFaceSetLoadStatus;
-			readyStable: boolean;
+test(
+	'warm candidate data avoids native FontFace construction and candidate readbacks',
+	{repeats: 9},
+	async (t) => {
+		const failure = createFontFailureRecorder(t);
+		const urls = await svgUseFontData;
+		const frame = document.createElement('iframe');
+		document.body.appendChild(frame);
+		const owner = frame.contentDocument!;
+		const win = owner.defaultView!;
+		const nativeFace = win.FontFace;
+		const nativeRead = win.CanvasRenderingContext2D.prototype.getImageData;
+		let constructors = 0;
+		let readbacks = 0;
+		const fontEvents: string[] = [];
+		let phase = 'cold';
+		const eventDetails: {
+			type: string;
+			phase: string;
+			faces: {family: string; status: string}[];
 		}[] = [];
-		let previous: {
-			events: number;
-			ready: Promise<FontFaceSet>;
-			status: FontFaceSetLoadStatus;
-		} | null = null;
-		let settled = false;
-		for (let checkpoint = 0; checkpoint < 4; checkpoint++) {
-			await owner.fonts.ready;
-			await new Promise<void>((resolve) =>
-				win.requestAnimationFrame(() => resolve()),
-			);
-			await Promise.resolve();
-			const current = {
-				events: initialFontEvents.length,
-				ready: owner.fonts.ready,
-				status: owner.fonts.status,
-			};
-			checkpoints.push({
-				events: current.events,
-				status: current.status,
-				readyStable: previous?.ready === current.ready,
+		const onFontEvent = (event: Event) => {
+			fontEvents.push(event.type);
+			eventDetails.push({
+				type: event.type,
+				phase,
+				faces: Array.from(
+					(event as FontFaceSetLoadEvent).fontfaces ?? [],
+					(face) => ({family: face.family, status: face.status}),
+				),
 			});
-			if (
-				previous &&
-				previous.events === current.events &&
-				previous.ready === current.ready &&
-				previous.status === 'loaded' &&
-				current.status === 'loaded'
-			) {
-				settled = true;
-				break;
+		};
+
+		const initialFontEvents: string[] = [];
+		const onInitialFontEvent = (event: Event) =>
+			initialFontEvents.push(event.type);
+		for (const type of ['loading', 'loadingdone', 'loadingerror'])
+			owner.fonts.addEventListener(type, onInitialFontEvent);
+		try {
+			const style = owner.createElement('style');
+			style.textContent = `@font-face{font-family:Review;src:url("${urls[0]}")}`;
+			owner.head.appendChild(style);
+			const text = owner.createElement('span');
+			text.style.cssText =
+				'font:36px Review;writing-mode:horizontal-tb;text-transform:none';
+			text.textContent = 'Review font';
+			owner.body.appendChild(text);
+			const sourceLoad = owner.fonts.load('36px Review');
+			const loadingStatus = owner.fonts.status;
+			await sourceLoad;
+			await owner.fonts.ready;
+			await failure.record(
+				`validation/font-fingerprint-cache/${t.task.file.projectName}/initial-font-readiness.json`,
+				JSON.stringify({
+					stage: 'loaded',
+					loadingStatus,
+					initialFontEvents,
+					status: owner.fonts.status,
+				}),
+			);
+			// Some native font sets report loading and become ready without firing
+			// loadingdone. Qualify actual ready/status/event stability across native
+			// frames instead of depending on an event that may never arrive.
+			const checkpoints: {
+				events: number;
+				status: FontFaceSetLoadStatus;
+				readyStable: boolean;
+			}[] = [];
+			let previous: {
+				events: number;
+				ready: Promise<FontFaceSet>;
+				status: FontFaceSetLoadStatus;
+			} | null = null;
+			let settled = false;
+			for (let checkpoint = 0; checkpoint < 4; checkpoint++) {
+				await owner.fonts.ready;
+				await new Promise<void>((resolve) =>
+					win.requestAnimationFrame(() => resolve()),
+				);
+				await Promise.resolve();
+				const current = {
+					events: initialFontEvents.length,
+					ready: owner.fonts.ready,
+					status: owner.fonts.status,
+				};
+				checkpoints.push({
+					events: current.events,
+					status: current.status,
+					readyStable: previous?.ready === current.ready,
+				});
+				if (
+					previous &&
+					previous.events === current.events &&
+					previous.ready === current.ready &&
+					previous.status === 'loaded' &&
+					current.status === 'loaded'
+				) {
+					settled = true;
+					break;
+				}
+
+				previous = current;
 			}
 
-			previous = current;
-		}
-
-		await failure.record(
-			`validation/font-fingerprint-cache/${t.task.file.projectName}/initial-font-readiness.json`,
-			JSON.stringify({loadingStatus, initialFontEvents, checkpoints, settled}),
-		);
-		expect(settled).toBe(true);
-		for (const type of ['loading', 'loadingdone', 'loadingerror'])
-			owner.fonts.addEventListener(type, onFontEvent);
-		const alternate = new win.CSSStyleSheet();
-		alternate.replaceSync(
-			`@font-face{font-family:Review;src:url("${urls[1]}")}`,
-		);
-		const groups = [style.sheet!, alternate].map((sheet, index) => ({
-			name: String(index),
-			rules: Array.from(sheet.cssRules) as CSSFontFaceRule[],
-		}));
-		const sample = {
-			text: text.textContent,
-			style: win.getComputedStyle(text),
-			lang: 'en',
-		};
-		const originals = Array.from(owner.fonts);
-		const promises = originals.map((face) => face.loaded);
-		const {ready} = owner.fonts;
-		win.FontFace = new Proxy(nativeFace, {
-			construct(target, args) {
-				constructors++;
-				return Reflect.construct(target, args);
-			},
-		});
-		win.CanvasRenderingContext2D.prototype.getImageData = function (...args) {
-			readbacks++;
-			return nativeRead.apply(this, args);
-		};
-
-		expect(fingerprintCssFontGroups(owner, [sample], groups)).toEqual({
-			matches: ['0'],
-			reason: null,
-		});
-		expect({constructors, readbacks}).toEqual({constructors: 2, readbacks: 3});
-		for (let repeat = 0; repeat < 4; repeat++) {
-			await new Promise<void>((resolve) =>
-				win.requestAnimationFrame(() => resolve()),
+			await failure.record(
+				`validation/font-fingerprint-cache/${t.task.file.projectName}/initial-font-readiness.json`,
+				JSON.stringify({
+					loadingStatus,
+					initialFontEvents,
+					checkpoints,
+					settled,
+				}),
 			);
-			await Promise.resolve();
+			expect(settled).toBe(true);
+			for (const type of ['loading', 'loadingdone', 'loadingerror'])
+				owner.fonts.addEventListener(type, onFontEvent);
+			const alternate = new win.CSSStyleSheet();
+			alternate.replaceSync(
+				`@font-face{font-family:Review;src:url("${urls[1]}")}`,
+			);
+			const groups = [style.sheet!, alternate].map((sheet, index) => ({
+				name: String(index),
+				rules: Array.from(sheet.cssRules) as CSSFontFaceRule[],
+			}));
+			const sample = {
+				text: text.textContent,
+				style: win.getComputedStyle(text),
+				lang: 'en',
+			};
+			const originals = Array.from(owner.fonts);
+			const promises = originals.map((face) => face.loaded);
+			const {ready} = owner.fonts;
+			win.FontFace = new Proxy(nativeFace, {
+				construct(target, args) {
+					constructors++;
+					return Reflect.construct(target, args);
+				},
+			});
+			win.CanvasRenderingContext2D.prototype.getImageData = function (...args) {
+				readbacks++;
+				return nativeRead.apply(this, args);
+			};
+
 			expect(fingerprintCssFontGroups(owner, [sample], groups)).toEqual({
 				matches: ['0'],
 				reason: null,
 			});
-			await failure.record(
-				`validation/font-fingerprint-cache/${t.task.file.projectName}/direct-counts.json`,
-				JSON.stringify({repeat, constructors, readbacks, fontEvents}),
-			);
 			expect({constructors, readbacks}).toEqual({
 				constructors: 2,
-				readbacks: 4 + repeat,
+				readbacks: 3,
 			});
-		}
+			for (let repeat = 0; repeat < 4; repeat++) {
+				phase = 'waiting-' + repeat;
+				await new Promise<void>((resolve) =>
+					win.requestAnimationFrame(() => resolve()),
+				);
+				await Promise.resolve();
+				phase = 'warm-' + repeat;
+				expect(fingerprintCssFontGroups(owner, [sample], groups)).toEqual({
+					matches: ['0'],
+					reason: null,
+				});
+				await failure.record(
+					`validation/font-fingerprint-cache/${t.task.file.projectName}/direct-counts.json`,
+					JSON.stringify({
+						repeat,
+						constructors,
+						readbacks,
+						fontEvents,
+						eventDetails,
+					}),
+				);
+				expect({constructors, readbacks}).toEqual({
+					constructors: 2,
+					readbacks: 4 + repeat,
+				});
+			}
 
-		expect(Array.from(owner.fonts)).toEqual(originals);
-		expect(Array.from(owner.fonts, (face) => face.loaded)).toEqual(promises);
-		expect(owner.fonts.ready).toBe(ready);
-		expect(owner.fonts.status).toBe('loaded');
-		expect(fontEvents).toEqual([]);
-	} finally {
-		for (const type of ['loading', 'loadingdone', 'loadingerror'])
-			owner.fonts.removeEventListener(type, onInitialFontEvent);
-		for (const type of ['loading', 'loadingdone', 'loadingerror'])
-			owner.fonts.removeEventListener(type, onFontEvent);
-		win.FontFace = nativeFace;
-		win.CanvasRenderingContext2D.prototype.getImageData = nativeRead;
-		frame.remove();
-	}
-});
+			expect(Array.from(owner.fonts)).toEqual(originals);
+			expect(Array.from(owner.fonts, (face) => face.loaded)).toEqual(promises);
+			expect(owner.fonts.ready).toBe(ready);
+			expect(owner.fonts.status).toBe('loaded');
+			expect(fontEvents).toEqual([]);
+		} finally {
+			for (const type of ['loading', 'loadingdone', 'loadingerror'])
+				owner.fonts.removeEventListener(type, onInitialFontEvent);
+			for (const type of ['loading', 'loadingdone', 'loadingerror'])
+				owner.fonts.removeEventListener(type, onFontEvent);
+			win.FontFace = nativeFace;
+			win.CanvasRenderingContext2D.prototype.getImageData = nativeRead;
+			frame.remove();
+		}
+	},
+);
 
 test('reuses candidate rasters through public batch SVG captures across frames', async (t) => {
 	const failure = createFontFailureRecorder(t);

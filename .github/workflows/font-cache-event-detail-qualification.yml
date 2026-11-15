@@ -1,0 +1,45 @@
+name: Native font cache event qualification
+on:
+  push:
+    branches: [codex/font-cache-event-detail-qualification]
+    paths:
+      - '.github/workflows/font-cache-event-detail-qualification.yml'
+      - 'packages/web-renderer/src/test/font-fingerprint-cache-browser.test.ts'
+permissions:
+  contents: read
+jobs:
+  native-events:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - name: Preserve producer and repeated-test inputs
+        run: |
+          mkdir -p packages/web-renderer/test/__results__/font-cache-events
+          cp packages/web-renderer/src/test/font-fingerprint-cache-browser.test.ts packages/web-renderer/test/__results__/font-cache-events/executed-test.ts
+          shasum -a 256 packages/web-renderer/src/drawing/font-fingerprint-cache.ts packages/web-renderer/src/drawing/fingerprint-css-font-groups.ts packages/web-renderer/src/test/fixtures/svg-use-data-font.tsx packages/web-renderer/src/test/fixtures/svg-titled-font-groups.tsx > packages/web-renderer/test/__results__/font-cache-events/source-inputs.txt
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Exercise all original cache assertions with native event details
+        run: cd packages/web-renderer && bunx vitest src/test/font-fingerprint-cache-browser.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/font-cache-events/results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: font-cache-events
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
