@@ -1,0 +1,50 @@
+name: Precompose native font and paint diagnostic
+on:
+  push:
+    branches: [codex/13117-precompose-native-diagnostic]
+permissions:
+  contents: read
+jobs:
+  pixels:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch exact upstream PR producer
+        run: git fetch --no-tags --depth=1 origin 54ecd7a88fbe7330d6ed6f51b87b669b701d38a5
+      - name: Verify unchanged producer and fixture
+        run: git diff --exit-code 54ecd7a88fbe7330d6ed6f51b87b669b701d38a5 -- packages/web-renderer/src/drawing packages/web-renderer/src/get-biggest-bounding-client-rect.ts packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps chromium firefox webkit
+      - name: Preserve committed golden and exact test inputs
+        run: |
+          mkdir -p packages/web-renderer/test/__results__/committed-golden
+          cp packages/web-renderer/src/test/__screenshots__/svg-precompose-font.test.tsx/*.png packages/web-renderer/test/__results__/committed-golden/
+          shasum -a 256 packages/web-renderer/src/test/svg-precompose-native-diagnostic.test.tsx packages/web-renderer/src/test/fixtures/svg-precompose-font.tsx > packages/web-renderer/test/__results__/test-identities.txt
+      - name: Record each original grid cell with native and explicit font controls
+        run: cd packages/web-renderer && bunx vitest src/test/svg-precompose-native-diagnostic.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/precompose-native.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: precompose-native-${{ matrix.os }}
+          path: |
+            packages/web-renderer/test/__results__/
+            packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: error
+          retention-days: 7
