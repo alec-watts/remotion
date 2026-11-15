@@ -1,5 +1,5 @@
 import {AbsoluteFill} from 'remotion';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -67,15 +67,29 @@ for (const [index, filter] of filters.entries())
 			const reference = await captureNativeReference(composition, 0, {
 				omitBackground: false,
 			});
-			const actual = await (
-				await renderStillOnWeb({
+			const sourceCaptures: {blob: Blob; width: number; height: number}[] = [];
+			const originalConvert = OffscreenCanvas.prototype.convertToBlob;
+			const capture = vi
+				.spyOn(OffscreenCanvas.prototype, 'convertToBlob')
+				.mockImplementation(async function (this: OffscreenCanvas, options) {
+					const blob = await originalConvert.call(this, options);
+					sourceCaptures.push({blob, width: this.width, height: this.height});
+					return blob;
+				});
+			let rendered: Awaited<ReturnType<typeof renderStillOnWeb>>;
+			try {
+				rendered = await renderStillOnWeb({
 					licenseKey: 'free-license',
 					composition,
 					frame: 0,
 					inputProps: {},
 					allowHtmlInCanvas: false,
-				})
-			).blob({format: 'png'});
+				});
+			} finally {
+				capture.mockRestore();
+			}
+
+			const actual = await rendered.blob({format: 'png'});
 			const result = await compareNativePixels(reference, actual);
 			const directory =
 				'test/__results__/css-filter-fallback/' +
@@ -88,6 +102,10 @@ for (const [index, filter] of filters.entries())
 				['reference', reference],
 				['actual', actual],
 				['diff', result.diff],
+				...sourceCaptures.map(
+					(source, sourceIndex) =>
+						['source-' + sourceIndex, source.blob] as const,
+				),
 			] as const) {
 				const bytes = new Uint8Array(await blob.arrayBuffer());
 				let binary = '';
@@ -107,6 +125,10 @@ for (const [index, filter] of filters.entries())
 						platform: server.platform,
 						userAgent: navigator.userAgent,
 						devicePixelRatio,
+						sourceCaptures: sourceCaptures.map(({width, height}) => ({
+							width,
+							height,
+						})),
 						index,
 						filter,
 						scale,
