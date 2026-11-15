@@ -7,6 +7,12 @@ import {parseBorderRadius} from '../drawing/border-radius';
 import {drawRoundedRectPath} from '../drawing/draw-rounded';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
 import {renderStillOnWeb} from '../render-still-on-web';
+import {
+	boxShadowSpreadInset,
+	boxShadowSpreadInsetAlpha,
+	boxShadowInsetReview,
+	boxShadowInsetContentClip,
+} from './fixtures/box-shadow-spread-inset';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const cases = [
@@ -97,7 +103,7 @@ for (const sample of cases) {
 		});
 		for (const target of [
 			'renderer',
-			'ellipse-clip',
+			'producer-clip',
 			'roundrect-clip',
 			'roundrect-fill',
 			'html-svg',
@@ -165,7 +171,7 @@ for (const sample of cases) {
 						context.translate(sample.left, sample.top);
 						context.scale(sample.scale, sample.scale);
 						context.fillStyle = sample.color;
-						if (target === 'ellipse-clip') {
+						if (target === 'producer-clip') {
 							drawRoundedRectPath({
 								ctx: context,
 								x: 0,
@@ -256,4 +262,74 @@ for (const sample of cases) {
 			expect(result.wrong, result.target).toBe(0);
 		}
 	});
+}
+
+for (const composition of [
+	boxShadowSpreadInset,
+	boxShadowSpreadInsetAlpha,
+	boxShadowInsetReview,
+	boxShadowInsetContentClip,
+]) {
+	for (const frame of [0, 1]) {
+		test(
+			'native shadow interaction ' + composition.id + ' frame ' + frame,
+			async () => {
+				const reference = await captureNativeReference(composition, frame, {
+					omitBackground: composition.id === boxShadowSpreadInsetAlpha.id,
+				});
+				const actual = await (
+					await renderStillOnWeb({
+						licenseKey: 'free-license',
+						composition,
+						frame,
+						inputProps: {},
+						allowHtmlInCanvas: false,
+					})
+				).blob({format: 'png'});
+				const comparison = await compareNativePixels(reference, actual);
+				const directory =
+					'test/__results__/corner-shadow-interactions/' +
+					server.browser +
+					'/' +
+					composition.id +
+					'-' +
+					frame;
+				for (const [name, blob] of [
+					['reference', reference],
+					['actual', actual],
+					['diff', comparison.diff],
+				] as const) {
+					let binary = '';
+					for (const byte of new Uint8Array(await blob.arrayBuffer()))
+						binary += String.fromCharCode(byte);
+					await server.commands.writeFile(
+						directory + '/' + name + '.png',
+						btoa(binary),
+						'base64',
+					);
+				}
+
+				await server.commands.writeFile(
+					directory + '/comparison.json',
+					JSON.stringify(
+						{
+							browser: server.browser,
+							platform: server.platform,
+							userAgent: navigator.userAgent,
+							devicePixelRatio,
+							id: composition.id,
+							frame,
+							width: composition.width,
+							height: composition.height,
+							mismatchedPixels: comparison.mismatchedPixels,
+							maxChannelDelta: comparison.maxChannelDelta,
+						},
+						null,
+						2,
+					),
+				);
+				expect(comparison.mismatchedPixels).toBe(0);
+			},
+		);
+	}
 }
