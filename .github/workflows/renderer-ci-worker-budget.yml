@@ -1,0 +1,86 @@
+name: Renderer CI worker budget qualification
+on:
+  push:
+    branches: [codex/renderer-ci-worker-budget]
+    paths:
+      - '.github/workflows/renderer-ci-worker-budget.yml'
+      - '.github/scripts/set-diagnostic-worker-budget.py'
+      - '.github/scripts/pin-gradient-chrome.py'
+      - 'packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx'
+permissions:
+  contents: read
+jobs:
+  suite:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        first_mode: [original, adaptive]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - run: git fetch --no-tags --depth=1 origin b0c3781e6acc736aeaf2102511068094032ea061 d77776aacb8066d6ee73c4b5e0d291f97425d169
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Snapshot Chrome so background updates cannot change either arm
+        run: |
+          ditto "/Applications/Google Chrome.app" "$RUNNER_TEMP/Remotion Diagnostic Chrome.app"
+          echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$RUNNER_TEMP/Remotion Diagnostic Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          find "$RUNNER_TEMP/Remotion Diagnostic Chrome.app" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/remotion-chrome.sha256"
+      - run: python3 .github/scripts/pin-gradient-chrome.py
+      - run: cp packages/web-renderer/vitest.config.ts "$RUNNER_TEMP/remotion-original-vitest.ts"
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Run both worker budgets on the same runner
+        run: |
+          if [ '${{ matrix.first_mode }}' = original ]; then
+            diagnostic_order='original adaptive'
+          else
+            diagnostic_order='adaptive original'
+          fi
+          diagnostic_failed=0
+          for diagnostic_producer in $diagnostic_order; do
+            python3 .github/scripts/set-diagnostic-worker-budget.py "$diagnostic_producer" "$RUNNER_TEMP/remotion-original-vitest.ts"
+            mkdir -p "qualification/$diagnostic_producer" packages/web-renderer/test/__results__/gradient-inputs
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-chrome.sha256"
+            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > "qualification/$diagnostic_producer/chrome-version.txt"
+            cp "$RUNNER_TEMP/remotion-chrome.sha256" "qualification/$diagnostic_producer/chrome.sha256"
+            node -e 'const os=require("node:os");process.stdout.write(JSON.stringify({cpu:os.cpus()[0].model,cores:os.cpus().length,memory:os.totalmem()}))' > "qualification/$diagnostic_producer/runner.json"
+            cp packages/web-renderer/vitest.config.ts "qualification/$diagnostic_producer/executed-vitest.config.ts"
+            node -e 'const os=require("node:os");const mode=process.argv[1];process.stdout.write(JSON.stringify({mode,availableParallelism:os.availableParallelism(),expectedWorkers:mode==="adaptive"?Math.min(2,Math.max(1,Math.floor(os.availableParallelism()/2))):2}))' "$diagnostic_producer" > "qualification/$diagnostic_producer/workers.json"
+            cp packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/test/__results__/gradient-inputs/executed-test.tsx
+            git show d77776aacb8066d6ee73c4b5e0d291f97425d169:packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/original-test.tsx
+            shasum -a 256 packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx packages/web-renderer/src/test/fixtures/issue-10676-svg-gradient-stroke.tsx packages/web-renderer/vitest.config.ts packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/test/border-radius.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/source-inputs.txt
+            git diff d77776aacb8066d6ee73c4b5e0d291f97425d169 -- packages/web-renderer/src/drawing > packages/web-renderer/test/__results__/gradient-inputs/producer.patch
+            git diff d77776aacb8066d6ee73c4b5e0d291f97425d169 -- packages/web-renderer/src/test/issue-10676-svg-gradient-stroke.test.tsx > packages/web-renderer/test/__results__/gradient-inputs/instrumentation.patch
+            if bun run testwebrenderer --log-order=stream -- --reporter=default --reporter=json --outputFile=./test/__results__/gradient-suite.json; then
+              diagnostic_exit=0
+            else
+              diagnostic_exit=$?
+              diagnostic_failed=1
+            fi
+            printf '%s\n' "$diagnostic_exit" > "qualification/$diagnostic_producer/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "qualification/$diagnostic_producer/web-renderer"
+            if [ -d packages/react18-tests/test/__results__ ]; then
+              mv packages/react18-tests/test/__results__ "qualification/$diagnostic_producer/react18-tests"
+            fi
+          done
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-chrome.sha256"
+          exit "$diagnostic_failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worker-budget-first-${{ matrix.first_mode }}
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
