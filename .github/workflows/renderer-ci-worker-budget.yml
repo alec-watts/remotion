@@ -33,6 +33,8 @@ jobs:
       - name: Snapshot Chrome so background updates cannot change either arm
         run: |
           ditto "/Applications/Google Chrome.app" "$RUNNER_TEMP/Remotion Diagnostic Chrome.app"
+          chflags -R uchg "$RUNNER_TEMP/Remotion Diagnostic Chrome.app"
+          ls -ldO "$RUNNER_TEMP/Remotion Diagnostic Chrome.app" "$RUNNER_TEMP/Remotion Diagnostic Chrome.app/Contents/MacOS/Google Chrome"
           echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$RUNNER_TEMP/Remotion Diagnostic Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
           find "$RUNNER_TEMP/Remotion Diagnostic Chrome.app" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/remotion-chrome.sha256"
       - run: python3 .github/scripts/pin-gradient-chrome.py
@@ -84,3 +86,9 @@ jobs:
           path: qualification/
           if-no-files-found: error
           retention-days: 7
+      - name: Release immutable diagnostic copy for runner cleanup
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Remotion Diagnostic Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Remotion Diagnostic Chrome.app"
+          fi
