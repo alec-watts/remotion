@@ -1,0 +1,41 @@
+name: Mask gradient backend stage qualification
+on:
+  push:
+    branches: [codex/mask-gradient-backend-stage]
+    paths:
+      - '.github/workflows/mask-gradient-backend-stage.yml'
+      - 'packages/web-renderer/src/test/mask-gradient-backend-qualification.test.ts'
+permissions:
+  contents: read
+jobs:
+  stage:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bun run lint
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Retain all context and paint controls without tolerance
+        run: cd packages/web-renderer && bunx vitest src/test/mask-gradient-backend-qualification.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-gradient-backend.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mask-gradient-backend-${{ matrix.os }}
+          path: packages/web-renderer/test/__results__/
+          if-no-files-found: error
+          retention-days: 7
