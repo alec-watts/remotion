@@ -21,22 +21,6 @@ export const drawRoundedRectPath = ({
 		ctx.beginPath();
 	}
 
-	if (typeof ctx.roundRect === 'function') {
-		ctx.roundRect(x, y, width, height, [
-			{x: borderRadius.topLeft.horizontal, y: borderRadius.topLeft.vertical},
-			{x: borderRadius.topRight.horizontal, y: borderRadius.topRight.vertical},
-			{
-				x: borderRadius.bottomRight.horizontal,
-				y: borderRadius.bottomRight.vertical,
-			},
-			{
-				x: borderRadius.bottomLeft.horizontal,
-				y: borderRadius.bottomLeft.vertical,
-			},
-		]);
-		return;
-	}
-
 	// Start from top-left corner, after the radius
 	ctx.moveTo(x + borderRadius.topLeft.horizontal, y);
 
