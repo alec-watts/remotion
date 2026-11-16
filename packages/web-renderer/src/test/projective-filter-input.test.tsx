@@ -1,3 +1,4 @@
+import '../symbol-dispose';
 import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
