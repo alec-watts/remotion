@@ -1,4 +1,3 @@
-import {createSvgFilterFromCss} from './css-filter-to-svg';
 import type {RasterScale} from './raster-scale';
 
 export const rasterizeCssFilter = async ({
@@ -29,30 +28,31 @@ export const rasterizeCssFilter = async ({
 	);
 	svg.setAttribute('width', String(source.width));
 	svg.setAttribute('height', String(source.height));
-	const resource = createSvgFilterFromCss({
-		filter,
-		rasterScale,
-		width: source.width,
-		height: source.height,
-		color,
-		ownerDocument,
-	});
-	if (!resource) throw new Error(`Cannot rasterize CSS filter: ${filter}`);
-	svg.appendChild(resource);
-	const input = ownerDocument.createElementNS(
+	const width = source.width / rasterScale.x;
+	const height = source.height / rasterScale.y;
+	svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+	svg.setAttribute('preserveAspectRatio', 'none');
+	const foreignObject = ownerDocument.createElementNS(
 		'http://www.w3.org/2000/svg',
-		'image',
+		'foreignObject',
 	);
-	input.setAttribute('width', String(source.width));
-	input.setAttribute('height', String(source.height));
-	input.setAttribute('href', 'data:image/png;base64,' + btoa(binary));
-	input.setAttribute('filter', 'url(#' + resource.id + ')');
-	svg.appendChild(input);
-	const url = URL.createObjectURL(
-		new Blob([new XMLSerializer().serializeToString(svg)], {
-			type: 'image/svg+xml',
-		}),
+	foreignObject.setAttribute('width', String(width));
+	foreignObject.setAttribute('height', String(height));
+	const input = ownerDocument.createElementNS(
+		'http://www.w3.org/1999/xhtml',
+		'img',
 	);
+	input.setAttribute('src', 'data:image/png;base64,' + btoa(binary));
+	input.setAttribute(
+		'style',
+		`display:block;width:${width}px;height:${height}px;filter:${filter};color:${color}`,
+	);
+	foreignObject.appendChild(input);
+	svg.appendChild(foreignObject);
+	const url =
+		'data:image/svg+xml;charset=utf-8,' +
+		encodeURIComponent(new XMLSerializer().serializeToString(svg));
+
 	const image = ownerDocument.createElement('img');
 	try {
 		await new Promise<void>((resolve, reject) => {
@@ -92,6 +92,7 @@ export const rasterizeCssFilter = async ({
 		signal?.throwIfAborted();
 		return image;
 	} finally {
-		URL.revokeObjectURL(url);
+		image.onload = null;
+		image.onerror = null;
 	}
 };

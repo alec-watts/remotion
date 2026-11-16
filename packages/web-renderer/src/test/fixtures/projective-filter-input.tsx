@@ -29,6 +29,11 @@ export const filterInputCases = [
 		left: -100.25,
 		transform: 'translateX(-130px) scale(1.5, 0.75)',
 	},
+
+	{kind: 'gradient-visible', left: 25, transform: 'scaleX(2)'},
+	{kind: 'text-visible', left: 25, transform: 'scaleX(2)'},
+	{kind: 'rounded-visible', left: 25, transform: 'scaleX(2)'},
+	{kind: 'texture-visible', left: 25, transform: 'scaleX(2)'},
 ] as const;
 
 export const projectiveFilterInput = (
@@ -51,12 +56,13 @@ export const projectiveFilterInput = (
 					top: kind === 'fractional' ? 100.25 : 100,
 					width: kind === 'fractional' ? 50.5 : 50,
 					height: kind === 'fractional' ? 49.25 : 50,
-					backgroundColor: kind === 'text' ? 'transparent' : 'red',
-					backgroundImage:
-						kind === 'gradient'
-							? 'linear-gradient(90deg, red, lime)'
+					backgroundColor: kind.startsWith('text') ? 'transparent' : 'red',
+					backgroundImage: kind.startsWith('gradient')
+						? 'linear-gradient(90deg, red, lime)'
+						: kind === 'texture-visible'
+							? 'repeating-linear-gradient(45deg, red 0px, red 3px, white 3px, white 6px)'
 							: undefined,
-					borderRadius: kind === 'rounded' ? 20 : 0,
+					borderRadius: kind.startsWith('rounded') ? 20 : 0,
 					fontSize: 24,
 					color: 'red',
 					transform: scene.transform,
@@ -64,10 +70,12 @@ export const projectiveFilterInput = (
 					filter:
 						kind === 'blurred'
 							? 'blur(2px) drop-shadow(150px 0 0 blue)'
-							: 'drop-shadow(150px 0 0 blue)',
+							: kind.endsWith('visible')
+								? 'drop-shadow(60px 0 0 blue)'
+								: 'drop-shadow(150px 0 0 blue)',
 				}}
 			>
-				{kind === 'text' ? 'Aa' : null}
+				{kind.startsWith('text') ? 'Aa' : null}
 			</div>
 		</AbsoluteFill>
 	);
