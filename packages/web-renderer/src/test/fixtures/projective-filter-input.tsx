@@ -14,6 +14,21 @@ export const filterInputCases = [
 		left: -100,
 		transform: 'translateX(-150px) scaleX(2) rotateY(20deg)',
 	},
+
+	{
+		kind: 'projective-front',
+		left: -100,
+		transform: 'translateX(-150px) scaleX(2) rotateY(-20deg)',
+	},
+	{kind: 'rounded', left: -100, transform: 'translateX(-150px) scaleX(2)'},
+	{kind: 'gradient', left: -100, transform: 'translateX(-150px) scaleX(2)'},
+	{kind: 'blurred', left: -100, transform: 'translateX(-150px) scaleX(2)'},
+	{kind: 'text', left: -100, transform: 'translateX(-150px) scaleX(2)'},
+	{
+		kind: 'fractional',
+		left: -100.25,
+		transform: 'translateX(-130px) scale(1.5, 0.75)',
+	},
 ] as const;
 
 export const projectiveFilterInput = (
@@ -25,7 +40,7 @@ export const projectiveFilterInput = (
 		<AbsoluteFill
 			style={{
 				backgroundColor: 'white',
-				perspective: kind === 'projective' ? 400 : undefined,
+				perspective: kind.startsWith('projective') ? 400 : undefined,
 				transformStyle: preserving ? 'preserve-3d' : 'flat',
 			}}
 		>
@@ -33,15 +48,27 @@ export const projectiveFilterInput = (
 				style={{
 					position: 'absolute',
 					left: scene.left,
-					top: 100,
-					width: 50,
-					height: 50,
-					backgroundColor: 'red',
+					top: kind === 'fractional' ? 100.25 : 100,
+					width: kind === 'fractional' ? 50.5 : 50,
+					height: kind === 'fractional' ? 49.25 : 50,
+					backgroundColor: kind === 'text' ? 'transparent' : 'red',
+					backgroundImage:
+						kind === 'gradient'
+							? 'linear-gradient(90deg, red, lime)'
+							: undefined,
+					borderRadius: kind === 'rounded' ? 20 : 0,
+					fontSize: 24,
+					color: 'red',
 					transform: scene.transform,
 					transformOrigin: '0 0',
-					filter: 'drop-shadow(150px 0 0 blue)',
+					filter:
+						kind === 'blurred'
+							? 'blur(2px) drop-shadow(150px 0 0 blue)'
+							: 'drop-shadow(150px 0 0 blue)',
 				}}
-			/>
+			>
+				{kind === 'text' ? 'Aa' : null}
+			</div>
 		</AbsoluteFill>
 	);
 	return {

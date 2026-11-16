@@ -1,7 +1,7 @@
 import {Internals, type LogLevel} from 'remotion';
 import {getBiggestBoundingClientRect} from '../get-biggest-bounding-client-rect';
 import type {InternalState} from '../internal-state';
-import {createLayer} from '../take-screenshot';
+import {createLayerWithRasterScale} from '../take-screenshot';
 import {
 	calculateTransforms,
 	type TransformStyleCache,
@@ -33,6 +33,8 @@ import {
 	handleSvgClip,
 } from './handle-mask';
 import {setOpacity} from './opacity';
+import {contextRasterScales} from './raster-scale';
+import {rasterizeCssFilter} from './rasterize-css-filter';
 import {roundToExpandRect} from './round-to-expand-rect';
 import {scaleRect} from './scale-rect';
 import {setTransform} from './transform';
@@ -268,6 +270,7 @@ export const processNode = async ({
 		const {
 			rect: layerRect,
 			scale: layerScale,
+			rasterScale: layerRasterScale,
 			pixelWidth: layerPixelWidth,
 			pixelHeight: layerPixelHeight,
 		} = getPrecomposedLayerGeometry({
@@ -276,9 +279,15 @@ export const processNode = async ({
 			parentRect,
 			scale,
 			is3DPrecomposition,
+			rasterScale:
+				internalState.experimental3DRendering &&
+				precompositing.needsFilterPrecompositing &&
+				!precompositing.needsFilterPrecompositing.includes('url(')
+					? (contextRasterScales.get(context) ?? {x: scale, y: scale})
+					: null,
 		});
 
-		const tempContext = await createLayer({
+		const tempContext = await createLayerWithRasterScale({
 			transparent: true,
 			cutout: layerRect,
 			onlyOwnPlane: preserves3D,
@@ -286,6 +295,7 @@ export const processNode = async ({
 			logLevel,
 			internalState,
 			scale: layerScale,
+			rasterScale: layerRasterScale,
 			onlyBackgroundClipText: false,
 			waitForPageResponsiveness,
 		});
@@ -340,18 +350,32 @@ export const processNode = async ({
 		}
 
 		if (precompositing.needsFilterPrecompositing && !svgFilteredLayer) {
+			const filteredImage = layerRasterScale
+				? await rasterizeCssFilter({
+						source: tempContext.canvas,
+						filter: precompositing.needsFilterPrecompositing,
+						rasterScale: layerRasterScale,
+						color: computedStyle.color,
+						ownerDocument: element.ownerDocument,
+						signal: internalState.rasterImageLoaderState.signal,
+					})
+				: null;
 			tempContext.save();
 			tempContext.resetTransform();
 			tempContext.globalAlpha = 1;
 			tempContext.globalCompositeOperation = 'copy';
-			applyFilterToDrawOperation({
-				context: tempContext,
-				filter: scaleFilterLengths(
-					precompositing.needsFilterPrecompositing,
-					layerScale,
-				),
-				drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
-			});
+			if (filteredImage) tempContext.drawImage(filteredImage, 0, 0);
+			else {
+				applyFilterToDrawOperation({
+					context: tempContext,
+					filter: scaleFilterLengths(
+						precompositing.needsFilterPrecompositing,
+						layerScale,
+					),
+					drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
+				});
+			}
+
 			tempContext.restore();
 		}
 

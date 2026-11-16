@@ -1,16 +1,63 @@
+import type {RasterScale} from './raster-scale';
 export const getPrecomposedLayerGeometry = ({
 	precomposeRect,
 	totalMatrix,
 	parentRect,
 	scale,
 	is3DPrecomposition,
+	rasterScale,
 }: {
 	precomposeRect: DOMRect;
 	totalMatrix: DOMMatrix;
 	parentRect: DOMRect;
 	scale: number;
 	is3DPrecomposition: boolean;
+	rasterScale: RasterScale | null;
 }) => {
+	if (
+		rasterScale &&
+		(rasterScale.x !== rasterScale.y ||
+			Math.abs(totalMatrix.a) !== Math.abs(totalMatrix.d) ||
+			totalMatrix.a < 0 ||
+			totalMatrix.d < 0) &&
+		!is3DPrecomposition &&
+		totalMatrix.b === 0 &&
+		totalMatrix.c === 0 &&
+		totalMatrix.a !== 0 &&
+		totalMatrix.d !== 0
+	) {
+		const xScale = rasterScale.x * Math.abs(totalMatrix.a);
+		const yScale = rasterScale.y * Math.abs(totalMatrix.d);
+		const xs = [precomposeRect.left, precomposeRect.right].map(
+			(x) => rasterScale.x * (totalMatrix.a * x + totalMatrix.e - parentRect.x),
+		);
+		const ys = [precomposeRect.top, precomposeRect.bottom].map(
+			(y) => rasterScale.y * (totalMatrix.d * y + totalMatrix.f - parentRect.y),
+		);
+		const left = Math.floor(Math.min(...xs));
+		const right = Math.ceil(Math.max(...xs));
+		const top = Math.floor(Math.min(...ys));
+		const bottom = Math.ceil(Math.max(...ys));
+		const localXs = [left, right].map(
+			(x) => (x / rasterScale.x - totalMatrix.e + parentRect.x) / totalMatrix.a,
+		);
+		const localYs = [top, bottom].map(
+			(y) => (y / rasterScale.y - totalMatrix.f + parentRect.y) / totalMatrix.d,
+		);
+		return {
+			rect: new DOMRect(
+				Math.min(...localXs),
+				Math.min(...localYs),
+				(right - left) / xScale,
+				(bottom - top) / yScale,
+			),
+			scale,
+			rasterScale: {x: xScale, y: yScale},
+			pixelWidth: right - left,
+			pixelHeight: bottom - top,
+		};
+	}
+
 	if (
 		is3DPrecomposition ||
 		totalMatrix.b !== 0 ||
@@ -21,6 +68,7 @@ export const getPrecomposedLayerGeometry = ({
 		return {
 			rect: precomposeRect,
 			scale,
+			rasterScale: null,
 			pixelWidth: null,
 			pixelHeight: null,
 		};
@@ -57,6 +105,7 @@ export const getPrecomposedLayerGeometry = ({
 			pixelHeight / layerScale,
 		),
 		scale: layerScale,
+		rasterScale: null,
 		pixelWidth,
 		pixelHeight,
 	};
