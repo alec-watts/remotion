@@ -167,6 +167,8 @@ export const drawBackground = async ({
 			typeof CanvasGradient !== 'undefined' &&
 			fill instanceof CanvasGradient
 		) {
+			target.save();
+			using _restoreTarget = {[Symbol.dispose]: () => target.restore()};
 			const matrix = target.getTransform();
 			if (matrix.a * matrix.d - matrix.b * matrix.c === 0) return;
 			const inverse = matrix.inverse();
