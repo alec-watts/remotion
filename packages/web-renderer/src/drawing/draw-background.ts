@@ -167,6 +167,9 @@ export const drawBackground = async ({
 			typeof CanvasGradient !== 'undefined' &&
 			fill instanceof CanvasGradient
 		) {
+			const matrix = target.getTransform();
+			if (matrix.a * matrix.d - matrix.b * matrix.c === 0) return;
+			const inverse = matrix.inverse();
 			const gradientCanvas = new OffscreenCanvas(
 				target.canvas.width,
 				target.canvas.height,
@@ -177,27 +180,39 @@ export const drawBackground = async ({
 					gradientCanvas.height = 0;
 				},
 			};
-			const gradientContext = gradientCanvas.getContext('2d', {
-				willReadFrequently: true,
-			});
+			const options = {willReadFrequently: true, colorType: 'float16'} as const;
+			const gradientContext = gradientCanvas.getContext('2d', options);
 			if (!gradientContext)
 				throw new Error('Could not create gradient raster context');
-			gradientContext.setTransform(target.getTransform());
+			gradientContext.setTransform(matrix);
 			gradientContext.fillStyle = fill;
-			gradientContext.fillRect(
+			const corners = [
+				new DOMPoint(0, 0),
+				new DOMPoint(gradientCanvas.width, 0),
+				new DOMPoint(0, gradientCanvas.height),
+				new DOMPoint(gradientCanvas.width, gradientCanvas.height),
+			].map((point) => point.matrixTransform(inverse));
+			const left = Math.min(...corners.map((point) => point.x)) - 1;
+			const top = Math.min(...corners.map((point) => point.y)) - 1;
+			const right = Math.max(...corners.map((point) => point.x)) + 1;
+			const bottom = Math.max(...corners.map((point) => point.y)) + 1;
+			gradientContext.fillRect(left, top, right - left, bottom - top);
+			const pattern = target.createPattern(gradientCanvas, 'no-repeat');
+			if (!pattern) throw new Error('Could not create gradient raster pattern');
+			pattern.setTransform(inverse);
+			const previousGradientFill = target.fillStyle;
+			using _fill = {
+				[Symbol.dispose]: () => {
+					target.fillStyle = previousGradientFill;
+				},
+			};
+			target.fillStyle = pattern;
+			target.fillRect(
 				boundingRect.left - originX,
 				boundingRect.top - originY,
 				boundingRect.width,
 				boundingRect.height,
 			);
-			target.save();
-			try {
-				target.resetTransform();
-				target.drawImage(gradientCanvas, 0, 0);
-			} finally {
-				target.restore();
-			}
-
 			return;
 		}
 
