@@ -4,6 +4,7 @@ import {
 	preserves3DChildren,
 	type TransformStyleCache,
 } from './drawing/calculate-transforms';
+import {clipFilterInputs} from './drawing/clip-filter-inputs';
 import {parseFilterOutsets} from './drawing/filter-outsets';
 import {
 	clipPolygonToHalfPlanes,
@@ -245,12 +246,7 @@ const planPreserve3DPlanes = ({
 							transforms.precompositing.needsFilterPrecompositing,
 						)
 					: {left: 0, right: 0, top: 0, bottom: 0};
-				const filterViewport = new DOMRect(
-					parentRect.left - filterOutsets.right,
-					parentRect.top - filterOutsets.bottom,
-					parentRect.width + filterOutsets.left + filterOutsets.right,
-					parentRect.height + filterOutsets.top + filterOutsets.bottom,
-				);
+
 				const bounds = getBiggestBoundingClientRect(
 					node,
 					true,
@@ -267,11 +263,18 @@ const planPreserve3DPlanes = ({
 					bounds.width + filterOutsets.left + filterOutsets.right,
 					bounds.height + filterOutsets.top + filterOutsets.bottom,
 				);
-				const paintRect = clipSourceRectToViewport(
-					paintBounds,
-					transforms.totalMatrix,
-					filterViewport,
-				);
+				const paintRect = transforms.precompositing.needsFilterPrecompositing
+					? clipFilterInputs({
+							rect: paintBounds,
+							matrix: transforms.totalMatrix,
+							viewport: parentRect,
+							filter: transforms.precompositing.needsFilterPrecompositing,
+						})
+					: clipSourceRectToViewport(
+							paintBounds,
+							transforms.totalMatrix,
+							parentRect,
+						);
 				if (!paintRect) {
 					// An invisible own plane does not invalidate the other context planes.
 					return preserving ? [...node.childNodes] : null;
