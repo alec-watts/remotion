@@ -1,0 +1,35 @@
+name: Check native backdrop filter outside the Player
+on:
+  push:
+    branches: [codex/backdrop-filter-direct-native]
+permissions:
+  contents: read
+jobs:
+  capture:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: cd packages/web-renderer && bun ./test/backdrop-native-dom.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backdrop-filter-direct-native-${{ matrix.os }}
+          path: packages/web-renderer/test/__results__/backdrop-direct
+          if-no-files-found: error
+          retention-days: 7
