@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -20,6 +20,24 @@ const paintOnWhite = async (blob: Blob) => {
 		return await canvas.convertToBlob({type: 'image/png'});
 	} finally {
 		bitmap.close();
+		canvas.width = 0;
+		canvas.height = 0;
+	}
+};
+
+const drawSvgImage = async (image: HTMLImageElement, onWhite: boolean) => {
+	const canvas = new OffscreenCanvas(image.naturalWidth, image.naturalHeight);
+	try {
+		const context = canvas.getContext('2d', {alpha: true});
+		if (!context) throw new Error('Cannot create drawable canvas');
+		if (onWhite) {
+			context.fillStyle = 'white';
+			context.fillRect(0, 0, canvas.width, canvas.height);
+		}
+
+		context.drawImage(image, 0, 0);
+		return await canvas.convertToBlob({type: 'image/png'});
+	} finally {
 		canvas.width = 0;
 		canvas.height = 0;
 	}
@@ -76,7 +94,119 @@ test.for(
 		await capture('native-clear', () =>
 			captureNativeReference(clear, frame, {omitBackground: true}),
 		);
-		await capture('export-clear', () => exportPng(clear));
+		const drawables: Blob[] = [];
+		let embeddedFont = false;
+		const createObjectURL = URL.createObjectURL.bind(URL);
+		const observeDrawable = vi
+			.spyOn(URL, 'createObjectURL')
+			.mockImplementation((input) => {
+				if (input instanceof Blob && input.type.startsWith('image/svg+xml')) {
+					drawables.push(input);
+				}
+
+				return createObjectURL(input);
+			});
+		try {
+			await capture('export-clear', () => exportPng(clear));
+		} finally {
+			observeDrawable.mockRestore();
+		}
+
+		if (drawables.length !== 1) {
+			errors['serialized-svg'] =
+				`Expected one SVG drawable, got ${drawables.length}`;
+		} else {
+			const blob = drawables[0]!;
+			const markup = await blob.text();
+			const parsed = new DOMParser().parseFromString(markup, 'image/svg+xml');
+			embeddedFont = markup.includes('data:font/woff2;');
+			if (
+				parsed.documentElement.localName !== 'svg' ||
+				(mode === 'root-mask' && !embeddedFont)
+			) {
+				errors['serialized-svg'] =
+					'The captured drawable is missing the expected embedded font';
+			} else {
+				await server.commands.writeFile(`${folder}/serialized.svg`, markup);
+				const url = URL.createObjectURL(blob);
+				const image = new Image();
+				try {
+					image.src = url;
+					await image.decode();
+					if (
+						image.naturalWidth !== clear.width ||
+						image.naturalHeight !== clear.height
+					) {
+						throw new Error(
+							`Unexpected intrinsic SVG size ${image.naturalWidth}×${image.naturalHeight}`,
+						);
+					}
+
+					for (const backgroundColor of ['white', 'transparent']) {
+						const onWhite = backgroundColor === 'white';
+						const suffix = onWhite ? 'white' : 'clear';
+						await capture(`image-${suffix}`, () =>
+							captureNativeReference(
+								{
+									...clear,
+									component: () => (
+										<div
+											style={{
+												backgroundColor,
+												width: clear.width,
+												height: clear.height,
+											}}
+										>
+											<img
+												src={url}
+												width={clear.width}
+												height={clear.height}
+												style={{display: 'block'}}
+												alt=""
+											/>
+										</div>
+									),
+								},
+								frame,
+								{omitBackground: !onWhite},
+							),
+						);
+						await capture(`canvas-${suffix}`, () =>
+							drawSvgImage(image, onWhite),
+						);
+					}
+
+					await capture('inline-serialized-white', () =>
+						captureNativeReference(
+							{
+								...white,
+								component: () => (
+									<div
+										ref={(host) => {
+											host?.replaceChildren(
+												document.importNode(parsed.documentElement, true),
+											);
+										}}
+										style={{
+											background: 'white',
+											width: white.width,
+											height: white.height,
+										}}
+									/>
+								),
+							},
+							frame,
+							{omitBackground: false},
+						),
+					);
+				} catch (error) {
+					errors['serialized-svg'] = String(error);
+				} finally {
+					URL.revokeObjectURL(url);
+				}
+			}
+		}
+
 		for (const source of ['native', 'export']) {
 			const clearPng = images.get(`${source}-clear`);
 			if (clearPng) {
@@ -91,6 +221,13 @@ test.for(
 			['native-white', 'native-replay'],
 			['export-white', 'export-replay'],
 			['native-replay', 'export-replay'],
+			['native-white', 'inline-serialized-white'],
+			['native-white', 'image-white'],
+			['native-clear', 'image-clear'],
+			['image-white', 'canvas-white'],
+			['image-clear', 'canvas-clear'],
+			['canvas-white', 'export-white'],
+			['canvas-clear', 'export-clear'],
 		]) {
 			const before = images.get(a);
 			const after = images.get(b);
@@ -102,8 +239,23 @@ test.for(
 
 		await server.commands.writeFile(
 			`${folder}/summary.json`,
-			JSON.stringify({counts, errors}),
+			JSON.stringify({
+				counts,
+				errors,
+				drawableCount: drawables.length,
+				embeddedFont,
+			}),
 		);
+		expect.soft(errors['serialized-svg']).toBeUndefined();
+		for (const label of [
+			'image-white',
+			'canvas-white',
+			'canvas-clear',
+			'inline-serialized-white',
+		]) {
+			expect.soft(images.has(label), label).toBe(true);
+		}
+
 		expect.soft(counts['native-white vs export-white']).toBe(0);
 		expect.soft(counts['native-clear vs export-clear']).toBe(0);
 	},
