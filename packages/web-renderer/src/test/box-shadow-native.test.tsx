@@ -1,5 +1,6 @@
 import {AbsoluteFill} from 'remotion';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import '../symbol-dispose';
 import {captureNativeReference, compareNativePixels} from './native-reference';
@@ -22,6 +23,29 @@ const cases: Record<string, React.CSSProperties> = {
 	},
 };
 
+const shadowFixture = (
+	name: string,
+	style: React.CSSProperties,
+	backgroundColor: string,
+) => ({
+	component: () => (
+		<AbsoluteFill
+			style={{backgroundColor, justifyContent: 'center', alignItems: 'center'}}
+		>
+			<div
+				style={{width: 90, height: 70, backgroundColor: '#f1f5f9', ...style}}
+			>
+				<div style={{width: 30, height: 30, backgroundColor: '#64748b'}} />
+			</div>
+		</AbsoluteFill>
+	),
+	id: `box-shadow-${name.replace(/\s+/g, '-')}`,
+	width: 160,
+	height: 140,
+	fps: 30,
+	durationInFrames: 1,
+});
+
 test.for(Object.entries(cases))(
 	'matches native box-shadow: %s',
 	async ([name, style], t) => {
@@ -30,33 +54,7 @@ test.for(Object.entries(cases))(
 			return;
 		}
 
-		const fixture = {
-			component: () => (
-				<AbsoluteFill
-					style={{
-						backgroundColor: 'white',
-						justifyContent: 'center',
-						alignItems: 'center',
-					}}
-				>
-					<div
-						style={{
-							width: 90,
-							height: 70,
-							backgroundColor: '#f1f5f9',
-							...style,
-						}}
-					>
-						<div style={{width: 30, height: 30, backgroundColor: '#64748b'}} />
-					</div>
-				</AbsoluteFill>
-			),
-			id: `box-shadow-${name.replace(/\s+/g, '-')}`,
-			width: 160,
-			height: 140,
-			fps: 30,
-			durationInFrames: 1,
-		};
+		const fixture = shadowFixture(name, style, 'white');
 		const reference = await captureNativeReference(fixture, 0, {
 			omitBackground: false,
 		});
@@ -72,5 +70,65 @@ test.for(Object.entries(cases))(
 		expect(
 			(await compareNativePixels(reference, actual)).mismatchedPixels,
 		).toBe(0);
+	},
+);
+
+test.for(
+	[
+		'spread',
+		'spread with blur',
+		'negative spread',
+		'negative spread with blur',
+	].flatMap((name) =>
+		['white', '#556677', 'transparent'].map((background) => ({
+			name,
+			background,
+		})),
+	),
+)(
+	'captures shadow coverage for $name on $background',
+	async ({name, background}, t) => {
+		const transparent = background === 'transparent';
+		if (transparent && server.browser === 'firefox') {
+			t.skip();
+			return;
+		}
+
+		const fixture = shadowFixture(name, cases[name], background);
+		const reference = await captureNativeReference(fixture, 0, {
+			omitBackground: transparent,
+		});
+		const actual = await (
+			await renderStillOnWeb({
+				composition: fixture,
+				frame: 0,
+				licenseKey: 'free-license',
+				inputProps: {},
+				allowHtmlInCanvas: false,
+			})
+		).blob({format: 'png'});
+		const match = await compareNativePixels(reference, actual);
+		const directory = `test/__results__/shadow-coverage/${server.browser}/${fixture.id}/${background.replace('#', '')}`;
+		for (const [role, blob] of [
+			['reference', reference],
+			['actual', actual],
+		] as const) {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer())) {
+				binary += String.fromCharCode(byte);
+			}
+
+			await server.commands.writeFile(
+				`${directory}/${role}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(
+			`${directory}/comparison.json`,
+			JSON.stringify(match),
+		);
+		expect(match.mismatchedPixels).toBe(0);
 	},
 );
