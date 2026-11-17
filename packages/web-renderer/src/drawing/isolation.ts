@@ -1,5 +1,34 @@
 import {getMaskImageValue} from './mask-image';
 
+export const getBackdropFilter = (style: CSSStyleDeclaration) => {
+	const filter =
+		style.backdropFilter || style.getPropertyValue('-webkit-backdrop-filter');
+	return filter && filter !== 'none' ? filter : null;
+};
+
+const backdropRootProperties = new Set([
+	'opacity',
+	'filter',
+	'backdrop-filter',
+	'clip-path',
+	'mask',
+	'mask-image',
+	'mask-border',
+	'mix-blend-mode',
+]);
+
+const createsBackdropRoot = (style: CSSStyleDeclaration) =>
+	style.display !== 'contents' &&
+	(parseFloat(style.opacity) < 1 ||
+		style.filter !== 'none' ||
+		getBackdropFilter(style) !== null ||
+		style.clipPath !== 'none' ||
+		getMaskImageValue(style) !== null ||
+		style.mixBlendMode !== 'normal' ||
+		style.willChange
+			.split(',')
+			.some((value) => backdropRootProperties.has(value.trim())));
+
 const willChangeStackingContextProperties = new Set([
 	'opacity',
 	'transform',
@@ -52,7 +81,7 @@ export const createsStackingContext = (element: Element) => {
 		style.perspective !== 'none' ||
 		style.transformStyle === 'preserve-3d' ||
 		style.filter !== 'none' ||
-		style.backdropFilter !== 'none' ||
+		getBackdropFilter(style) !== null ||
 		style.clipPath !== 'none' ||
 		getMaskImageValue(style) !== null ||
 		style.isolation === 'isolate' ||
@@ -82,19 +111,27 @@ export const getElementsNeedingIsolation = ({
 
 	while (treeWalker.nextNode()) {
 		const element = treeWalker.currentNode as Element;
-		if (getComputedStyle(element).mixBlendMode === 'normal') {
-			continue;
-		}
+		const style = getComputedStyle(element);
+		let needsBackdropRoot = getBackdropFilter(style) !== null;
+		let needsBlendContext = style.mixBlendMode !== 'normal';
 
 		let ancestor = element.parentElement;
-		while (ancestor && ancestor !== rootElement) {
-			if (isolatedElements.has(ancestor)) {
-				break;
+		while (
+			(needsBackdropRoot || needsBlendContext) &&
+			ancestor &&
+			ancestor !== rootElement
+		) {
+			if (
+				needsBackdropRoot &&
+				createsBackdropRoot(getComputedStyle(ancestor))
+			) {
+				isolatedElements.add(ancestor);
+				needsBackdropRoot = false;
 			}
 
-			if (createsStackingContext(ancestor)) {
+			if (needsBlendContext && createsStackingContext(ancestor)) {
 				isolatedElements.add(ancestor);
-				break;
+				needsBlendContext = false;
 			}
 
 			ancestor = ancestor.parentElement;

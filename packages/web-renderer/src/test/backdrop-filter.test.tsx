@@ -36,6 +36,23 @@ for (const scene of backdropFilterCases) {
 			).blob({format: 'png'});
 			const differentFromControl = await countNativePixels(control, reference);
 			const comparison = await compareNativePixels(reference, actual);
+			for (const [name, blob] of [
+				['reference', reference],
+				['control', control],
+				['actual', actual],
+			] as const) {
+				let binary = '';
+				for (const byte of new Uint8Array(await blob.arrayBuffer())) {
+					binary += String.fromCharCode(byte);
+				}
+
+				await server.commands.writeFile(
+					`test/__results__/backdrop-filter/${server.browser}/${scene.mode}-${frame}-${name}.png`,
+					btoa(binary),
+					'base64',
+				);
+			}
+
 			await server.commands.writeFile(
 				`test/__results__/backdrop-filter/${server.browser}/${scene.mode}-${frame}.json`,
 				JSON.stringify({

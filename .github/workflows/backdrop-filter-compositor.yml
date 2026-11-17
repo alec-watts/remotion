@@ -1,0 +1,102 @@
+name: Compare compositor backdrop filtering with upstream main
+on:
+  push:
+    branches: [codex/backdrop-filter-compositor-experiment]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 8
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze the browser for both renderer revisions
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            diagnostic_bundle="$RUNNER_TEMP/Backdrop Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$diagnostic_bundle"
+            chflags -R uchg "$diagnostic_bundle"
+            diagnostic_executable="$diagnostic_bundle/Contents/MacOS/Google Chrome"
+          else
+            diagnostic_bundle="$RUNNER_TEMP/backdrop-chrome"
+            mkdir -p "$diagnostic_bundle"
+            cp -RL /opt/google/chrome/. "$diagnostic_bundle/"
+            diagnostic_executable="$diagnostic_bundle/chrome"
+          fi
+          echo "BACKDROP_CHROME_EXECUTABLE=$diagnostic_executable" >> "$GITHUB_ENV"
+          find "$diagnostic_bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/backdrop-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.BACKDROP_CHROME_EXECUTABLE,"))
+          PIN
+      - name: Compare candidate and original composer
+        run: |
+          baseline=26afaf0d015c336b6695c68530abe33ea3edce1c
+          git diff --binary "$baseline" HEAD -- packages/web-renderer/src/drawing > "$RUNNER_TEMP/backdrop-producer.patch"
+          test -s "$RUNNER_TEMP/backdrop-producer.patch"
+          mkdir -p qualification
+          cp "$RUNNER_TEMP/backdrop-producer.patch" qualification/producer.patch
+          diagnostic_failure=0
+          for arm in candidate control; do
+            if [ "$arm" = control ]; then
+              git apply --reverse "$RUNNER_TEMP/backdrop-producer.patch"
+              git diff --exit-code "$baseline" -- packages/web-renderer/src/drawing
+            fi
+            bunx turbo run make --filter=@remotion/web-renderer
+            result_dir="qualification/$arm"
+            mkdir -p "$result_dir" packages/web-renderer/test/__results__
+            shasum -a 256 packages/web-renderer/src/test/backdrop-filter.test.tsx packages/web-renderer/src/test/fixtures/backdrop-filter.tsx packages/web-renderer/vitest.config.ts bun.lock > "$result_dir/inputs.txt"
+            "$BACKDROP_CHROME_EXECUTABLE" --version > "$result_dir/chrome.txt"
+            if (cd packages/web-renderer && bunx vitest run src/test/backdrop-filter.test.tsx src/test/mix-blend-mode.test.tsx src/test/opacity.test.tsx src/test/opacity-inherited.test.tsx src/test/filter.test.tsx --reporter=default --reporter=json --outputFile=./test/__results__/backdrop-filter-suite.json); then
+              diagnostic_exit=0
+            else
+              diagnostic_exit=$?
+              diagnostic_failure=1
+            fi
+            printf '%s\n' "$diagnostic_exit" > "$result_dir/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "$result_dir/web-renderer"
+            if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
+              mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "$result_dir/native-pixel-failures"
+            fi
+            if [ -d packages/web-renderer/.vitest/attachments ]; then
+              mv packages/web-renderer/.vitest/attachments "$result_dir/attachments"
+            fi
+          done
+          cmp qualification/candidate/inputs.txt qualification/control/inputs.txt
+          cmp qualification/candidate/chrome.txt qualification/control/chrome.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/backdrop-chrome.sha256"
+          exit "$diagnostic_failure"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backdrop-filter-compositor-${{ matrix.os }}
+          path: qualification
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Backdrop Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Backdrop Chrome.app"
+          fi

@@ -1,5 +1,6 @@
 import {getSvgClipForPrecompositing} from './clip-path';
 import {hasAnyTransformCssValue, hasTransformCssValue} from './has-transform';
+import {getBackdropFilter} from './isolation';
 import {makeDOMMatrix} from './make-dom-matrix';
 import {
 	getMaskImageValue,
@@ -229,6 +230,7 @@ export const calculateTransforms = ({
 	let maskImageInfo: MaskImageInfo | null = null;
 	let svgClip: SVGClipPathElement | null = null;
 	let filterForPrecompositing: string | null = null;
+	let backdropFilter: string | null = null;
 	let blendMode: GlobalCompositeOperation | null = null;
 	while (parent) {
 		// Each node walks its ancestors, so reuse their immutable transform fields
@@ -285,11 +287,14 @@ export const calculateTransforms = ({
 
 			svgClip = getSvgClipForPrecompositing(computedStyle.clipPath, parent);
 			blendMode = getBlendMode(computedStyle.mixBlendMode);
+			backdropFilter =
+				element === rootElement ? null : getBackdropFilter(computedStyle);
 			// In CSS, an element blends together with its descendants as one group,
 			// and its filter and opacity apply to that group as a whole.
 			const needsGroup =
 				blendMode !== null ||
 				isolated ||
+				backdropFilter !== null ||
 				svgClip !== null ||
 				computedStyle.filter.includes('url(');
 
@@ -455,13 +460,15 @@ export const calculateTransforms = ({
 			needsSvgClip: svgClip,
 			needsFilterPrecompositing: filterForPrecompositing,
 			needsBlendMode: blendMode,
-			needsIsolation: isolated,
+			backdropFilter,
+			needsIsolation: isolated || backdropFilter !== null,
 			needsPrecompositing: Boolean(
 				needs3DTransformViaWebGL ||
 				needsMaskImage ||
 				svgClip !== null ||
 				needsFilterPrecompositing ||
 				blendMode !== null ||
+				backdropFilter !== null ||
 				isolated,
 			),
 		},

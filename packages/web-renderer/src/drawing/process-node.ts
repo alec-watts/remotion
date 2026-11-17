@@ -8,6 +8,7 @@ import {
 } from './calculate-transforms';
 import {getWiderRectAndExpand} from './clamp-rect-to-parent-bounds';
 import {doRectsIntersect} from './do-rects-intersect';
+import {drawBackdropFilter} from './draw-backdrop-filter';
 import {drawElement} from './draw-element';
 import type {DrawFn} from './drawn-fn';
 import {getPrecomposedLayerGeometry} from './get-precomposed-layer-geometry';
@@ -188,6 +189,21 @@ export const processNode = async ({
 			onlyBackgroundClipText: false,
 			waitForPageResponsiveness,
 		});
+		if (precompositing.backdropFilter !== null) {
+			drawBackdropFilter({
+				source: context.canvas,
+				destination: tempContext,
+				filter: precompositing.backdropFilter,
+				dimensions,
+				layerRect,
+				parentRect,
+				totalMatrix,
+				scale,
+				layerScale,
+				borderRadius: computedStyle.borderRadius,
+			});
+		}
+
 		if (waitForPageResponsiveness !== null) {
 			await waitForPageResponsiveness();
 		}
