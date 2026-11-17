@@ -167,11 +167,14 @@ test.for(
 				markup: string,
 				label: string,
 				captureDom: boolean,
-				readback: boolean,
+				{
+					readback,
+					useDataUrl = false,
+				}: {readback: boolean; useDataUrl?: boolean},
 			) => {
-				const url = createObjectUrl(
-					new Blob([markup], {type: 'image/svg+xml'}),
-				);
+				const url = useDataUrl
+					? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`
+					: createObjectUrl(new Blob([markup], {type: 'image/svg+xml'}));
 				const image = new Image();
 				const canvas = new OffscreenCanvas(width, height);
 				try {
@@ -217,21 +220,33 @@ test.for(
 					context.drawImage(image, 0, 0);
 					return await canvas.convertToBlob({type: 'image/png'});
 				} finally {
-					URL.revokeObjectURL(url);
+					if (!useDataUrl) {
+						URL.revokeObjectURL(url);
+					}
+
 					canvas.width = 0;
 					canvas.height = 0;
 				}
 			};
 
-			const wrapperCanvas = await paint(
-				wrapped,
-				'svg-device',
-				true,
-				server.browser === 'webkit',
-			);
+			const wrapperCanvas = await paint(wrapped, 'svg-device', true, {
+				readback: server.browser === 'webkit',
+			});
 			await capture('svg-device-readback', () =>
-				paint(wrapped, 'svg-device-readback', false, true),
+				paint(wrapped, 'svg-device-readback', false, {readback: true}),
 			);
+
+			await capture('svg-html-transform', async () => {
+				const htmlWrapper = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${fixture.width}px;height:${fixture.height}px;transform-origin:0 0;transform:matrix(${a},${b},${c},${d},${e},${f})">${svg}</div></foreignObject></svg>`;
+				await server.commands.writeFile(
+					`${folder}/html-transform.svg`,
+					htmlWrapper,
+				);
+				return paint(htmlWrapper, 'svg-html-transform', true, {
+					readback: server.browser === 'webkit',
+					useDataUrl: true,
+				});
+			});
 
 			if (a > 0 && d > 0 && b === 0 && c === 0) {
 				await capture('svg-root-viewbox', async () => {
@@ -255,12 +270,9 @@ test.for(
 						`${folder}/root-viewbox.svg`,
 						rootViewBox,
 					);
-					return paint(
-						rootViewBox,
-						'svg-root-viewbox',
-						true,
-						server.browser === 'webkit',
-					);
+					return paint(rootViewBox, 'svg-root-viewbox', true, {
+						readback: server.browser === 'webkit',
+					});
 				});
 			}
 
@@ -324,7 +336,9 @@ test.for(
 
 						const markup = new XMLSerializer().serializeToString(root);
 						await server.commands.writeFile(`${folder}/${label}.svg`, markup);
-						return paint(markup, label, true, server.browser === 'webkit');
+						return paint(markup, label, true, {
+							readback: server.browser === 'webkit',
+						});
 					});
 				}
 			}
