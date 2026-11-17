@@ -1,7 +1,7 @@
-name: Compare direct SVG mask compositing
+name: Compare SVG masks on a readback destination
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-html-direct]
+    branches: [codex/qualify-svg-root-mask-html-readback-destination]
 permissions:
   contents: read
 jobs:
@@ -49,21 +49,26 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare scratch and direct SVG mask compositing
+      - name: Compare ordinary and readback export canvases
         run: |
           drawing=packages/web-renderer/src/drawing
-          producer=("$drawing/draw-dom-element.ts" "$drawing/turn-svg-into-drawable.ts")
+          producer=(packages/web-renderer/src/take-screenshot.ts)
           fixtures=(
             src/test/svg-root-mask-readback.test.tsx
             src/test/svg-registered-font-selection.test.ts
             src/test/svg-registered-cdata-font.test.tsx
             src/test/svg-disabled-styles.test.tsx
             src/test/svg-css-font.test.tsx
+            src/test/box-shadow.test.tsx
+            src/test/mix-blend-mode.test.tsx
+            src/test/opacity-inherited.test.tsx
+            src/test/background-blend-mode.test.tsx
+            src/test/clip-path.test.tsx
           )
           mkdir -p qualification
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
           git rev-parse HEAD^ HEAD > qualification/revisions.txt
-          shasum -a 256 "$drawing"/{calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
+          shasum -a 256 "$drawing"/{draw-dom-element,turn-svg-into-drawable,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
           exit_status=0
           for arm in baseline candidate; do
@@ -87,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-html-direct-${{ matrix.os }}
+          name: svg-root-mask-html-readback-destination-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
