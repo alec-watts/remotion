@@ -67,8 +67,14 @@ export const createCssMask = async ({
 			svg.removeAttribute('viewBox');
 			foreignObject.setAttribute('width', String(width));
 			foreignObject.setAttribute('height', String(height));
-			viewport.style.transformOrigin = '0 0';
-			viewport.style.transform = `scale(${width / precomposeRect.width}, ${height / precomposeRect.height})`;
+			const scaleX = width / precomposeRect.width;
+			const scaleY = height / precomposeRect.height;
+			if (scaleX === scaleY && CSS.supports('zoom', String(scaleX))) {
+				viewport.style.zoom = String(scaleX);
+			} else {
+				viewport.style.transformOrigin = '0 0';
+				viewport.style.transform = `scale(${scaleX}, ${scaleY})`;
+			}
 		}
 
 		target.replaceChildren(source);
