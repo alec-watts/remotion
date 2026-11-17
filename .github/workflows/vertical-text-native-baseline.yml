@@ -1,7 +1,7 @@
-name: Trace vertical text carrier in the DOM renderer
+name: Trace viewport alignment for vertical DOM text
 on:
   push:
-    branches: [codex/vertical-text-svg-carrier]
+    branches: [codex/vertical-text-viewport-carrier]
 permissions:
   contents: read
 jobs:
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vertical-text-svg-carrier-${{ matrix.os }}
+          name: vertical-text-viewport-carrier-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

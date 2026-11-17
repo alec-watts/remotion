@@ -80,18 +80,24 @@ export const drawVerticalText = async ({
 	}
 
 	const rect = block.getBoundingClientRect();
+	const matrix = contextToDraw.getTransform();
+	const {width, height} = parentRect;
 	if (
 		rect.width <= 0 ||
 		rect.height <= 0 ||
-		block.scrollWidth > block.clientWidth ||
-		block.scrollHeight > block.clientHeight
+		width <= 0 ||
+		height <= 0 ||
+		matrix.a <= 0 ||
+		matrix.a !== matrix.d ||
+		matrix.b !== 0 ||
+		matrix.c !== 0 ||
+		matrix.e !== 0 ||
+		matrix.f !== 0
 	) {
 		return false;
 	}
 
 	const document = block.ownerDocument;
-	const width = Math.ceil(rect.width);
-	const height = Math.ceil(rect.height);
 	const svg = document.createElementNS(svgNamespace, 'svg');
 	svg.setAttribute('width', String(width));
 	svg.setAttribute('height', String(height));
@@ -100,6 +106,10 @@ export const drawVerticalText = async ({
 	const carrier = document.createElementNS(svgNamespace, 'foreignObject');
 	carrier.setAttribute('width', String(width));
 	carrier.setAttribute('height', String(height));
+	const viewport = document.createElement('div');
+	viewport.style.position = 'relative';
+	viewport.style.width = `${width}px`;
+	viewport.style.height = `${height}px`;
 	const textBlock = document.createElement('div');
 	const language = block.closest('[lang]')?.getAttribute('lang');
 	if (language !== null && language !== undefined) {
@@ -110,10 +120,14 @@ export const drawVerticalText = async ({
 		textBlock.style.setProperty(property, style.getPropertyValue(property));
 	}
 
+	textBlock.style.position = 'absolute';
+	textBlock.style.left = `${rect.x - parentRect.x}px`;
+	textBlock.style.top = `${rect.y - parentRect.y}px`;
 	textBlock.style.width = `${rect.width}px`;
 	textBlock.style.height = `${rect.height}px`;
 	textBlock.textContent = span.textContent;
-	carrier.append(textBlock);
+	viewport.append(textBlock);
+	carrier.append(viewport);
 	svg.append(carrier);
 	document.body.append(svg);
 	let image: Promise<HTMLImageElement>;
@@ -123,10 +137,6 @@ export const drawVerticalText = async ({
 		svg.remove();
 	}
 
-	contextToDraw.drawImage(
-		await image,
-		rect.x - parentRect.x,
-		rect.y - parentRect.y,
-	);
+	contextToDraw.drawImage(await image, 0, 0, width, height);
 	return true;
 };
