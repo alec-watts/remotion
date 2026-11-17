@@ -182,23 +182,50 @@ export const drawBackground = async ({
 	};
 
 	const blendMode = getBlendMode(computedStyle.backgroundBlendMode);
+	// Fork-only experiment: match the layer-local visible-gradient origin
+	// observed in the native-position and Canvas origin controls.
+	const paintTransform = contextToDraw.getTransform();
+	const usePaddedGradientSurface =
+		contextRasterScales.has(context) &&
+		rasterScale.x !== rasterScale.y &&
+		contextToDraw === context &&
+		backgroundImage.startsWith('linear-gradient(') &&
+		paintTransform.a === rasterScale.x &&
+		paintTransform.d === rasterScale.y &&
+		paintTransform.b === 0 &&
+		paintTransform.c === 0 &&
+		Number.isInteger(boundingRect.width * rasterScale.x) &&
+		Number.isInteger(boundingRect.height * rasterScale.y) &&
+		Number.isInteger(boundingRect.left * rasterScale.x + paintTransform.e) &&
+		Number.isInteger(boundingRect.top * rasterScale.y + paintTransform.f);
 	if (
 		backgroundImage !== 'none' &&
-		(blendMode ||
+		(usePaddedGradientSurface ||
+			blendMode ||
 			contextToDraw !== context ||
 			(!isColorTransparent(backgroundColor) &&
 				(context.globalAlpha !== 1 ||
 					(typeof context.filter === 'string' && context.filter !== 'none'))))
 	) {
 		// Blend inside the background group before applying element opacity, filters and text masks.
+		const padding = usePaddedGradientSurface ? 1 : 0;
+		const pixelWidth = Math.ceil(boundingRect.width * rasterScale.x);
+		const pixelHeight = Math.ceil(boundingRect.height * rasterScale.y);
 		const backgroundCanvas = new OffscreenCanvas(
-			Math.ceil(boundingRect.width * rasterScale.x),
-			Math.ceil(boundingRect.height * rasterScale.y),
+			pixelWidth + padding * 2,
+			pixelHeight + padding * 2,
 		);
 		const backgroundContext = backgroundCanvas.getContext('2d');
 		if (!backgroundContext)
 			throw new Error('Could not create background compositing context');
-		backgroundContext.scale(rasterScale.x, rasterScale.y);
+		backgroundContext.setTransform(
+			rasterScale.x,
+			0,
+			0,
+			rasterScale.y,
+			padding,
+			padding,
+		);
 		backgroundContext.fillStyle = backgroundColor;
 		backgroundContext.fillRect(0, 0, boundingRect.width, boundingRect.height);
 		const groupFill = await getBackgroundFill({
@@ -222,10 +249,14 @@ export const drawBackground = async ({
 		);
 		contextToDraw.drawImage(
 			backgroundCanvas,
+			padding,
+			padding,
+			pixelWidth,
+			pixelHeight,
 			boundingRect.left - offsetLeft,
 			boundingRect.top - offsetTop,
-			backgroundCanvas.width / rasterScale.x,
-			backgroundCanvas.height / rasterScale.y,
+			pixelWidth / rasterScale.x,
+			pixelHeight / rasterScale.y,
 		);
 		return;
 	}

@@ -186,10 +186,13 @@ for (const position of nativeGradientPositions) {
 			const canvas = new OffscreenCanvas(300, 300);
 			const ctx = canvas.getContext('2d')!;
 			ctx.drawImage(image, 0, 0);
-			const {data} = ctx.getImageData(position.left, position.top, 100, 50);
-			expect(data[0]).toBeGreaterThan(250);
-			expect(data[3998]).toBe(0);
-			expect(data[3999]).toBe(255);
+			const interiorY = position.top + 20;
+			const red = ctx.getImageData(position.left + 10, interiorY, 1, 1).data;
+			const green = ctx.getImageData(position.left + 89, interiorY, 1, 1).data;
+			expect(red[0]).toBeGreaterThan(red[1]);
+			expect(green[1]).toBeGreaterThan(green[0]);
+			expect(red[3]).toBe(255);
+			expect(green[3]).toBe(255);
 			const shadowX = position.left + position.shadowOffset * 2;
 			expect(
 				Array.from(
@@ -199,5 +202,25 @@ for (const position of nativeGradientPositions) {
 		} finally {
 			image.close();
 		}
+
+		const actual = await (
+			await renderStillOnWeb({
+				composition,
+				frame: 0,
+				inputProps: {},
+				licenseKey: 'free-license',
+				allowHtmlInCanvas: false,
+				experimental3DRendering: true,
+			})
+		).blob({format: 'png'});
+		const result = await compareNativePixels(native, actual);
+		await server.commands.writeFile(
+			`test/__results__/native-gradient-origins/${server.browser}/${composition.id}.json`,
+			JSON.stringify({
+				mismatchedPixels: result.mismatchedPixels,
+				maxChannelDelta: result.maxChannelDelta,
+			}),
+		);
+		expect(result.mismatchedPixels).toBe(0);
 	});
 }

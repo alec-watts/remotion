@@ -1,7 +1,7 @@
-name: Native filtered gradient positions
+name: Filtered gradients on a padded local canvas
 on:
   push:
-    branches: [codex/filtered-gradient-native-origins]
+    branches: [codex/filtered-gradient-local-paint]
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 6
+          fetch-depth: 8
       - name: Freeze the complete Chrome bundle
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
@@ -77,6 +77,23 @@ jobs:
           if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
             mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "qualification/$diagnostic_arm/native-pixel-failures"
           fi
+          diagnostic_source=packages/web-renderer/src/drawing/draw-background.ts
+          candidate_source="$RUNNER_TEMP/candidate-draw-background.ts"
+          cp "$diagnostic_source" "$candidate_source"
+          trap 'cp "$candidate_source" "$diagnostic_source"' EXIT
+          git show "abba30cd0801f5d2290bf018e0b60711fc37613e:$diagnostic_source" > "$diagnostic_source"
+          git diff --exit-code abba30cd0801f5d2290bf018e0b60711fc37613e -- packages/web-renderer/src/drawing
+          git diff --exit-code HEAD -- packages/web-renderer/src/test bun.lock
+          mkdir -p qualification/control packages/web-renderer/test/__results__
+          shasum -a 256 "$diagnostic_source" > qualification/control/draw-background.txt
+          bunx turbo run make --filter=@remotion/web-renderer
+          if (cd packages/web-renderer && bunx vitest src/test/projective-filter-input.test.tsx --run -t 'captures native gradient at|retains gradient-visible filter inputs' --reporter=default --reporter=json --outputFile=./test/__results__/projective-filter-suite.json); then
+            control_exit=0
+          else
+            control_exit=$?
+          fi
+          printf '%s\n' "$control_exit" > qualification/control/exit-code.txt
+          mv packages/web-renderer/test/__results__ qualification/control/web-renderer
           exit "$diagnostic_failed"
       - name: Verify browser remains frozen
         if: always()
@@ -85,7 +102,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: filtered-gradient-native-origins-${{ matrix.os }}
+          name: filtered-gradient-local-paint-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
