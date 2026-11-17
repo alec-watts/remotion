@@ -25,19 +25,61 @@ const paintOnWhite = async (blob: Blob) => {
 	}
 };
 
-const drawSvgImage = async (image: HTMLImageElement, onWhite: boolean) => {
-	const canvas = new OffscreenCanvas(image.naturalWidth, image.naturalHeight);
+const alternativePaths = [
+	'readback',
+	'html-canvas',
+	'bitmap',
+	'blob-bitmap',
+	'unpremultiplied-bitmap',
+] as const;
+type CanvasPath = 'canvas' | (typeof alternativePaths)[number];
+
+const drawSvgImage = async (
+	image: HTMLImageElement,
+	blob: Blob,
+	onWhite: boolean,
+	path: CanvasPath,
+) => {
+	const {naturalWidth, naturalHeight} = image;
+	const canvas =
+		path === 'html-canvas'
+			? document.createElement('canvas')
+			: new OffscreenCanvas(naturalWidth, naturalHeight);
+	canvas.width = naturalWidth;
+	canvas.height = naturalHeight;
+	let bitmap: ImageBitmap | null = null;
 	try {
-		const context = canvas.getContext('2d', {alpha: true});
+		const context = canvas.getContext('2d', {
+			alpha: true,
+			willReadFrequently: path === 'readback',
+		});
 		if (!context) throw new Error('Cannot create drawable canvas');
 		if (onWhite) {
 			context.fillStyle = 'white';
 			context.fillRect(0, 0, canvas.width, canvas.height);
 		}
 
-		context.drawImage(image, 0, 0);
-		return await canvas.convertToBlob({type: 'image/png'});
+		if (path === 'bitmap') {
+			bitmap = await createImageBitmap(image);
+		} else if (path === 'blob-bitmap') {
+			bitmap = await createImageBitmap(blob);
+		} else if (path === 'unpremultiplied-bitmap') {
+			bitmap = await createImageBitmap(image, {premultiplyAlpha: 'none'});
+		}
+
+		context.drawImage(bitmap ?? image, 0, 0);
+		if (canvas instanceof OffscreenCanvas) {
+			return await canvas.convertToBlob({type: 'image/png'});
+		}
+
+		return await new Promise<Blob>((resolve, reject) => {
+			canvas.toBlob((png) => {
+				if (png) resolve(png);
+				else reject(new Error('Cannot encode drawable canvas'));
+			}, 'image/png');
+		});
 	} finally {
+		bitmap?.close();
 		canvas.width = 0;
 		canvas.height = 0;
 	}
@@ -171,9 +213,11 @@ test.for(
 								{omitBackground: !onWhite},
 							),
 						);
-						await capture(`canvas-${suffix}`, () =>
-							drawSvgImage(image, onWhite),
-						);
+						for (const path of ['canvas', ...alternativePaths] as const) {
+							await capture(`${path}-${suffix}`, () =>
+								drawSvgImage(image, blob, onWhite, path),
+							);
+						}
 					}
 
 					await capture('inline-serialized-white', () =>
@@ -228,6 +272,10 @@ test.for(
 			['image-clear', 'canvas-clear'],
 			['canvas-white', 'export-white'],
 			['canvas-clear', 'export-clear'],
+			...alternativePaths.flatMap((path) => [
+				['native-white', `${path}-white`],
+				['native-clear', `${path}-clear`],
+			]),
 		]) {
 			const before = images.get(a);
 			const after = images.get(b);
