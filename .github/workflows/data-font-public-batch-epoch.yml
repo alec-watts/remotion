@@ -1,18 +1,14 @@
-name: Trace data-font cache in public frame batches
+name: Trace data-font cache during the full web renderer suite
 on:
   push:
-    branches: [codex/data-font-public-batch-epoch]
+    branches: [codex/data-font-cache-full-suite]
 permissions:
   contents: read
 jobs:
-  compare:
+  trace:
     if: github.repository == 'alec-watts/remotion'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-24.04]
+    runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
@@ -28,46 +24,40 @@ jobs:
       - run: cd packages/web-renderer && bunx playwright install --with-deps
       - name: Freeze browser inputs
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then
-            bundle="$RUNNER_TEMP/Mask Gradient Chrome.app"
-            ditto "/Applications/Google Chrome.app" "$bundle"
-            chflags -R uchg "$bundle"
-            binary="$bundle/Contents/MacOS/Google Chrome"
-          else
-            bundle="$RUNNER_TEMP/mask-gradient-chrome"
-            mkdir -p "$bundle"
-            cp -RL /opt/google/chrome/. "$bundle/"
-            binary="$bundle/chrome"
-          fi
-          echo "MASK_GRADIENT_CHROME=$binary" >> "$GITHUB_ENV"
-          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/mask-chrome.sha256"
+          bundle="$RUNNER_TEMP/Font Cache Chrome.app"
+          ditto "/Applications/Google Chrome.app" "$bundle"
+          chflags -R uchg "$bundle"
+          binary="$bundle/Contents/MacOS/Google Chrome"
+          echo "FONT_CACHE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/font-cache-chrome.sha256"
           python3 - <<'PIN'
           from pathlib import Path
           config = Path("packages/web-renderer/vitest.config.ts")
           source = config.read_text()
           marker = "channel: 'chrome',"
           assert source.count(marker) == 1
-          config.write_text(source.replace(marker, marker + " executablePath: process.env.MASK_GRADIENT_CHROME,"))
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.FONT_CACHE_CHROME,"))
           PIN
-      - name: Capture the cache trace across public frame batches
+      - name: Run the upstream renderer command with cache tracing
         run: |
-          git diff --exit-code HEAD^ HEAD -- packages/web-renderer/src/drawing
-          bunx turbo run make --filter=@remotion/web-renderer
+          git diff --exit-code 8c9241525789deb049200154f060be0ef5b35883 HEAD -- packages/web-renderer/src/drawing packages/web-renderer/src/render-still-on-web.tsx bun.lock
           mkdir -p qualification packages/web-renderer/test/__results__
-          "$MASK_GRADIENT_CHROME" --version > qualification/chrome.txt
+          "$FONT_CACHE_CHROME" --version > qualification/chrome.txt
           shasum -a 256 packages/web-renderer/src/test/font-fingerprint-cache-browser.test.ts packages/web-renderer/src/test/fixtures/svg-titled-font-groups.tsx packages/web-renderer/src/drawing/fingerprint-css-font-groups.ts packages/web-renderer/src/drawing/font-fingerprint-cache.ts packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > qualification/inputs.txt
           status=0
-          (cd packages/web-renderer && bunx vitest src/test/font-fingerprint-cache-browser.test.ts --run --repeats 4 --testNamePattern 'reuses candidate rasters through public batch' --reporter=default --reporter=json --outputFile=./test/__results__/font-batch-epoch.json) || status=$?
-          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          bun run testwebrenderer --log-order=stream || status=$?
+          if [ -d packages/web-renderer/test/__results__/font-batch-epoch ]; then
+            mv packages/web-renderer/test/__results__/font-batch-epoch qualification/font-batch-epoch
+          fi
           if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
             mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures qualification/native-pixel-failures
           fi
-          shasum -a 256 --quiet -c "$RUNNER_TEMP/mask-chrome.sha256"
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/font-cache-chrome.sha256"
           exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: data-font-public-batch-epoch-${{ matrix.os }}
+          name: data-font-cache-full-suite-macos
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
@@ -75,6 +65,6 @@ jobs:
       - name: Release the frozen macOS browser
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/Mask Gradient Chrome.app" ]; then
-            chflags -R nouchg "$RUNNER_TEMP/Mask Gradient Chrome.app"
+          if [ -d "$RUNNER_TEMP/Font Cache Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Font Cache Chrome.app"
           fi
