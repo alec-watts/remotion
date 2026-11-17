@@ -7,12 +7,30 @@ export const backdropFilterCases = [
 	{mode: 'nested-opacity', filter: 'brightness(50%)'},
 	{mode: 'blended', filter: 'brightness(50%)'},
 	{mode: 'transformed', filter: 'blur(4px)'},
+	{mode: 'transformed-x', filter: 'blur(4px)'},
+	{mode: 'transformed-y', filter: 'blur(4px)'},
 ] as const;
 
 type BackdropCase = (typeof backdropFilterCases)[number];
 
-const Chart = () => {
+const Chart = ({mode}: {readonly mode: BackdropCase['mode']}) => {
 	const frame = useCurrentFrame();
+	if (mode === 'transformed-x' || mode === 'transformed-y') {
+		const verticalEdge = mode === 'transformed-x';
+		return (
+			<div
+				style={{
+					position: 'absolute',
+					left: verticalEdge ? (frame === 0 ? 108 : 116) : 0,
+					top: verticalEdge ? 0 : frame === 0 ? 59 : 67,
+					right: 0,
+					bottom: 0,
+					backgroundColor: '#e6b246',
+				}}
+			/>
+		);
+	}
+
 	return Array.from({length: 5}, (_, index) => (
 		<div
 			key={index}
@@ -46,7 +64,7 @@ export const backdropFilter = ({
 			WebkitBackdropFilter: enabled ? scene.filter : 'none',
 		};
 		if (scene.mode === 'rounded-blur') style.borderRadius = 23;
-		if (scene.mode === 'transformed') {
+		if (scene.mode.startsWith('transformed')) {
 			style.transform = 'translate(6px, -4px) scale(1.25, 0.9)';
 			style.transformOrigin = '0 0';
 		}
@@ -57,19 +75,34 @@ export const backdropFilter = ({
 			style.backgroundColor = '#ff8a42cc';
 		}
 
-		const overlay = <div style={style} />;
+		const overlay = (
+			<div style={style}>
+				{scene.mode === 'transformed-y' ? (
+					<div
+						style={{
+							position: 'absolute',
+							right: 4,
+							top: 8,
+							width: 8,
+							height: 8,
+							backgroundColor: '#ff005d',
+						}}
+					/>
+				) : null}
+			</div>
+		);
 		return (
 			<AbsoluteFill style={{backgroundColor: '#183048'}}>
 				{scene.mode === 'nested-opacity' ? (
 					<AbsoluteFill style={{opacity: 0.75}}>
-						<Chart />
+						<Chart mode={scene.mode} />
 						<AbsoluteFill style={{isolation: 'isolate'}}>
 							{overlay}
 						</AbsoluteFill>
 					</AbsoluteFill>
 				) : (
 					<>
-						<Chart />
+						<Chart mode={scene.mode} />
 						{overlay}
 					</>
 				)}

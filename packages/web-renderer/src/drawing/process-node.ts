@@ -190,12 +190,26 @@ export const processNode = async ({
 			waitForPageResponsiveness,
 		});
 		if (precompositing.backdropFilter !== null) {
+			// An unmodified 2D group can paint the backdrop directly in the parent
+			// raster. Its own content still uses the isolated group above it.
+			const compositeBackdropInParent =
+				!is3DPrecomposition &&
+				!isolatedElements.has(element) &&
+				precompositing.backdropFilter.startsWith('blur(') &&
+				precompositing.needsBlendMode === null &&
+				precompositing.needsFilterPrecompositing === null &&
+				precompositing.needsMaskImage === null &&
+				precompositing.needsSvgClip === null &&
+				computedStyle.clipPath === 'none' &&
+				opacity === 1 &&
+				context.globalAlpha === 1 &&
+				context.globalCompositeOperation === 'source-over';
 			drawBackdropFilter({
 				source: context.canvas,
-				destination: tempContext,
+				destination: compositeBackdropInParent ? context : tempContext,
 				filter: precompositing.backdropFilter,
 				dimensions,
-				layerRect,
+				layerRect: compositeBackdropInParent ? null : layerRect,
 				parentRect,
 				totalMatrix,
 				scale,

@@ -1,6 +1,7 @@
 import {parseBorderRadius} from './border-radius';
 import {drawRoundedRectPath} from './draw-rounded';
 import {scaleFilterLengths} from './handle-filter';
+import {setTransform} from './transform';
 import {transformDOMRect} from './transform-rect-with-matrix';
 
 const mirrorBackdrop = ({
@@ -71,7 +72,7 @@ export const drawBackdropFilter = ({
 	destination: OffscreenCanvasRenderingContext2D;
 	filter: string;
 	dimensions: DOMRect;
-	layerRect: DOMRect;
+	layerRect: DOMRect | null;
 	parentRect: DOMRect;
 	totalMatrix: DOMMatrix;
 	scale: number;
@@ -142,18 +143,22 @@ export const drawBackdropFilter = ({
 
 	// Filter the painted backdrop in the parent bitmap's coordinate system.
 	// Map it back to the element's group before applying group opacity or effects.
-	const parentToLayer = new DOMMatrix()
-		.scale(layerScale)
-		.translate(-layerRect.left, -layerRect.top)
-		.multiply(inverse)
-		.translate(parentRect.left, parentRect.top)
-		.scale(1 / scale);
-
 	destination.save();
 	try {
-		destination.setTransform(layerScale, 0, 0, layerScale, 0, 0);
-		const x = dimensions.left - layerRect.left;
-		const y = dimensions.top - layerRect.top;
+		const clipOrigin = layerRect ?? parentRect;
+		if (layerRect) {
+			destination.setTransform(layerScale, 0, 0, layerScale, 0, 0);
+		} else {
+			setTransform({
+				ctx: destination,
+				transform: totalMatrix,
+				parentRect,
+				scale,
+			});
+		}
+
+		const x = dimensions.left - clipOrigin.left;
+		const y = dimensions.top - clipOrigin.top;
 		const radii = parseBorderRadius({
 			borderRadius,
 			width: dimensions.width,
@@ -189,9 +194,23 @@ export const drawBackdropFilter = ({
 		}
 
 		destination.clip();
-		destination.setTransform(parentToLayer);
+		if (layerRect) {
+			destination.setTransform(
+				new DOMMatrix()
+					.scale(layerScale)
+					.translate(-layerRect.left, -layerRect.top)
+					.multiply(inverse)
+					.translate(parentRect.left, parentRect.top)
+					.scale(1 / scale),
+			);
+		} else {
+			destination.resetTransform();
+		}
+
 		destination.globalAlpha = 1;
-		destination.globalCompositeOperation = 'destination-over';
+		destination.globalCompositeOperation = layerRect
+			? 'destination-over'
+			: 'source-over';
 		destination.filter = 'none';
 		destination.drawImage(
 			backdrop,
