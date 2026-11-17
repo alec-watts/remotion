@@ -2,6 +2,7 @@ import {Internals, type LogLevel} from 'remotion';
 import {getBiggestBoundingClientRect} from '../get-biggest-bounding-client-rect';
 import type {InternalState} from '../internal-state';
 import {createLayerWithRasterScale} from '../take-screenshot';
+import {splitAtTopLevel} from './background-image-rect';
 import {
 	calculateTransforms,
 	type TransformStyleCache,
@@ -117,10 +118,26 @@ export const processNode = async ({
 
 	if (precompositing.needsPrecompositing) {
 		const start = Date.now();
-		const filterBounds = precompositing.needsFilterPrecompositing
+		const filter = precompositing.needsFilterPrecompositing;
+		// The native fallback samples the filtered layer inside its paint
+		// bounds before the final axis-aligned transform.
+		const useLayoutFilterRaster =
+			internalState.experimental3DRendering &&
+			!precompositing.needs3DTransformViaWebGL &&
+			totalMatrix.b === 0 &&
+			totalMatrix.c === 0 &&
+			totalMatrix.a !== 0 &&
+			totalMatrix.d !== 0 &&
+			(totalMatrix.a !== 1 || totalMatrix.d !== 1) &&
+			filter !== null &&
+			filter.startsWith('drop-shadow(') &&
+			splitAtTopLevel(filter, ' ').length === 1 &&
+			!supportsCanvasDropShadow();
+		const filterBounds = filter
 			? getPrecomposeRectForFilter({
 					element,
-					filter: precompositing.needsFilterPrecompositing,
+					filter,
+					includeCapturePadding: useLayoutFilterRaster ? false : null,
 				})
 			: null;
 		// Include offscreen inputs before the perspective path can reject them.
@@ -292,25 +309,32 @@ export const processNode = async ({
 
 		const is3DPrecomposition = precompositing.needs3DTransformViaWebGL;
 
+		const geometry = useLayoutFilterRaster
+			? {
+					rect: precomposeRect,
+					scale,
+					rasterScale: null,
+					pixelWidth: null,
+					pixelHeight: null,
+				}
+			: getPrecomposedLayerGeometry({
+					precomposeRect,
+					totalMatrix,
+					parentRect,
+					scale,
+					is3DPrecomposition,
+					rasterScale:
+						knownFilterFootprint && filter
+							? (contextRasterScales.get(context) ?? {x: scale, y: scale})
+							: null,
+				});
 		const {
 			rect: layerRect,
 			scale: layerScale,
 			rasterScale: layerRasterScale,
 			pixelWidth: layerPixelWidth,
 			pixelHeight: layerPixelHeight,
-		} = getPrecomposedLayerGeometry({
-			precomposeRect,
-			totalMatrix,
-			parentRect,
-			scale,
-			is3DPrecomposition,
-			rasterScale:
-				internalState.experimental3DRendering &&
-				precompositing.needsFilterPrecompositing &&
-				!precompositing.needsFilterPrecompositing.includes('url(')
-					? (contextRasterScales.get(context) ?? {x: scale, y: scale})
-					: null,
-		});
+		} = geometry;
 
 		const tempContext = await createLayerWithRasterScale({
 			transparent: true,
@@ -387,7 +411,10 @@ export const processNode = async ({
 				precompositing.needsFilterPrecompositing.includes('drop-shadow(') &&
 				!supportsCanvasDropShadow();
 			const filterRasterScale =
-				layerRasterScale ?? (useTranslatedShadowFallback ? {x: 1, y: 1} : null);
+				layerRasterScale ??
+				(useLayoutFilterRaster || useTranslatedShadowFallback
+					? {x: layerScale, y: layerScale}
+					: null);
 			const filteredImage = filterRasterScale
 				? await rasterizeCssFilter({
 						source: tempContext.canvas,

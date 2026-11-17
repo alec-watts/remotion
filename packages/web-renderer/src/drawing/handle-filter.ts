@@ -36,15 +36,17 @@ export const supportsCanvasDropShadow = () => {
 export const getPrecomposeRectForFilter = ({
 	element,
 	filter,
+	includeCapturePadding,
 }: {
 	element: HTMLElement | SVGElement;
 	filter: string;
+	includeCapturePadding: boolean | null;
 }): DOMRect => {
 	// Use getBiggestBoundingClientRect to include all children that may overflow
 	const elementRect = getBiggestBoundingClientRect(element, true, false, {
 		onlyOwnPlane: null,
 		experimental3DRendering: null,
-		includeCapturePadding: null,
+		includeCapturePadding,
 	});
 	const expansion = parseFilterOutsets(filter);
 	const bounds = element.getBoundingClientRect();
