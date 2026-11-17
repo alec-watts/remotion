@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -27,8 +27,7 @@ jobs:
         shell: pwsh
         run: |
           $main = $env:TURBO_SCM_BASE
-          $candidate = git rev-parse HEAD^
-          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the isolated test revision' }
+          $candidate = 'd7b68835cc6c6d9779490a530dcf87addf974aac'
           $env:TURBO_SCM_HEAD = $candidate
           $artifacts = Join-Path $env:RUNNER_TEMP 'audio-format-attempt-isolation-windows'
           New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
@@ -64,6 +63,13 @@ jobs:
             $status = $LASTEXITCODE
             $status | Set-Content (Join-Path $record 'status.txt')
             Get-Content (Join-Path $record 'test.log') -Tail 80
+            Write-Host "Revision for ${arm}: $(Get-Content (Join-Path $record 'revision.txt'))"
+            Get-Content (Join-Path $record 'inputs.sha256')
+            $codecResult = Select-String -LiteralPath (Join-Path $record 'test.log') -Pattern 'Should render WAV, MP3, and AAC audio files'
+            $codecResult | ForEach-Object { Write-Host $_.Line }
+            if ($status -eq 0 -and -not ($codecResult.Line -match '\(pass\)|✓')) {
+              throw "Codec assertion missing from the successful $arm test log"
+            }
             if ($status -ne 0) { $failed = $status }
           }
 
@@ -72,6 +78,6 @@ jobs:
         if: always()
         with:
           name: audio-format-attempt-isolation-windows
-          path: ${{ runner.temp }}/layered-mask-windows
+          path: ${{ runner.temp }}/audio-format-attempt-isolation-windows
           if-no-files-found: error
           retention-days: 7
