@@ -7,7 +7,7 @@ permissions:
 jobs:
   chromium:
     if: github.repository == 'alec-watts/remotion'
-    runs-on: macos-26-arm64
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
