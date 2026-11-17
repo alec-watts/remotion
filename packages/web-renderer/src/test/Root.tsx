@@ -184,6 +184,10 @@ import {
 	gridSamplerParent,
 	reviewSceneSize,
 } from './fixtures/preserve-3d-depth';
+import {
+	filterInputCases,
+	projectiveFilterInput,
+} from './fixtures/projective-filter-input';
 import {queuedFrameCapturePreview} from './fixtures/queued-frame-capture';
 import {replacedElementPixelated} from './fixtures/replaced-element-pixelated';
 import {
@@ -460,6 +464,14 @@ export const Root: React.FC = () => {
 				<Composition {...opaqueTargetText} />
 				<Composition {...opaqueTargetGroup} />
 			</Folder>
+			{filterInputCases.flatMap(({kind}) =>
+				[false, true].map((preserving) => (
+					<Composition
+						key={`${kind}-${preserving}`}
+						{...projectiveFilterInput(kind, preserving)}
+					/>
+				)),
+			)}
 			<Composition {...perspectiveFilter} />
 			<Composition {...preserve3DBlendIsolation} />
 			<Composition {...gridSamplerParent} />
