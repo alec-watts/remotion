@@ -151,3 +151,53 @@ for (const readback of [false, true]) {
 		});
 	}
 }
+
+const nativeGradientPositions = [
+	{left: 26, top: 100, shadowOffset: 60},
+	{left: 25, top: 101, shadowOffset: 60},
+	{left: 32, top: 107, shadowOffset: 60},
+	{left: 33, top: 108, shadowOffset: 60},
+	{left: 25, top: 100, shadowOffset: 61},
+	{left: 145, top: 100, shadowOffset: -60},
+];
+
+for (const position of nativeGradientPositions) {
+	test(`captures native gradient at ${position.left},${position.top} with shadow ${position.shadowOffset}`, async () => {
+		const composition = projectiveFilterInput(
+			'gradient-visible',
+			false,
+			position,
+		);
+		const native = await captureNativeReference(composition, 0, {
+			omitBackground: false,
+		});
+		const bytes = new Uint8Array(await native.arrayBuffer());
+		let binary = '';
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		await server.commands.writeFile(
+			`test/__results__/native-gradient-origins/${server.browser}/${composition.id}.png`,
+			btoa(binary),
+			'base64',
+		);
+		const image = await createImageBitmap(native);
+		try {
+			expect(image.width).toBe(300);
+			expect(image.height).toBe(300);
+			const canvas = new OffscreenCanvas(300, 300);
+			const ctx = canvas.getContext('2d')!;
+			ctx.drawImage(image, 0, 0);
+			const {data} = ctx.getImageData(position.left, position.top, 100, 50);
+			expect(data[0]).toBeGreaterThan(250);
+			expect(data[3998]).toBe(0);
+			expect(data[3999]).toBe(255);
+			const shadowX = position.left + position.shadowOffset * 2;
+			expect(
+				Array.from(
+					ctx.getImageData(shadowX + 50, position.top + 20, 1, 1).data,
+				),
+			).toEqual([0, 0, 255, 255]);
+		} finally {
+			image.close();
+		}
+	});
+}

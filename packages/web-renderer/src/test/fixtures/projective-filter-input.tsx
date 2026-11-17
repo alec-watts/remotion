@@ -39,6 +39,7 @@ export const filterInputCases = [
 export const projectiveFilterInput = (
 	kind: (typeof filterInputCases)[number]['kind'],
 	preserving: boolean,
+	position: {left: number; top: number; shadowOffset: number} | null = null,
 ) => {
 	const scene = filterInputCases.find((item) => item.kind === kind)!;
 	const Component: React.FC = () => (
@@ -52,8 +53,8 @@ export const projectiveFilterInput = (
 			<div
 				style={{
 					position: 'absolute',
-					left: scene.left,
-					top: kind === 'fractional' ? 100.25 : 100,
+					left: position?.left ?? scene.left,
+					top: position?.top ?? (kind === 'fractional' ? 100.25 : 100),
 					width: kind === 'fractional' ? 50.5 : 50,
 					height: kind === 'fractional' ? 49.25 : 50,
 					backgroundColor: kind.startsWith('text') ? 'transparent' : 'red',
@@ -71,7 +72,7 @@ export const projectiveFilterInput = (
 						kind === 'blurred'
 							? 'blur(2px) drop-shadow(150px 0 0 blue)'
 							: kind.endsWith('visible')
-								? 'drop-shadow(60px 0 0 blue)'
+								? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
 								: 'drop-shadow(150px 0 0 blue)',
 				}}
 			>
@@ -81,7 +82,7 @@ export const projectiveFilterInput = (
 	);
 	return {
 		component: Component,
-		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}`,
+		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}`,
 		width: 300,
 		height: 300,
 		fps: 30,
