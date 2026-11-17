@@ -36,17 +36,27 @@ export const createCssMask = async ({
 		}),
 	);
 
-	const source = document.createElement('img');
+	const alphaOnly =
+		!Number.isInteger(scale) &&
+		Math.abs(precomposeRect.width * scale - width) <= width * Number.EPSILON &&
+		Math.abs(precomposeRect.height * scale - height) <= height * Number.EPSILON;
+	const image = alphaOnly ? null : document.createElement('img');
+	const source = image ?? document.createElement('div');
 	const {signal} = internalState.rasterImageLoaderState;
-	const abort = () => source.removeAttribute('src');
+	const abort = () => image?.removeAttribute('src');
 	signal?.addEventListener('abort', abort, {once: true});
 	try {
-		source.src = await readBlobAsDataUrl({
-			blob: await content.convertToBlob({type: 'image/png'}),
-			signal: internalState.rasterImageLoaderState.signal,
-		});
-		if (signal?.aborted) throw new Error('Aborted');
-		await source.decode();
+		if (image) {
+			image.src = await readBlobAsDataUrl({
+				blob: await content.convertToBlob({type: 'image/png'}),
+				signal,
+			});
+			if (signal?.aborted) throw new Error('Aborted');
+			await image.decode();
+		} else {
+			source.style.backgroundColor = 'white';
+		}
+
 		if (signal?.aborted) throw new Error('Aborted');
 		Object.assign(source.style, {
 			position: 'absolute',
@@ -72,13 +82,7 @@ export const createCssMask = async ({
 			const scaleX = width / precomposeRect.width;
 			const scaleY = height / precomposeRect.height;
 			viewport.style.transformOrigin = '0 0';
-			if (
-				!Number.isInteger(scale) &&
-				Math.abs(precomposeRect.width * scale - width) <=
-					width * Number.EPSILON &&
-				Math.abs(precomposeRect.height * scale - height) <=
-					height * Number.EPSILON
-			) {
+			if (alphaOnly) {
 				// Keep the mask in layout coordinates and shift the scaled
 				// viewport to the capture origin after layout.
 				target.style.left = `${maskRect.left}px`;
@@ -96,9 +100,9 @@ export const createCssMask = async ({
 
 		const drawable = await turnSvgIntoDrawable(svg);
 		if (signal?.aborted) throw new Error('Aborted');
-		return drawable;
+		return {drawable, alphaOnly};
 	} finally {
 		signal?.removeEventListener('abort', abort);
-		source.removeAttribute('src');
+		image?.removeAttribute('src');
 	}
 };

@@ -29,7 +29,7 @@ export const handleMask = async ({
 	internalState: InternalState;
 }) => {
 	if (maskImageInfo.type === 'layers') {
-		const groupImage = await createCssMask({
+		const {drawable, alphaOnly} = await createCssMask({
 			content: tempContext.canvas,
 			maskImageInfo,
 			maskRect,
@@ -53,7 +53,12 @@ export const handleMask = async ({
 			if (!masked) throw new Error('Could not create mask group context');
 			// The drawable already uses device dimensions. Keep it as the group
 			// source instead of drawing it through the original layer's transform.
-			masked.drawImage(groupImage, 0, 0);
+			if (alphaOnly) {
+				masked.drawImage(tempContext.canvas, 0, 0);
+				masked.globalCompositeOperation = 'destination-in';
+			}
+
+			masked.drawImage(drawable, 0, 0);
 			return {canvas, [Symbol.dispose]: dispose};
 		} catch (error) {
 			dispose();
