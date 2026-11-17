@@ -188,15 +188,77 @@ const drawMaskedSvgThroughReadback = ({
 	}
 };
 
+const drawFilteredSvgThroughOrdinaryCanvas = ({
+	drawable,
+	fitted,
+	context,
+}: {
+	drawable: HTMLImageElement;
+	fitted: ReturnType<typeof fitSvgIntoItsContainer>;
+	context: OffscreenCanvasRenderingContext2D;
+}) => {
+	const {width, height} = context.canvas;
+	if (
+		context.globalCompositeOperation !== 'source-over' ||
+		width <= 0 ||
+		height <= 0 ||
+		width > 16384 ||
+		height > 16384 ||
+		width * height > 16 * 1024 ** 2
+	)
+		return false;
+	const scratch = new OffscreenCanvas(width, height);
+	try {
+		const ordinary = scratch.getContext('2d', {
+			alpha: true,
+			willReadFrequently: false,
+		});
+		if (!ordinary) return false;
+		ordinary.drawImage(context.canvas, 0, 0);
+		ordinary.setTransform(context.getTransform());
+		ordinary.globalAlpha = context.globalAlpha;
+		ordinary.filter = context.filter;
+		ordinary.shadowColor = context.shadowColor;
+		ordinary.shadowBlur = context.shadowBlur;
+		ordinary.shadowOffsetX = context.shadowOffsetX;
+		ordinary.shadowOffsetY = context.shadowOffsetY;
+		ordinary.drawImage(
+			drawable,
+			fitted.left,
+			fitted.top,
+			fitted.width,
+			fitted.height,
+		);
+		context.save();
+		try {
+			context.resetTransform();
+			context.globalCompositeOperation = 'copy';
+			context.globalAlpha = 1;
+			context.filter = 'none';
+			context.shadowColor = 'transparent';
+			context.drawImage(scratch, 0, 0);
+		} finally {
+			context.restore();
+		}
+
+		return true;
+	} finally {
+		scratch.width = 0;
+		scratch.height = 0;
+	}
+};
+
 /**
  * Draw an SVG element using "contain" behavior (the default for SVGs).
  */
 const drawSvg = async ({
+	ordinaryFilter,
 	markup,
 	drawable,
 	dimensions,
 	contextToDraw,
 }: {
+	ordinaryFilter: boolean;
 	markup: Promise<string> | null;
 	drawable: HTMLImageElement;
 	dimensions: DOMRect;
@@ -209,6 +271,15 @@ const drawSvg = async ({
 			height: drawable.height,
 		},
 	});
+	if (
+		ordinaryFilter &&
+		drawFilteredSvgThroughOrdinaryCanvas({
+			drawable,
+			fitted,
+			context: contextToDraw,
+		})
+	)
+		return;
 	if (
 		markup &&
 		((await drawTransformedMaskedSvg({
@@ -394,6 +465,10 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 				getSvgMaskForDrawable(node, maskImage),
 			);
 			await drawSvg({
+				ordinaryFilter:
+					/AppleWebKit/.test(userAgent) &&
+					!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
+					Boolean(node.querySelector('feImage')),
 				drawable,
 				dimensions,
 				contextToDraw,

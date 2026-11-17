@@ -1,11 +1,7 @@
 import type {LogLevel} from 'remotion';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {compose} from './compose';
-import {
-	containsUrlMaskImage,
-	getMaskImageValue,
-	getSvgMaskForDrawable,
-} from './drawing/mask-image';
+import {containsUrlMaskImage} from './drawing/mask-image';
 import type {HtmlInCanvasContext} from './html-in-canvas';
 import {
 	containsLayoutSubtreeCanvas,
@@ -103,12 +99,7 @@ export const createLayer = async ({
 		element.ownerDocument.defaultView?.navigator.userAgent ?? '';
 	const useReadback =
 		/AppleWebKit/.test(userAgent) &&
-		!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
-		[element, ...element.querySelectorAll('svg')].some((candidate) => {
-			if (!(candidate instanceof SVGSVGElement)) return false;
-			const mask = getMaskImageValue(getComputedStyle(candidate));
-			return Boolean(mask && getSvgMaskForDrawable(candidate, mask));
-		});
+		!/Chrome\/|Chromium\/|Android/.test(userAgent);
 	const context = canvas.getContext('2d', {
 		alpha: transparent,
 		willReadFrequently: useReadback,
