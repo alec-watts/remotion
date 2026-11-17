@@ -1,7 +1,7 @@
-name: Compare cropped and full-viewport vertical text
+name: Compare CSS-positioned vertical text crop
 on:
   push:
-    branches: [codex/vertical-text-crop]
+    branches: [codex/vertical-text-crop-css-position]
 permissions:
   contents: read
 jobs:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 4
+          fetch-depth: 6
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -51,7 +51,7 @@ jobs:
           PIN
       - name: Capture native HTML, candidate DOM renderer and authored SVG
         run: |
-          git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts bun.lock
+          git diff --exit-code HEAD^ -- packages/web-renderer/src/test packages/web-renderer/src/take-screenshot.ts bun.lock
           source=packages/web-renderer/src/drawing/text/draw-vertical-text.ts
           baseline=56b11a711ec02792ad18313ff0647d52dbd820d2
           git diff "$baseline" HEAD -- "$source" > "$RUNNER_TEMP/vertical-text-crop.patch"
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vertical-text-crop-${{ matrix.os }}
+          name: vertical-text-crop-css-position-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

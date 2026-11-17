@@ -153,17 +153,16 @@ export const drawVerticalText = async ({
 	const svg = document.createElementNS(svgNamespace, 'svg');
 	svg.setAttribute('width', String(cropWidth));
 	svg.setAttribute('height', String(cropHeight));
-	if (cropWidth !== width || cropHeight !== height) {
-		svg.setAttribute('viewBox', `${left} ${top} ${cropWidth} ${cropHeight}`);
-	}
 
 	svg.style.cssText =
 		'position: fixed; left: -100000px; top: 0; pointer-events: none;';
 	const carrier = document.createElementNS(svgNamespace, 'foreignObject');
-	carrier.setAttribute('width', String(width));
-	carrier.setAttribute('height', String(height));
+	carrier.setAttribute('width', String(cropWidth));
+	carrier.setAttribute('height', String(cropHeight));
 	const viewport = document.createElement('div');
 	viewport.style.position = 'relative';
+	if (left !== 0) viewport.style.left = `${-left}px`;
+	if (top !== 0) viewport.style.top = `${-top}px`;
 	viewport.style.width = `${width}px`;
 	viewport.style.height = `${height}px`;
 	const textBlock = document.createElement('div');
