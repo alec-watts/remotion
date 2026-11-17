@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -33,6 +33,9 @@ jobs:
           New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
           node --version | Set-Content (Join-Path $artifacts 'node-version.txt')
           bun --version | Set-Content (Join-Path $artifacts 'bun-version.txt')
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
+          if ($LASTEXITCODE -ne 0) { throw 'Could not set the upstream test origin' }
+          git remote get-url origin | Set-Content (Join-Path $artifacts 'origin.txt')
           git diff --exit-code $main $candidate -- bun.lock packages/it-tests packages/example packages/renderer
           if ($LASTEXITCODE -ne 0) { throw 'The integration harness changed' }
 
