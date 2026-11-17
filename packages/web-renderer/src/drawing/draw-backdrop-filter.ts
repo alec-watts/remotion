@@ -152,18 +152,42 @@ export const drawBackdropFilter = ({
 	destination.save();
 	try {
 		destination.setTransform(layerScale, 0, 0, layerScale, 0, 0);
-		drawRoundedRectPath({
-			ctx: destination,
-			x: dimensions.left - layerRect.left,
-			y: dimensions.top - layerRect.top,
+		const x = dimensions.left - layerRect.left;
+		const y = dimensions.top - layerRect.top;
+		const radii = parseBorderRadius({
+			borderRadius,
 			width: dimensions.width,
 			height: dimensions.height,
-			borderRadius: parseBorderRadius({
-				borderRadius,
+		});
+		const corners = [
+			radii.topLeft,
+			radii.topRight,
+			radii.bottomRight,
+			radii.bottomLeft,
+		];
+		if (
+			typeof destination.roundRect === 'function' &&
+			corners.some((corner) => corner.horizontal !== 0 || corner.vertical !== 0)
+		) {
+			destination.beginPath();
+			destination.roundRect(
+				x,
+				y,
+				dimensions.width,
+				dimensions.height,
+				corners.map(({horizontal, vertical}) => ({x: horizontal, y: vertical})),
+			);
+		} else {
+			drawRoundedRectPath({
+				ctx: destination,
+				x,
+				y,
 				width: dimensions.width,
 				height: dimensions.height,
-			}),
-		});
+				borderRadius: radii,
+			});
+		}
+
 		destination.clip();
 		destination.setTransform(parentToLayer);
 		destination.globalAlpha = 1;
