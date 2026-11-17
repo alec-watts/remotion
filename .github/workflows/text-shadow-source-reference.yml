@@ -1,7 +1,7 @@
-name: Compare SVG replay of filtered mixed HTML layers
+name: Capture mixed HTML replay even when export rejects
 on:
   push:
-    branches: [codex/3d-mixed-markup-filter]
+    branches: [codex/3d-mixed-replay-isolated]
 permissions:
   contents: read
 jobs:

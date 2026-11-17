@@ -147,9 +147,11 @@ test.for(
 			);
 		};
 
-		const render = async (composition: typeof filtered) =>
-			(
-				await renderStillOnWeb({
+		const render = async (
+			composition: typeof filtered,
+		): Promise<PromiseSettledResult<Blob>> => {
+			try {
+				const still = await renderStillOnWeb({
 					composition,
 					frame: 0,
 					licenseKey: 'free-license',
@@ -157,8 +159,13 @@ test.for(
 					allowHtmlInCanvas: false,
 					experimental3DRendering: true,
 					scale,
-				})
-			).blob({format: 'png'});
+				});
+				return {status: 'fulfilled', value: await still.blob({format: 'png'})};
+			} catch (reason) {
+				return {status: 'rejected', reason};
+			}
+		};
+
 		let filteredMarkup: HTMLElement | null = null;
 		let sourceMarkup: HTMLElement | null = null;
 		const nativeFiltered = await native(filtered, (host) => {
@@ -191,32 +198,47 @@ test.for(
 		]);
 
 		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}${mixedMarkup ? `/${mixedMarkup}` : ''}`;
+		const exportResults = {
+			actualFiltered,
+			actualSource,
+			actualTransformOutside,
+			actualFilterOutside,
+		};
+		const errorText = (result: PromiseSettledResult<Blob>) =>
+			result.status === 'fulfilled' ? null : String(result.reason);
 		await server.commands.writeFile(
-			`${folder}/svg-replay.json`,
+			`${folder}/export-replay.json`,
 			JSON.stringify(
-				[svgFiltered, svgSource].map((result) =>
-					result.status === 'fulfilled' ? null : String(result.reason),
+				Object.fromEntries(
+					Object.entries(exportResults).map(([name, result]) => [
+						name,
+						errorText(result),
+					]),
 				),
 			),
 		);
+		await server.commands.writeFile(
+			`${folder}/svg-replay.json`,
+			JSON.stringify([svgFiltered, svgSource].map(errorText)),
+		);
 		for (const [name, blob] of Object.entries({
 			nativeFiltered,
-			actualFiltered,
 			nativeSource,
-			actualSource,
 			nativeShifted,
 			nativeLayered,
 			nativeTransformOutside,
-			actualTransformOutside,
 			nativeFilterOutside,
-			actualFilterOutside,
 			nativeTransformOutsideSource,
 			nativeFilterOutsideSource,
-			svgFiltered:
-				svgFiltered.status === 'fulfilled' ? svgFiltered.value : null,
-			svgSource: svgSource.status === 'fulfilled' ? svgSource.value : null,
+			...Object.fromEntries(
+				Object.entries({...exportResults, svgFiltered, svgSource}).flatMap(
+					([captureName, capture]) =>
+						capture.status === 'fulfilled'
+							? [[captureName, capture.value]]
+							: [],
+				),
+			),
 		})) {
-			if (!blob) continue;
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer()))
 				binary += String.fromCharCode(byte);
@@ -227,43 +249,25 @@ test.for(
 			);
 		}
 
-		expect
-			.soft(
-				(await countNativePixels(nativeFiltered, actualFiltered))
-					.mismatchedPixels,
-			)
-			.toBe(0);
-		expect
-			.soft(
-				(await countNativePixels(nativeSource, actualSource)).mismatchedPixels,
-			)
-			.toBe(0);
-		expect
-			.soft(
-				(
-					await countNativePixels(
-						nativeTransformOutside,
-						actualTransformOutside,
-					)
-				).mismatchedPixels,
-			)
-			.toBe(0);
-		expect
-			.soft(
-				(await countNativePixels(nativeFilterOutside, actualFilterOutside))
-					.mismatchedPixels,
-			)
-			.toBe(0);
-		for (const [expected, replay] of [
-			[nativeFiltered, svgFiltered],
-			[nativeSource, svgSource],
+		for (const [name, expected, capture] of [
+			['filtered export', nativeFiltered, actualFiltered],
+			['unfiltered export', nativeSource, actualSource],
+			[
+				'outer transform export',
+				nativeTransformOutside,
+				actualTransformOutside,
+			],
+			['outer filter export', nativeFilterOutside, actualFilterOutside],
+			['filtered SVG replay', nativeFiltered, svgFiltered],
+			['unfiltered SVG replay', nativeSource, svgSource],
 		] as const) {
-			if (replay.status === 'rejected') {
-				expect.soft(String(replay.reason)).toBeNull();
+			if (capture.status === 'rejected') {
+				expect.soft(errorText(capture), name).toBeNull();
 			} else {
 				expect
 					.soft(
-						(await countNativePixels(expected, replay.value)).mismatchedPixels,
+						(await countNativePixels(expected, capture.value)).mismatchedPixels,
+						name,
 					)
 					.toBe(0);
 			}
