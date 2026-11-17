@@ -1,7 +1,7 @@
-name: Compare masked SVG root viewBox and readback transfers
+name: Compare SVG masks moved to painted content
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-root-viewbox]
+    branches: [codex/qualify-svg-root-mask-content-group]
 permissions:
   contents: read
 jobs:
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-root-viewbox-${{ matrix.os }}
+          name: svg-root-mask-content-group-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

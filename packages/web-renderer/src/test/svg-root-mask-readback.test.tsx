@@ -264,6 +264,71 @@ test.for(
 				});
 			}
 
+			if (mode === 'root-mask') {
+				for (const placement of ['group-transform', 'group-viewbox']) {
+					if (
+						placement === 'group-viewbox' &&
+						(a <= 0 || d <= 0 || b !== 0 || c !== 0)
+					) {
+						continue;
+					}
+
+					const label = `svg-${placement}`;
+					await capture(label, async () => {
+						const root = new DOMParser().parseFromString(svg, 'image/svg+xml')
+							.documentElement as unknown as SVGSVGElement;
+						const authoredMask = root.getAttribute('mask');
+						const painted = [...root.children].filter(
+							(element) => element.localName === 'rect',
+						);
+						if (
+							!authoredMask ||
+							painted.length !== 2 ||
+							root.hasAttribute('viewBox')
+						) {
+							throw new Error(
+								'Expected a mask and two rectangles on the authored SVG root',
+							);
+						}
+
+						root.removeAttribute('mask');
+						const properties = [...Array.from(root.style)];
+						for (const property of properties) {
+							if (/^(?:-webkit-)?mask(?:-|$)/.test(property)) {
+								root.style.removeProperty(property);
+							}
+						}
+
+						const group = root.ownerDocument.createElementNS(
+							root.namespaceURI,
+							'g',
+						);
+						group.setAttribute('mask', authoredMask);
+						painted[0]!.before(group);
+						group.append(...painted);
+						root.setAttribute('width', String(width));
+						root.setAttribute('height', String(height));
+						root.setAttribute('preserveAspectRatio', 'none');
+						if (placement === 'group-viewbox') {
+							root.setAttribute(
+								'viewBox',
+								`${-e / a} ${-f / d} ${width / a} ${height / d}`,
+							);
+						} else {
+							root.setAttribute('viewBox', `0 0 ${width} ${height}`);
+							group.setAttribute(
+								'transform',
+								`matrix(${a} ${b} ${c} ${d} ${e} ${f})`,
+							);
+						}
+
+						const markup = new XMLSerializer().serializeToString(root);
+						await server.commands.writeFile(`${folder}/${label}.svg`, markup);
+						return paint(markup, label, true, server.browser === 'webkit');
+					});
+				}
+			}
+
 			return wrapperCanvas;
 		});
 		const svgComparison =
