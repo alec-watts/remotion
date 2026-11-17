@@ -197,6 +197,54 @@ export const drawBorderRadius = ({
 		const newBottom = Math.ceil(
 			Math.max(rect.bottom, rect.bottom + spread + shadow.offsetY + margin),
 		);
+		const squareCorners = Object.values(shadowRadius).every(
+			(radius) => radius.horizontal === 0 && radius.vertical === 0,
+		);
+		const {a, b, c, d, e, f} = ctx.getTransform();
+		if (
+			squareCorners &&
+			shadow.blurRadius > 0 &&
+			a === 1 &&
+			b === 0 &&
+			c === 0 &&
+			d === 1 &&
+			[rect.left + e, rect.right + e, rect.top + f, rect.bottom + f].every(
+				Number.isInteger,
+			) &&
+			Object.values(borderRadius).every(
+				(radius) => radius.horizontal === 0 && radius.vertical === 0,
+			) &&
+			ctx.globalAlpha === 1 &&
+			ctx.globalCompositeOperation === 'source-over' &&
+			(!ctx.filter || ctx.filter === 'none')
+		) {
+			ctx.save();
+			try {
+				const clip = new Path2D();
+				clip.rect(newLeft, newTop, newRight - newLeft, newBottom - newTop);
+				clip.rect(rect.left, rect.top, rect.width, rect.height);
+				ctx.clip(clip, 'evenodd');
+
+				// Move the caster outside the clip but keep its shadow in place.
+				const shift = rect.left - spread + width - newLeft + 1;
+				ctx.shadowBlur = shadow.blurRadius;
+				ctx.shadowColor = shadow.color;
+				ctx.shadowOffsetX = shadow.offsetX + shift;
+				ctx.shadowOffsetY = shadow.offsetY;
+				ctx.fillStyle = 'black';
+				ctx.fillRect(
+					rect.left - spread - shift,
+					rect.top - spread,
+					width,
+					height,
+				);
+			} finally {
+				ctx.restore();
+			}
+
+			continue;
+		}
+
 		const leftOffset = rect.left - newLeft;
 		const topOffset = rect.top - newTop;
 		const newCanvas = new OffscreenCanvas(
@@ -215,9 +263,6 @@ export const drawBorderRadius = ({
 		newCtx.fillStyle = 'black';
 		const casterX = leftOffset - spread - newCanvas.width * 2;
 		const casterY = topOffset - spread;
-		const squareCorners = Object.values(shadowRadius).every(
-			(radius) => radius.horizontal === 0 && radius.vertical === 0,
-		);
 		if (squareCorners) {
 			newCtx.fillRect(casterX, casterY, width, height);
 		} else {

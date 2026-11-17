@@ -1,7 +1,7 @@
-name: Compare square caster rectangle shadow primitive
+name: Compare direct shadow compositing on the destination
 on:
   push:
-    branches: [codex/shadow-square-caster-primitive]
+    branches: [codex/shadow-destination-compositing]
 permissions:
   contents: read
 jobs:
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shadow-square-caster-primitive-${{ matrix.os }}
+          name: shadow-destination-compositing-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
