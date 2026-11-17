@@ -1,6 +1,7 @@
 import {calculateObjectFit, parseObjectFit} from './calculate-object-fit';
 import type {DrawFn} from './drawn-fn';
 import {fitSvgIntoItsContainer} from './fit-svg-into-its-dimensions';
+import {getMaskImageValue, getSvgMaskForDrawable} from './mask-image';
 import {turnSvgIntoDrawable} from './turn-svg-into-drawable';
 
 const getReadableImageError = (
@@ -31,14 +32,86 @@ const getReadableImageError = (
 	return null;
 };
 
+const drawMaskedSvgThroughReadback = ({
+	drawable,
+	fitted,
+	context,
+}: {
+	drawable: HTMLImageElement;
+	fitted: ReturnType<typeof fitSvgIntoItsContainer>;
+	context: OffscreenCanvasRenderingContext2D;
+}) => {
+	const matrix = context.getTransform();
+	const corners = [
+		[fitted.left, fitted.top],
+		[fitted.left + fitted.width, fitted.top],
+		[fitted.left, fitted.top + fitted.height],
+		[fitted.left + fitted.width, fitted.top + fitted.height],
+	].map(([cornerX, cornerY]) =>
+		matrix.transformPoint({x: cornerX, y: cornerY}),
+	);
+	const x = Math.floor(Math.min(...corners.map((corner) => corner.x)));
+	const y = Math.floor(Math.min(...corners.map((corner) => corner.y)));
+	const width = Math.ceil(Math.max(...corners.map((corner) => corner.x))) - x;
+	const height = Math.ceil(Math.max(...corners.map((corner) => corner.y))) - y;
+	if (
+		!Number.isFinite(width * height) ||
+		width <= 0 ||
+		height <= 0 ||
+		width > 16384 ||
+		height > 16384 ||
+		width * height > 16 * 1024 ** 2
+	) {
+		return false;
+	}
+
+	const scratch = new OffscreenCanvas(width, height);
+	try {
+		const readback = scratch.getContext('2d', {
+			alpha: true,
+			willReadFrequently: true,
+		});
+		if (!readback) return false;
+		readback.setTransform(
+			matrix.a,
+			matrix.b,
+			matrix.c,
+			matrix.d,
+			matrix.e - x,
+			matrix.f - y,
+		);
+		readback.drawImage(
+			drawable,
+			fitted.left,
+			fitted.top,
+			fitted.width,
+			fitted.height,
+		);
+		context.save();
+		try {
+			context.resetTransform();
+			context.drawImage(scratch, x, y);
+		} finally {
+			context.restore();
+		}
+
+		return true;
+	} finally {
+		scratch.width = 0;
+		scratch.height = 0;
+	}
+};
+
 /**
  * Draw an SVG element using "contain" behavior (the default for SVGs).
  */
 const drawSvg = ({
+	useReadback,
 	drawable,
 	dimensions,
 	contextToDraw,
 }: {
+	useReadback: boolean;
 	drawable: HTMLImageElement;
 	dimensions: DOMRect;
 	contextToDraw: OffscreenCanvasRenderingContext2D;
@@ -50,6 +123,13 @@ const drawSvg = ({
 			height: drawable.height,
 		},
 	});
+	if (
+		useReadback &&
+		drawMaskedSvgThroughReadback({drawable, fitted, context: contextToDraw})
+	) {
+		return;
+	}
+
 	contextToDraw.drawImage(
 		drawable,
 		fitted.left,
@@ -211,7 +291,16 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 		// Handle SVG elements separately - they use "contain" behavior by default
 		if (node instanceof SVGSVGElement) {
 			const drawable = await turnSvgIntoDrawable(node);
-			drawSvg({drawable, dimensions, contextToDraw});
+			const maskImage = getMaskImageValue(computedStyle);
+			const userAgent =
+				node.ownerDocument.defaultView?.navigator.userAgent ?? '';
+			const useReadback = Boolean(
+				/AppleWebKit/.test(userAgent) &&
+				!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
+				maskImage &&
+				getSvgMaskForDrawable(node, maskImage),
+			);
+			drawSvg({drawable, dimensions, contextToDraw, useReadback});
 			return;
 		}
 
