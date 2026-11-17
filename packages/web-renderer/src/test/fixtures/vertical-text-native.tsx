@@ -60,9 +60,11 @@ const height = 180;
 export const verticalTextNative = ({
 	entry,
 	carrier,
+	backdrop = 'outer',
 }: {
 	entry: (typeof verticalTextCases)[number];
 	carrier: 'html' | 'svg';
+	backdrop?: 'outer' | 'transparent' | 'inside-svg';
 }) => {
 	const paintedText = () => (
 		<div
@@ -88,11 +90,21 @@ export const verticalTextNative = ({
 		</div>
 	);
 	const Component = () => (
-		<AbsoluteFill style={{backgroundColor: 'white'}}>
+		<AbsoluteFill
+			style={{backgroundColor: backdrop === 'outer' ? 'white' : 'transparent'}}
+		>
 			{carrier === 'svg' ? (
 				<svg width={width} height={height}>
 					<foreignObject x={0} y={0} width={width} height={height}>
-						<div style={{position: 'relative', width, height}}>
+						<div
+							style={{
+								position: 'relative',
+								width,
+								height,
+								backgroundColor:
+									backdrop === 'inside-svg' ? 'white' : 'transparent',
+							}}
+						>
 							{paintedText()}
 						</div>
 					</foreignObject>
@@ -103,7 +115,10 @@ export const verticalTextNative = ({
 		</AbsoluteFill>
 	);
 	return {
-		id: `vertical-text-${entry.id}-${carrier}`,
+		id:
+			backdrop === 'outer'
+				? `vertical-text-${entry.id}-${carrier}`
+				: `vertical-text-${entry.id}-${carrier}-${backdrop}`,
 		component: Component,
 		width,
 		height,

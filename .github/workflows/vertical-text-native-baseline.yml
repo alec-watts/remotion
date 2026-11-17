@@ -1,7 +1,7 @@
-name: Trace viewport alignment for vertical DOM text
+name: Compare transparent and opaque vertical text rasters
 on:
   push:
-    branches: [codex/vertical-text-viewport-carrier]
+    branches: [codex/vertical-text-backdrop]
 permissions:
   contents: read
 jobs:
@@ -51,7 +51,7 @@ jobs:
           PIN
       - name: Capture native HTML, candidate DOM renderer and authored SVG
         run: |
-          git diff --exit-code HEAD^ -- packages/web-renderer/src/test packages/web-renderer/src/take-screenshot.ts bun.lock
+          git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts bun.lock
           bunx turbo run make --filter=@remotion/web-renderer
           mkdir -p qualification packages/web-renderer/test/__results__
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vertical-text-viewport-carrier-${{ matrix.os }}
+          name: vertical-text-backdrop-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

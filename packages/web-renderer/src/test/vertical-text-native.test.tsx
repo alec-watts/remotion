@@ -11,14 +11,24 @@ import {captureNativeReference, countNativePixels} from './native-reference';
 
 test.for(
 	verticalTextCases.flatMap((entry) =>
-		[1, 1.5].map((scale) => ({entry, scale})),
+		[1, 1.5].flatMap((scale) =>
+			(['outer', 'transparent', 'inside-svg'] as const).map((backdrop) => ({
+				entry,
+				scale,
+				backdrop,
+			})),
+		),
 	),
 )(
-	'matches browser writing mode $entry.id at scale $scale',
-	async ({entry, scale}) => {
+	'matches browser writing mode $entry.id at scale $scale with $backdrop backdrop',
+	async ({entry, scale, backdrop}) => {
 		await verticalTextFontReady;
-		const html = verticalTextNative({entry, carrier: 'html'});
-		const svg = verticalTextNative({entry, carrier: 'svg'});
+		const html = verticalTextNative({
+			entry,
+			carrier: 'html',
+			backdrop: backdrop === 'transparent' ? 'transparent' : 'outer',
+		});
+		const svg = verticalTextNative({entry, carrier: 'svg', backdrop});
 		const Scene = html.component;
 		const reference = await captureNativeReference(
 			{
@@ -40,7 +50,7 @@ test.for(
 				),
 			},
 			0,
-			{omitBackground: false},
+			{omitBackground: backdrop === 'transparent'},
 		);
 		const render = async (composition: typeof html) =>
 			(
@@ -55,7 +65,7 @@ test.for(
 			).blob({format: 'png'});
 		const actual = await render(html);
 		const svgExport = await render(svg);
-		const output = `test/__results__/vertical-text/${server.browser}/${entry.id}/${scale}`;
+		const output = `test/__results__/vertical-text/${server.browser}/${entry.id}/${scale}/${backdrop}`;
 		for (const [name, blob] of [
 			['reference', reference],
 			['actual', actual],
@@ -80,6 +90,7 @@ test.for(
 			JSON.stringify({
 				entry,
 				scale,
+				backdrop,
 				counts,
 				writingModeSupported: CSS.supports('writing-mode', entry.writingMode),
 				orientationSupported: CSS.supports(
