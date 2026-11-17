@@ -4,6 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -67,15 +68,29 @@ const countDifferentPixels = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
 
 test('preserves the displayed frame while HtmlInCanvas resizes in preview', async (t) => {
 	if (!HtmlInCanvas.isSupported()) {
+		if (server.browser === 'chromium') {
+			throw new Error('Hosted Chromium is missing native HtmlInCanvas');
+		}
+
 		t.skip();
 		return;
 	}
+
+	const trial = 0;
 
 	const container = document.createElement('div');
 	document.body.appendChild(container);
 	const root = createRoot(container);
 	const playerRef = createRef<PlayerRef>();
 	const {component, width, height, fps, durationInFrames} = htmlInCanvasResize;
+	const paintTimes: number[] = [];
+	const frameTimings: {frame: number; start: number; end: number}[] = [];
+	const start = performance.now();
+	let frameAtObservation = 0;
+	let waitStartedAt: number | null = null;
+	const onPaint = () => paintTimes.push(performance.now() - start);
+	container.addEventListener('paint', onPaint, true);
+	let diagnostics: Record<string, unknown> = {};
 
 	try {
 		flushSync(() => {
@@ -98,6 +113,7 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 		const context = canvas.getContext('2d')!;
 
 		for (const [frame, size] of htmlInCanvasResizeFrames.entries()) {
+			frameAtObservation = frame;
 			if (frame > 0) {
 				flushSync(() => playerRef.current!.seekTo(frame));
 				expect(canvas.width).toBe(size.width);
@@ -112,16 +128,66 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 				).toEqual([htmlInCanvasResizeFrames[frame - 1].red, 200, 40, 255]);
 			}
 
+			waitStartedAt = performance.now() - start;
 			await vi.waitFor(() => {
 				expect(
 					Array.from(context.getImageData(10, 10, 1, 1).data),
 					`completed paint at frame ${frame}`,
 				).toEqual([size.red, 200, 40, 255]);
 			});
+			frameTimings.push({
+				frame,
+				start: waitStartedAt,
+				end: performance.now() - start,
+			});
 		}
+	} catch (error) {
+		const canvas = container.querySelector('canvas') as
+			| (HTMLCanvasElement & {
+					requestPaint?: () => void;
+			  })
+			| null;
+		const ctx = canvas?.getContext('2d');
+		const pixel = () =>
+			ctx ? Array.from(ctx.getImageData(10, 10, 1, 1).data) : null;
+		const paintCountAtFailure = paintTimes.length;
+		const failedAt = performance.now() - start;
+		const rect = canvas?.getBoundingClientRect().toJSON();
+		const pixelAtFailure = pixel();
+		await new Promise<void>((resolve) => setTimeout(resolve, 150));
+		const pixelWithoutRequest = pixel();
+		const paintCountBeforeRequest = paintTimes.length;
+		canvas?.requestPaint?.();
+		await new Promise<void>((resolve) => setTimeout(resolve, 150));
+		diagnostics = {
+			error: String(error),
+			frameAtObservation,
+			waitStartedAt,
+			failedAt,
+			paintCountAtFailure,
+			paintCountBeforeRequest,
+			rect,
+			pixelAtFailure,
+			pixelWithoutRequest,
+			pixelAfterRequest: pixel(),
+		};
+		throw error;
 	} finally {
 		root.unmount();
+		container.removeEventListener('paint', onPaint, true);
 		container.remove();
+		await server.commands.writeFile(
+			`test/__results__/native-preview-paint/${server.browser}/trial-${trial}.json`,
+			JSON.stringify({
+				...diagnostics,
+				trial,
+				paintTimes,
+				frameTimings,
+				visibility: document.visibilityState,
+				viewport: [window.innerWidth, window.innerHeight],
+				userAgent: navigator.userAgent,
+			}),
+		);
 	}
 });
 

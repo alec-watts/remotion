@@ -1,0 +1,93 @@
+name: Compare first native preview paint on main and 3D head
+on:
+  push:
+    branches: [codex/12686-native-preview-ci-isolation]
+permissions:
+  contents: read
+jobs:
+  web-renderer:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 44
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Verify control and candidate ancestry
+        run: |
+          git merge-base --is-ancestor e685d2e71da35a6c34cc3e942b7a40485a345ac8 HEAD
+          git merge-base --is-ancestor 300df79769f47ad3c5e25869f74d2ec293384d5c HEAD
+      - name: Freeze Chrome for both test arms
+        run: |
+          diagnostic_bundle="$RUNNER_TEMP/Native Preview Chrome.app"
+          ditto "/Applications/Google Chrome.app" "$diagnostic_bundle"
+          chflags -R uchg "$diagnostic_bundle"
+          diagnostic_browser="$diagnostic_bundle/Contents/MacOS/Google Chrome"
+          echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$diagnostic_browser" >> "$GITHUB_ENV"
+          find "$diagnostic_bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/preview-chrome.sha256"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: python3 .github/scripts/pin-gradient-chrome.py
+      - name: Compare the unchanged assertions on both trees
+        run: |
+          candidate=300df79769f47ad3c5e25869f74d2ec293384d5c
+          baseline=e685d2e71da35a6c34cc3e942b7a40485a345ac8
+          git diff --binary "$baseline" "$candidate" > "$RUNNER_TEMP/3d-feature.patch"
+          mkdir -p qualification
+          diagnostic_failed=0
+          for arm in main 3d; do
+            if [ "$arm" = main ]; then
+              git apply --reverse "$RUNNER_TEMP/3d-feature.patch"
+              git diff --exit-code "$baseline" -- packages/web-renderer/src ':!packages/web-renderer/src/test/html-in-canvas.test.tsx'
+            else
+              git apply "$RUNNER_TEMP/3d-feature.patch"
+              git diff --exit-code "$candidate" -- packages/web-renderer/src ':!packages/web-renderer/src/test/html-in-canvas.test.tsx'
+            fi
+            git diff --exit-code "$baseline" -- packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx bun.lock
+            bunx turbo run make --filter=@remotion/web-renderer
+            result_dir="qualification/$arm"
+            mkdir -p "$result_dir" packages/web-renderer/test/__results__
+            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > "$result_dir/chrome.txt"
+            sed -n '1,/can evict WebGL contexts after native capture/p' packages/web-renderer/src/test/html-in-canvas.test.tsx | shasum -a 256 > "$result_dir/resize-case.txt"
+            shasum -a 256 packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx packages/web-renderer/vitest.config.ts bun.lock > "$result_dir/inputs.txt"
+            if (cd packages/web-renderer && bunx vitest src/test --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/result.json); then
+              diagnostic_exit=0
+            else
+              diagnostic_exit=$?
+              diagnostic_failed=1
+            fi
+            printf '%s\n' "$diagnostic_exit" > "$result_dir/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "$result_dir/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then
+              mv packages/web-renderer/.vitest/attachments "$result_dir/attachments"
+            fi
+            if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
+              mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "$result_dir/native-pixel-failures"
+            fi
+          done
+          cmp qualification/3d/chrome.txt qualification/main/chrome.txt
+          cmp qualification/3d/inputs.txt qualification/main/inputs.txt
+          cmp qualification/3d/resize-case.txt qualification/main/resize-case.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/preview-chrome.sha256"
+          exit "$diagnostic_failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 12686-native-preview-ci-isolation
+          path: qualification
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen browser
+        if: always()
+        run: |
+          diagnostic_bundle="$RUNNER_TEMP/Native Preview Chrome.app"
+          if [ -d "$diagnostic_bundle" ]; then
+            chflags -R nouchg "$diagnostic_bundle"
+          fi
