@@ -4,6 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {createEffect, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import {MediaPlayer} from '../media-player';
 import {PremountAwareDelayPlayback} from '../premount-aware-delay-playback';
 import type {MaxCanvasSinkFrameSize} from '../video/props';
@@ -23,20 +24,64 @@ test.each([false, true])(
 		const playerRef = React.createRef<PlayerRef>();
 		const frames: {width: number; height: number}[] = [];
 		const bufferingOrigins: string[] = [];
+		let phase = 'initial playback';
+		const lifetimes: {
+			id: number;
+			phase: string;
+			start: number;
+			end: number | null;
+			stack: string;
+		}[] = [];
+		const active = new Map<number, (typeof lifetimes)[number]>();
+		let handleCount = 0;
 		const originalCreateHandle =
 			PremountAwareDelayPlayback.prototype.createHandle;
 		const delayHandles = vi
 			.spyOn(PremountAwareDelayPlayback.prototype, 'createHandle')
 			.mockImplementation(function (this: PremountAwareDelayPlayback) {
-				bufferingOrigins.push(
-					new Error('Buffering handle allocated').stack ?? 'Stack unavailable',
-				);
+				const stack =
+					new Error('Buffering handle allocated').stack ?? 'Stack unavailable';
+				bufferingOrigins.push(stack);
 				if (bufferingOrigins.length > 8) bufferingOrigins.shift();
-				return originalCreateHandle.call(this);
+				const trace = {
+					id: ++handleCount,
+					phase,
+					start: performance.now(),
+					end: null as number | null,
+					stack,
+				};
+				active.set(trace.id, trace);
+				if (lifetimes.length < 256) lifetimes.push(trace);
+				const release = () => {
+					trace.end ??= performance.now();
+					active.delete(trace.id);
+				};
+
+				try {
+					const handle = originalCreateHandle.call(this);
+					return {
+						unblock: () => {
+							try {
+								handle.unblock();
+							} finally {
+								release();
+							}
+						},
+						[Symbol.dispose]: () => {
+							try {
+								handle[Symbol.dispose]();
+							} finally {
+								release();
+							}
+						},
+					};
+				} catch (error) {
+					release();
+					throw error;
+				}
 			});
 		let waiting = 0;
 		let pausedAtFrame: number | null = null;
-		let phase = 'initial playback';
 		let requestedSize: MaxCanvasSinkFrameSize | null = null;
 		let resizeStartedAt = performance.now();
 		let lastFrameAt: number | null = null;
@@ -49,7 +94,10 @@ test.each([false, true])(
 			millisecondsSinceFrame: number | null;
 			millisecondsSinceResize: number;
 			bufferingOrigins: string[];
+			unreleasedHandleIds: number[];
+			observedAt: number;
 		}[] = [];
+		const traceEvents: typeof waitingEvents = [];
 		const onFrame = (frame: CanvasImageSource) => {
 			lastFrameAt = performance.now();
 			const canvas = frame as OffscreenCanvas;
@@ -121,7 +169,10 @@ test.each([false, true])(
 						lastFrameAt === null ? null : now - lastFrameAt,
 					millisecondsSinceResize: now - resizeStartedAt,
 					bufferingOrigins: [...bufferingOrigins],
+					unreleasedHandleIds: [...active.keys()],
+					observedAt: now,
 				});
+				traceEvents.push(waitingEvents.at(-1)!);
 			});
 			playerRef.current!.play();
 			await waitFor(() => frames.length > 10);
@@ -227,6 +278,24 @@ test.each([false, true])(
 			delayHandles.mockRestore();
 			container.remove();
 			URL.revokeObjectURL(src);
+			try {
+				await server.commands.writeFile(
+					`test/__results__/resize-lifetimes/${isStudio ? 'studio' : 'player'}/${crypto.randomUUID()}.json`,
+					JSON.stringify({
+						isStudio,
+						pausedAtFrame,
+						handleCount,
+						lifetimes,
+						traceEvents,
+					}),
+				);
+			} catch (traceError) {
+				Internals.Log.warn(
+					{logLevel: 'warn', tag: 'resize-test'},
+					'Could not save the resize lifetime trace',
+					traceError,
+				);
+			}
 		}
 	},
 );

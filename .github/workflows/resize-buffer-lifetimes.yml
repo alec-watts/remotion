@@ -1,0 +1,40 @@
+name: Trace preview resize buffer lifetimes
+on:
+  push:
+    branches: [codex/13365-resize-buffer-lifetimes]
+permissions:
+  contents: read
+jobs:
+  trace:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/media && bunx playwright install --with-deps chromium
+      - name: Check the producer and build the workspace
+        run: |
+          git diff --exit-code HEAD^ HEAD -- . ':(exclude).github/workflows/resize-buffer-lifetimes.yml' ':(exclude)packages/media/src/test/player-preview-resize.test.tsx'
+          bun run build
+      - name: Run media tests with handle tracing
+        working-directory: packages/media
+        run: |
+          mkdir -p test/__results__
+          bunx vitest src/test --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/media.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resize-buffer-lifetimes-macos
+          path: packages/media/test/__results__/
+          if-no-files-found: error
+          retention-days: 7
