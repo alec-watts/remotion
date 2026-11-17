@@ -476,9 +476,13 @@ test('chains effect edits before persistence and HMR without losing the latest i
 		await expect
 			.poll(() => {
 				const contents = fs.readFileSync(effectKeyframeE2eFile, 'utf8');
-				const image = contents
-					.split('name="Effect scale precision"')[1]
-					.split('/>')[0];
+				const imageStart = contents.indexOf('name="Effect scale precision"');
+				const imageEnd = contents.indexOf('/>', imageStart);
+				if (imageStart < 0 || imageEnd < 0) {
+					return null;
+				}
+
+				const image = contents.slice(imageStart, imageEnd);
 				return {
 					scale: image.match(/scale\(/g)?.length ?? 0,
 					brightness: image.match(/brightness\(/g)?.length ?? 0,
