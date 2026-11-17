@@ -1,7 +1,7 @@
-name: Compare native preview resize in the full renderer suite
+name: Compare native preview resize with main running first
 on:
   push:
-    branches: [codex/13312-native-preview-full-suite]
+    branches: [codex/13312-native-preview-order-control]
 permissions:
   contents: read
 jobs:
@@ -63,10 +63,13 @@ jobs:
           git diff --binary "$baseline" "$candidate" > "$RUNNER_TEMP/gradient-feature.patch"
           mkdir -p qualification
           diagnostic_failed=0
-          for arm in gradient main; do
+          for arm in main gradient; do
             if [ "$arm" = main ]; then
               git apply --reverse "$RUNNER_TEMP/gradient-feature.patch"
               git diff --exit-code "$baseline" -- packages/web-renderer/src ':!packages/web-renderer/src/test/html-in-canvas.test.tsx'
+            else
+              git apply "$RUNNER_TEMP/gradient-feature.patch"
+              git diff --exit-code "$candidate" -- packages/web-renderer/src ':!packages/web-renderer/src/test/html-in-canvas.test.tsx'
             fi
             git diff --exit-code "$baseline" -- packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx bun.lock
             bunx turbo run make --filter=@remotion/web-renderer
@@ -96,7 +99,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-preview-full-suite
+          name: native-preview-order-control
           path: qualification
           if-no-files-found: error
           retention-days: 7

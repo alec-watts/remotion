@@ -87,6 +87,7 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 	const frameTimings: {frame: number; start: number; end: number}[] = [];
 	const start = performance.now();
 	let frameAtObservation = 0;
+	let waitStartedAt: number | null = null;
 	const onPaint = () => paintTimes.push(performance.now() - start);
 	container.addEventListener('paint', onPaint, true);
 	let diagnostics: Record<string, unknown> = {};
@@ -127,7 +128,7 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 				).toEqual([htmlInCanvasResizeFrames[frame - 1].red, 200, 40, 255]);
 			}
 
-			const waitStart = performance.now() - start;
+			waitStartedAt = performance.now() - start;
 			await vi.waitFor(() => {
 				expect(
 					Array.from(context.getImageData(10, 10, 1, 1).data),
@@ -136,7 +137,7 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 			});
 			frameTimings.push({
 				frame,
-				start: waitStart,
+				start: waitStartedAt,
 				end: performance.now() - start,
 			});
 		}
@@ -150,16 +151,24 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 		const pixel = () =>
 			ctx ? Array.from(ctx.getImageData(10, 10, 1, 1).data) : null;
 		const paintCountAtFailure = paintTimes.length;
+		const failedAt = performance.now() - start;
 		const rect = canvas?.getBoundingClientRect().toJSON();
 		const pixelAtFailure = pixel();
+		await new Promise<void>((resolve) => setTimeout(resolve, 150));
+		const pixelWithoutRequest = pixel();
+		const paintCountBeforeRequest = paintTimes.length;
 		canvas?.requestPaint?.();
 		await new Promise<void>((resolve) => setTimeout(resolve, 150));
 		diagnostics = {
 			error: String(error),
 			frameAtObservation,
+			waitStartedAt,
+			failedAt,
 			paintCountAtFailure,
+			paintCountBeforeRequest,
 			rect,
 			pixelAtFailure,
+			pixelWithoutRequest,
 			pixelAfterRequest: pixel(),
 		};
 		throw error;
