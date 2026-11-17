@@ -1,7 +1,7 @@
-name: Compare final SVG readback and font native pixels
+name: Compare repeated main and SVG readback producers
 on:
   push:
-    branches: [codex/qualify-webkit-svg-only-final]
+    branches: [codex/qualify-webkit-svg-main-repeat]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-24.04]
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,10 +74,10 @@ jobs:
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
           git diff --exit-code 37ace5adafc3a815728332620148f81d6e716938 HEAD -- "${producer[@]}"
           exit_status=0
-          for arm in baseline candidate; do
+          for arm in baseline candidate baseline-repeat candidate-repeat; do
             mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
             revision=HEAD
-            if [ "$arm" = baseline ]; then revision=e6b9083c4984609e48db0453f3274e2123f30430; fi
+            if [ "$arm" = baseline ] || [ "$arm" = baseline-repeat ]; then revision=e6b9083c4984609e48db0453f3274e2123f30430; fi
             git restore --source="$revision" -- "${producer[@]}"
             shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c qualification/inputs.sha256
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: webkit-ci-native-controls-${{ matrix.os }}
+          name: webkit-svg-source-repeat-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
