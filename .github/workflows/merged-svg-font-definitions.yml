@@ -1,7 +1,7 @@
-name: Compare consistent WebKit readback with filtered SVG isolation
+name: Compare WebKit readback font controls against native
 on:
   push:
-    branches: [codex/qualify-consistent-webkit-readback]
+    branches: [codex/qualify-readback-font-native-controls]
 permissions:
   contents: read
 jobs:
@@ -57,6 +57,7 @@ jobs:
             src/test/svg-root-mask-readback.test.tsx
             src/test/svg-root-mask-destination.test.tsx
             src/test/svg-registered-font-selection.test.ts
+            src/test/svg-readback-font-native-controls.test.ts
             src/test/svg-registered-cdata-font.test.tsx
             src/test/svg-disabled-styles.test.tsx
             src/test/svg-css-font.test.tsx
@@ -82,9 +83,11 @@ jobs:
             shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c qualification/inputs.sha256
             bunx turbo run make --filter=@remotion/web-renderer
+            rm -rf packages/web-renderer/.vitest/attachments
             status=0
             (cd packages/web-renderer && bunx vitest "${fixtures[@]}" --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
             mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
             printf "%s\n" "$status" > "qualification/$arm/status.txt"
             shasum -a 256 --quiet -c "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
@@ -95,7 +98,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: consistent-webkit-readback-${{ matrix.os }}
+          name: readback-font-native-controls-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
