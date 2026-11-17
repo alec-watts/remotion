@@ -80,15 +80,42 @@ const drawTransformedMaskedSvg = async ({
 		return false;
 	}
 
-	context.save();
+	const scratch = new OffscreenCanvas(width, height);
 	try {
-		context.resetTransform();
-		context.drawImage(image, 0, 0);
-	} finally {
-		context.restore();
-	}
+		const readback = scratch.getContext('2d', {
+			alpha: true,
+			willReadFrequently: true,
+		});
+		if (!readback) return false;
 
-	return true;
+		// Let the readback canvas blend the SVG against the current destination
+		// before transferring the resulting pixels through the original clip.
+		readback.drawImage(context.canvas, 0, 0);
+		readback.globalAlpha = context.globalAlpha;
+		readback.filter = context.filter;
+		readback.shadowColor = context.shadowColor;
+		readback.shadowBlur = context.shadowBlur;
+		readback.shadowOffsetX = context.shadowOffsetX;
+		readback.shadowOffsetY = context.shadowOffsetY;
+		readback.drawImage(image, 0, 0);
+
+		context.save();
+		try {
+			context.resetTransform();
+			context.globalCompositeOperation = 'copy';
+			context.globalAlpha = 1;
+			context.filter = 'none';
+			context.shadowColor = 'transparent';
+			context.drawImage(scratch, 0, 0);
+		} finally {
+			context.restore();
+		}
+
+		return true;
+	} finally {
+		scratch.width = 0;
+		scratch.height = 0;
+	}
 };
 
 const drawMaskedSvgThroughReadback = ({
