@@ -1,7 +1,7 @@
-name: Compare SVG mask export and native backdrop
+name: Compare SVGs using the measured viewport
 on:
   push:
-    branches: [codex/qualify-svg-mask-native-backdrop]
+    branches: [codex/qualify-svg-resolved-viewport]
 permissions:
   contents: read
 jobs:
@@ -49,10 +49,10 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare direct and seeded readback compositing
+      - name: Compare intrinsic and measured SVG viewports
         run: |
           drawing=packages/web-renderer/src/drawing
-          producer=("$drawing/draw-dom-element.ts")
+          producer=("$drawing/turn-svg-into-drawable.ts")
           fixtures=(
             src/test/svg-root-mask-readback.test.tsx
             src/test/svg-root-mask-destination.test.tsx
@@ -65,17 +65,19 @@ jobs:
             src/test/opacity-inherited.test.tsx
             src/test/background-blend-mode.test.tsx
             src/test/clip-path.test.tsx
+            src/test/svg-preserve-aspect-ratio-none.test.tsx
+            src/test/transforms.test.tsx
           )
           mkdir -p qualification
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
-          git rev-parse aa0109f7a2bb6899d397dc7161d55275b8c91d13 HEAD > qualification/revisions.txt
-          shasum -a 256 packages/web-renderer/src/take-screenshot.ts "$drawing"/{turn-svg-into-drawable,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
+          git rev-parse f18ba4ee0413a3799d60bca8015bf7f2da724f87 HEAD > qualification/revisions.txt
+          shasum -a 256 packages/web-renderer/src/take-screenshot.ts "$drawing"/{draw-dom-element,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
           exit_status=0
           for arm in baseline candidate; do
             mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
             revision=HEAD
-            if [ "$arm" = baseline ]; then revision=aa0109f7a2bb6899d397dc7161d55275b8c91d13; fi
+            if [ "$arm" = baseline ]; then revision=f18ba4ee0413a3799d60bca8015bf7f2da724f87; fi
             git restore --source="$revision" -- "${producer[@]}"
             shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c qualification/inputs.sha256
@@ -93,7 +95,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-mask-native-backdrop-${{ matrix.os }}
+          name: svg-resolved-viewport-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
