@@ -17,6 +17,7 @@ import {
 } from './handle-3d-transform';
 import {
 	applyFilterToDrawOperation,
+	applySharpShadowFallback,
 	applySvgFilterToPrecomposedCanvas,
 	scaleFilterLengths,
 	getPrecomposeRectForFilter,
@@ -313,15 +314,24 @@ export const processNode = async ({
 			tempContext.resetTransform();
 			tempContext.globalAlpha = 1;
 			tempContext.globalCompositeOperation = 'copy';
-			applyFilterToDrawOperation({
-				context: tempContext,
-				filter: scaleFilterLengths(
-					precompositing.needsFilterPrecompositing,
-					layerScale,
-				),
-				drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
-			});
-			tempContext.restore();
+			const filter = scaleFilterLengths(
+				precompositing.needsFilterPrecompositing,
+				layerScale,
+			);
+			try {
+				if (
+					is3DPrecomposition ||
+					!applySharpShadowFallback(tempContext, filter)
+				) {
+					applyFilterToDrawOperation({
+						context: tempContext,
+						filter,
+						drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
+					});
+				}
+			} finally {
+				tempContext.restore();
+			}
 		}
 
 		if (precompositing.needsSvgClip) {
