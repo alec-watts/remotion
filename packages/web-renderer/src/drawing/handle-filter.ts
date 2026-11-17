@@ -85,14 +85,11 @@ const canvasPaintsDropShadow = () => {
 	}
 };
 
-export const applySharpShadowFallback = (
-	context: OffscreenCanvasRenderingContext2D,
-	filter: string,
-): boolean => {
+export const getSharpShadowFallback = (filter: string) => {
 	const operations = splitAtTopLevel(filter, ' ');
 	const operation = operations[0];
 	if (operations.length !== 1 || !operation.startsWith('drop-shadow(')) {
-		return false;
+		return null;
 	}
 
 	const tokens = splitAtTopLevel(operation.slice(12, -1), ' ');
@@ -110,9 +107,16 @@ export const applySharpShadowFallback = (
 		(offsetX === 0 && offsetY === 0) ||
 		canvasPaintsDropShadow()
 	) {
-		return false;
+		return null;
 	}
 
+	return {color: colors[0], offsetX, offsetY};
+};
+
+export const applySharpShadowFallback = (
+	context: OffscreenCanvasRenderingContext2D,
+	shadow: NonNullable<ReturnType<typeof getSharpShadowFallback>>,
+): boolean => {
 	const {width, height} = context.canvas;
 	if (width > 16384 || height > 16384 || width * height > 16777216) {
 		return false;
@@ -122,15 +126,73 @@ export const applySharpShadowFallback = (
 	try {
 		const target = scratch.getContext('2d');
 		if (!target) return false;
-		target.shadowColor = colors[0];
-		target.shadowOffsetX = offsetX;
-		target.shadowOffsetY = offsetY;
+		target.shadowColor = shadow.color;
+		target.shadowOffsetX = shadow.offsetX;
+		target.shadowOffsetY = shadow.offsetY;
 		target.drawImage(context.canvas, 0, 0);
 		context.drawImage(scratch, 0, 0);
 		return true;
 	} finally {
 		scratch.width = 0;
 		scratch.height = 0;
+	}
+};
+
+export const cropSharpShadowBitmap = (
+	context: OffscreenCanvasRenderingContext2D,
+) => {
+	const {width, height} = context.canvas;
+	if (width === 0 || height === 0) return null;
+	const rowsPerRead = Math.max(1, Math.floor(1048576 / width));
+	let left = width;
+	let top = height;
+	let right = 0;
+	let bottom = 0;
+	for (let start = 0; start < height; start += rowsPerRead) {
+		const rows = Math.min(rowsPerRead, height - start);
+		const pixels = context.getImageData(0, start, width, rows).data;
+		for (let row = 0; row < rows; row++) {
+			for (let column = 0; column < width; column++) {
+				if (pixels[(row * width + column) * 4 + 3] === 0) continue;
+				left = Math.min(left, column);
+				top = Math.min(top, start + row);
+				right = Math.max(right, column + 1);
+				bottom = Math.max(bottom, start + row + 1);
+			}
+		}
+	}
+
+	if (right <= left || bottom <= top) return null;
+	if (left === 0 && top === 0 && right === width && bottom === height)
+		return null;
+	const canvas = new OffscreenCanvas(right - left, bottom - top);
+	const dispose = () => {
+		canvas.width = 0;
+		canvas.height = 0;
+	};
+
+	try {
+		const target = canvas.getContext('2d');
+		if (!target) {
+			dispose();
+			return null;
+		}
+
+		target.drawImage(
+			context.canvas,
+			left,
+			top,
+			canvas.width,
+			canvas.height,
+			0,
+			0,
+			canvas.width,
+			canvas.height,
+		);
+		return {canvas, left, top, [Symbol.dispose]: dispose};
+	} catch (error) {
+		dispose();
+		throw error;
 	}
 };
 

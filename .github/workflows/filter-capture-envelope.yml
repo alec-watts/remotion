@@ -1,7 +1,7 @@
-name: Compare native Canvas sharp shadows in experimental 3D only
+name: Compare cropped sharp shadow bitmaps
 on:
   push:
-    branches: [codex/3d-affine-filter-native-shadow-policy]
+    branches: [codex/3d-affine-shadow-ink-bounds]
 permissions:
   contents: read
 jobs:
@@ -47,13 +47,13 @@ jobs:
       - name: Compare all producers on the same immutable runner
         run: |
           diagnostic_patch="$RUNNER_TEMP/3d-scalar-css-filter.patch"
-          git diff --binary 4dad3076081152d60b5781208fbe376e75b23197 HEAD -- packages/web-renderer/src/drawing/handle-filter.ts packages/web-renderer/src/drawing/process-node.ts > "$diagnostic_patch"
+          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing/handle-filter.ts packages/web-renderer/src/drawing/process-node.ts > "$diagnostic_patch"
           test -s "$diagnostic_patch"
           diagnostic_failed=0
           for diagnostic_arm in candidate baseline; do
             if [ "$diagnostic_arm" = baseline ]; then
               git apply --reverse "$diagnostic_patch"
-              git diff --exit-code 4dad3076081152d60b5781208fbe376e75b23197 -- packages/web-renderer/src/compose.ts packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts
+              git diff --exit-code HEAD^ -- packages/web-renderer/src/compose.ts packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts
             fi
             mkdir -p "qualification/$diagnostic_arm" packages/web-renderer/test/__results__/inputs
             cp "$diagnostic_patch" packages/web-renderer/test/__results__/inputs/producer.patch
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: 3d-affine-filter-native-shadow-policy-${{ matrix.os }}
+          name: 3d-affine-shadow-ink-bounds-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

@@ -23,6 +23,8 @@ import {
 import {
 	applyFilterToDrawOperation,
 	applySharpShadowFallback,
+	cropSharpShadowBitmap,
+	getSharpShadowFallback,
 	applySvgFilterToPrecomposedCanvas,
 	scaleFilterLengths,
 	getPrecomposeRectForFilter,
@@ -317,7 +319,21 @@ export const processNode = async ({
 			scale,
 			is3DPrecomposition,
 		});
-		const filterLayerScale = affineFilterScale ?? layerScale;
+		const precomposedFilter = precompositing.needsFilterPrecompositing;
+		const canUseSharpShadowFallback =
+			internalState.experimental3DRendering &&
+			!is3DPrecomposition &&
+			precomposedFilter !== null;
+		const layoutSharpShadow =
+			canUseSharpShadowFallback && affineFilterScale !== null
+				? getSharpShadowFallback(
+						scaleFilterLengths(precomposedFilter, layerScale),
+					)
+				: null;
+		const filterLayerScale = layoutSharpShadow
+			? layerScale
+			: (affineFilterScale ?? layerScale);
+		let shouldCropShadow = false;
 
 		const tempContext = await createLayer({
 			transparent: true,
@@ -390,11 +406,13 @@ export const processNode = async ({
 				filterLayerScale,
 			);
 			try {
-				if (
-					!internalState.experimental3DRendering ||
-					is3DPrecomposition ||
-					!applySharpShadowFallback(tempContext, filter)
-				) {
+				const shadow = canUseSharpShadowFallback
+					? (layoutSharpShadow ?? getSharpShadowFallback(filter))
+					: null;
+				const appliedShadow =
+					shadow && applySharpShadowFallback(tempContext, shadow);
+				shouldCropShadow = Boolean(appliedShadow && layoutSharpShadow);
+				if (!appliedShadow) {
 					applyFilterToDrawOperation({
 						context: tempContext,
 						filter,
@@ -430,9 +448,25 @@ export const processNode = async ({
 			}
 		}
 
+		using croppedShadow = shouldCropShadow
+			? cropSharpShadowBitmap(tempContext)
+			: null;
+		const sourceScaleX = layerRect.width / tempContext.canvas.width;
+		const sourceScaleY = layerRect.height / tempContext.canvas.height;
+		if (croppedShadow) {
+			drawable = croppedShadow.canvas;
+		}
+
 		const destinationRect = is3DPrecomposition
 			? rectAfterTransforms
-			: layerRect;
+			: croppedShadow
+				? new DOMRect(
+						layerRect.left + croppedShadow.left * sourceScaleX,
+						layerRect.top + croppedShadow.top * sourceScaleY,
+						croppedShadow.canvas.width * sourceScaleX,
+						croppedShadow.canvas.height * sourceScaleY,
+					)
+				: layerRect;
 		const parentOffsetScale = is3DPrecomposition ? scale : 1;
 		const copyX = destinationRect.left - parentRect.x * parentOffsetScale;
 		const copyY = destinationRect.top - parentRect.y * parentOffsetScale;
