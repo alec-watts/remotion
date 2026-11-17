@@ -35,6 +35,7 @@ export const filterInputCases = [
 	{kind: 'rounded-visible', left: 25, transform: 'scaleX(2)'},
 	{kind: 'texture-visible', left: 25, transform: 'scaleX(2)'},
 	{kind: 'masked-visible', left: 25, transform: 'scale(2, 0.75)'},
+	{kind: 'overlapping-shadow-visible', left: 25, transform: 'scale(1.5, 0.75)'},
 ] as const;
 
 export const projectiveFilterInput = (
@@ -61,7 +62,9 @@ export const projectiveFilterInput = (
 					backgroundColor:
 						kind.startsWith('text') || kind === 'masked-visible'
 							? 'transparent'
-							: 'red',
+							: kind === 'overlapping-shadow-visible'
+								? 'rgba(255, 0, 0, 0.6)'
+								: 'red',
 					backgroundImage: kind.startsWith('gradient')
 						? 'linear-gradient(90deg, red, lime)'
 						: kind === 'texture-visible'
@@ -75,9 +78,11 @@ export const projectiveFilterInput = (
 					filter:
 						kind === 'blurred'
 							? 'blur(2px) drop-shadow(150px 0 0 blue)'
-							: kind.endsWith('visible')
-								? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
-								: 'drop-shadow(150px 0 0 blue)',
+							: kind === 'overlapping-shadow-visible'
+								? 'drop-shadow(12.25px -3.5px rgba(0, 0, 255, 0.45))'
+								: kind.endsWith('visible')
+									? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
+									: 'drop-shadow(150px 0 0 blue)',
 				}}
 			>
 				{kind.startsWith('text') ? 'Aa' : null}

@@ -1,6 +1,23 @@
 import {splitAtTopLevel} from './background-image-rect';
 import type {RasterScale} from './raster-scale';
 
+export const parseCssDropShadow = (value: string, color: string) => {
+	const parts = splitAtTopLevel(value, ' ');
+	const isLength = (part: string) =>
+		/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:px)?$/i.test(part);
+	const lengths = parts.filter(isLength).map(Number.parseFloat);
+	if (lengths.length < 2 || lengths.length > 3) return null;
+	return {
+		x: lengths[0],
+		y: lengths[1],
+		blur: lengths[2] ?? 0,
+		color: (parts.filter((part) => !isLength(part)).join(' ') || color).replace(
+			/\bcurrentcolor\b/gi,
+			color,
+		),
+	};
+};
+
 export const createSvgFilterFromCss = ({
 	filter,
 	width,
@@ -48,28 +65,19 @@ export const createSvgFilterFromCss = ({
 			);
 			primitive.setAttribute('edgeMode', 'none');
 		} else if (name === 'drop-shadow') {
-			const parts = splitAtTopLevel(value, ' ');
-			const isLength = (part: string) =>
-				/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:px)?$/i.test(part);
-			const lengths = parts.filter(isLength).map(Number.parseFloat);
-			if (lengths.length < 2 || lengths.length > 3) return null;
+			const shadow = parseCssDropShadow(value, color);
+			if (!shadow) return null;
 			primitive = ownerDocument.createElementNS(
 				'http://www.w3.org/2000/svg',
 				'feDropShadow',
 			);
-			primitive.setAttribute('dx', String(lengths[0] * rasterScale.x));
-			primitive.setAttribute('dy', String(lengths[1] * rasterScale.y));
+			primitive.setAttribute('dx', String(shadow.x * rasterScale.x));
+			primitive.setAttribute('dy', String(shadow.y * rasterScale.y));
 			primitive.setAttribute(
 				'stdDeviation',
-				`${(lengths[2] ?? 0) * rasterScale.x} ${(lengths[2] ?? 0) * rasterScale.y}`,
+				`${shadow.blur * rasterScale.x} ${shadow.blur * rasterScale.y}`,
 			);
-			primitive.setAttribute(
-				'flood-color',
-				(parts.filter((part) => !isLength(part)).join(' ') || color).replace(
-					/\bcurrentcolor\b/gi,
-					color,
-				),
-			);
+			primitive.setAttribute('flood-color', shadow.color);
 		} else if (
 			name === 'saturate' ||
 			name === 'hue-rotate' ||

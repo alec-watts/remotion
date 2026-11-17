@@ -388,19 +388,25 @@ export const processNode = async ({
 			tempContext.resetTransform();
 			tempContext.globalAlpha = 1;
 			tempContext.globalCompositeOperation = 'copy';
-			if (filteredImage) tempContext.drawImage(filteredImage, 0, 0);
-			else {
-				applyFilterToDrawOperation({
-					context: tempContext,
-					filter: scaleFilterLengths(
-						precompositing.needsFilterPrecompositing,
-						layerScale,
-					),
-					drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
-				});
+			try {
+				if (filteredImage) tempContext.drawImage(filteredImage, 0, 0);
+				else {
+					applyFilterToDrawOperation({
+						context: tempContext,
+						filter: scaleFilterLengths(
+							precompositing.needsFilterPrecompositing,
+							layerScale,
+						),
+						drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
+					});
+				}
+			} finally {
+				tempContext.restore();
+				if (filteredImage instanceof OffscreenCanvas) {
+					filteredImage.width = 0;
+					filteredImage.height = 0;
+				}
 			}
-
-			tempContext.restore();
 		}
 
 		if (precompositing.needsSvgClip) {

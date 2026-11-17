@@ -1,4 +1,5 @@
-import {createSvgFilterFromCss} from './css-filter-to-svg';
+import {splitAtTopLevel} from './background-image-rect';
+import {createSvgFilterFromCss, parseCssDropShadow} from './css-filter-to-svg';
 import type {RasterScale} from './raster-scale';
 
 export const rasterizeCssFilter = async ({
@@ -17,6 +18,29 @@ export const rasterizeCssFilter = async ({
 	signal: AbortSignal | null;
 }) => {
 	signal?.throwIfAborted();
+	const operations = splitAtTopLevel(filter, ' ');
+	const match =
+		operations.length === 1 ? /^drop-shadow\((.*)\)$/i.exec(filter) : null;
+	const shadow = match ? parseCssDropShadow(match[1].trim(), color) : null;
+	if (shadow?.blur === 0 && (shadow.x !== 0 || shadow.y !== 0)) {
+		// A single Canvas draw can paint a sharp shadow and its source without
+		// passing the source colors through an SVG filter image.
+		const canvas = new OffscreenCanvas(source.width, source.height);
+		const context = canvas.getContext('2d');
+		try {
+			if (!context) throw new Error('Could not create sharp shadow canvas');
+			context.shadowColor = shadow.color;
+			context.shadowOffsetX = shadow.x * rasterScale.x;
+			context.shadowOffsetY = shadow.y * rasterScale.y;
+			context.drawImage(source, 0, 0);
+			return canvas;
+		} catch (error) {
+			canvas.width = 0;
+			canvas.height = 0;
+			throw error;
+		}
+	}
+
 	const blob = await source.convertToBlob({type: 'image/png'});
 	signal?.throwIfAborted();
 	const bytes = new Uint8Array(await blob.arrayBuffer());
