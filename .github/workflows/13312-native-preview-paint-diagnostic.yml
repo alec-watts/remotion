@@ -20,10 +20,17 @@ jobs:
           git merge-base --is-ancestor ac9d96ada0fb3e13051f8c05cf4e9d06eaaba4ce HEAD
       - name: Freeze Chrome for both test arms
         run: |
-          diagnostic_bundle="$RUNNER_TEMP/Diagnostic Preview Chrome.app"
-          ditto "/Applications/Google Chrome.app" "$diagnostic_bundle"
+          diagnostic_version=157.0.8103.79
+          diagnostic_archive="$RUNNER_TEMP/preview-chrome.zip"
+          curl --fail --silent --show-error --location --retry 2 \
+            "https://storage.googleapis.com/chrome-for-testing-public/$diagnostic_version/mac-arm64/chrome-mac-arm64.zip" \
+            --output "$diagnostic_archive"
+          ditto -x -k "$diagnostic_archive" "$RUNNER_TEMP/preview-chrome"
+          diagnostic_bundle="$RUNNER_TEMP/preview-chrome/chrome-mac-arm64/Google Chrome for Testing.app"
+          diagnostic_browser="$diagnostic_bundle/Contents/MacOS/Google Chrome for Testing"
+          "$diagnostic_browser" --version | grep -F "$diagnostic_version"
           chflags -R uchg "$diagnostic_bundle"
-          echo "REMOTION_CHROME_EXECUTABLE=$diagnostic_bundle/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          echo "REMOTION_CHROME_EXECUTABLE=$diagnostic_browser" >> "$GITHUB_ENV"
           find "$diagnostic_bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/preview-chrome.sha256"
       - uses: actions/setup-node@v6
         with:
@@ -73,6 +80,7 @@ jobs:
       - name: Release the frozen browser
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/Diagnostic Preview Chrome.app" ]; then
-            chflags -R nouchg "$RUNNER_TEMP/Diagnostic Preview Chrome.app"
+          diagnostic_bundle="$RUNNER_TEMP/preview-chrome/chrome-mac-arm64/Google Chrome for Testing.app"
+          if [ -d "$diagnostic_bundle" ]; then
+            chflags -R nouchg "$diagnostic_bundle"
           fi
