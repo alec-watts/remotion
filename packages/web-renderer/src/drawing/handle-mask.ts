@@ -36,7 +36,6 @@ export const handleMask = async ({
 			precomposeRect,
 			width: tempContext.canvas.width,
 			height: tempContext.canvas.height,
-			scale,
 			internalState,
 		});
 		const masked = new OffscreenCanvas(
@@ -48,7 +47,6 @@ export const handleMask = async ({
 			// Rasterize the native masked content before copying the completed layer. The
 			// readback context preserves fractional alpha at this SVG drawable seam.
 			masked.drawImage(groupImage, 0, 0);
-			tempContext.resetTransform();
 			tempContext.globalCompositeOperation = 'copy';
 			tempContext.drawImage(masked.canvas, 0, 0);
 		} finally {
