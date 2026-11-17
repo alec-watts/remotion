@@ -230,6 +230,10 @@ import {
 	svgFilterReviewReference,
 	svgFilterContainingBlockReference,
 } from './fixtures/svg-filter-reference';
+import {
+	svgDefinitionFont,
+	svgDefinitionFontUrl,
+} from './fixtures/svg-font-definition-review';
 import {svgFontFamilyLifetime} from './fixtures/svg-font-family-lifetime';
 import {svgForeignObjectFont} from './fixtures/svg-foreign-object-font';
 import {
@@ -639,6 +643,13 @@ export const Root: React.FC = () => {
 					/>
 				)),
 			)}
+			{(['root-mask', 'filter-image'] as const).map((mode) => {
+				const fixture = svgDefinitionFont({
+					mode,
+					fontUrl: svgDefinitionFontUrl,
+				});
+				return <Composition key={fixture.id} {...fixture} />;
+			})}
 			<Composition {...queuedFrameCapturePreview} />
 		</>
 	);
