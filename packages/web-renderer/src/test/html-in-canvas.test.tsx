@@ -4,6 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -65,65 +66,110 @@ const countDifferentPixels = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
 	return different;
 };
 
-test('preserves the displayed frame while HtmlInCanvas resizes in preview', async (t) => {
-	if (!HtmlInCanvas.isSupported()) {
-		t.skip();
-		return;
-	}
-
-	const container = document.createElement('div');
-	document.body.appendChild(container);
-	const root = createRoot(container);
-	const playerRef = createRef<PlayerRef>();
-	const {component, width, height, fps, durationInFrames} = htmlInCanvasResize;
-
-	try {
-		flushSync(() => {
-			root.render(
-				<Player
-					ref={playerRef}
-					acknowledgeRemotionLicense
-					component={component}
-					compositionWidth={width}
-					compositionHeight={height}
-					fps={fps}
-					durationInFrames={durationInFrames}
-					style={{width, height}}
-				/>,
-			);
-		});
-		const canvas = container.querySelector('canvas')!;
-		const child = container.querySelector('[data-testid="resize-content"]');
-		expect(child).not.toBeNull();
-		const context = canvas.getContext('2d')!;
-
-		for (const [frame, size] of htmlInCanvasResizeFrames.entries()) {
-			if (frame > 0) {
-				flushSync(() => playerRef.current!.seekTo(frame));
-				expect(canvas.width).toBe(size.width);
-				expect(canvas.height).toBe(size.height);
-				expect(container.querySelector('canvas')).toBe(canvas);
-				expect(container.querySelector('[data-testid="resize-content"]')).toBe(
-					child,
-				);
-				expect(
-					Array.from(context.getImageData(10, 10, 1, 1).data),
-					`previous image immediately after resizing at frame ${frame}`,
-				).toEqual([htmlInCanvasResizeFrames[frame - 1].red, 200, 40, 255]);
-			}
-
-			await vi.waitFor(() => {
-				expect(
-					Array.from(context.getImageData(10, 10, 1, 1).data),
-					`completed paint at frame ${frame}`,
-				).toEqual([size.red, 200, 40, 255]);
-			});
+test.each(Array.from({length: 16}, (_, trial) => trial))(
+	'preserves the displayed frame while HtmlInCanvas resizes in preview, trial %i',
+	async (trial) => {
+		if (!HtmlInCanvas.isSupported()) {
+			throw new Error('Hosted Chromium is missing native HtmlInCanvas');
 		}
-	} finally {
-		root.unmount();
-		container.remove();
-	}
-});
+
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		const playerRef = createRef<PlayerRef>();
+		const {component, width, height, fps, durationInFrames} =
+			htmlInCanvasResize;
+		const paintTimes: number[] = [];
+		const start = performance.now();
+		let frameAtObservation = 0;
+		const onPaint = () => paintTimes.push(performance.now() - start);
+		container.addEventListener('paint', onPaint, true);
+		let diagnostics: Record<string, unknown> = {};
+
+		try {
+			flushSync(() => {
+				root.render(
+					<Player
+						ref={playerRef}
+						acknowledgeRemotionLicense
+						component={component}
+						compositionWidth={width}
+						compositionHeight={height}
+						fps={fps}
+						durationInFrames={durationInFrames}
+						style={{width, height}}
+					/>,
+				);
+			});
+			const canvas = container.querySelector('canvas')!;
+			const child = container.querySelector('[data-testid="resize-content"]');
+			expect(child).not.toBeNull();
+			const context = canvas.getContext('2d')!;
+
+			for (const [frame, size] of htmlInCanvasResizeFrames.entries()) {
+				frameAtObservation = frame;
+				if (frame > 0) {
+					flushSync(() => playerRef.current!.seekTo(frame));
+					expect(canvas.width).toBe(size.width);
+					expect(canvas.height).toBe(size.height);
+					expect(container.querySelector('canvas')).toBe(canvas);
+					expect(
+						container.querySelector('[data-testid="resize-content"]'),
+					).toBe(child);
+					expect(
+						Array.from(context.getImageData(10, 10, 1, 1).data),
+						`previous image immediately after resizing at frame ${frame}`,
+					).toEqual([htmlInCanvasResizeFrames[frame - 1].red, 200, 40, 255]);
+				}
+
+				await vi.waitFor(() => {
+					expect(
+						Array.from(context.getImageData(10, 10, 1, 1).data),
+						`completed paint at frame ${frame}`,
+					).toEqual([size.red, 200, 40, 255]);
+				});
+			}
+		} catch (error) {
+			const canvas = container.querySelector('canvas') as
+				| (HTMLCanvasElement & {
+						requestPaint?: () => void;
+				  })
+				| null;
+			const ctx = canvas?.getContext('2d');
+			const pixel = () =>
+				ctx ? Array.from(ctx.getImageData(10, 10, 1, 1).data) : null;
+			const paintCountAtFailure = paintTimes.length;
+			const rect = canvas?.getBoundingClientRect().toJSON();
+			const pixelAtFailure = pixel();
+			canvas?.requestPaint?.();
+			await new Promise<void>((resolve) => setTimeout(resolve, 150));
+			diagnostics = {
+				error: String(error),
+				frameAtObservation,
+				paintCountAtFailure,
+				rect,
+				pixelAtFailure,
+				pixelAfterRequest: pixel(),
+			};
+			throw error;
+		} finally {
+			root.unmount();
+			container.removeEventListener('paint', onPaint, true);
+			container.remove();
+			await server.commands.writeFile(
+				`test/__results__/native-preview-paint/trial-${trial}.json`,
+				JSON.stringify({
+					...diagnostics,
+					trial,
+					paintTimes,
+					visibility: document.visibilityState,
+					viewport: [window.innerWidth, window.innerHeight],
+					userAgent: navigator.userAgent,
+				}),
+			);
+		}
+	},
+);
 
 test('can evict WebGL contexts after native capture without crashing', async (t) => {
 	if (!supportsNativeHtmlInCanvas()) {

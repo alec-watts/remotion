@@ -1,0 +1,79 @@
+name: Compare native preview resize paint on main and the gradient PR
+on:
+  push:
+    branches: [codex/13312-native-preview-paint-diagnostic]
+permissions:
+  contents: read
+jobs:
+  chromium:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-26-arm64
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 6
+          persist-credentials: false
+      - name: Verify control and candidate ancestry
+        run: |
+          git merge-base --is-ancestor 26afaf0d015c336b6695c68530abe33ea3edce1c HEAD
+          git merge-base --is-ancestor ac9d96ada0fb3e13051f8c05cf4e9d06eaaba4ce HEAD
+      - name: Freeze Chrome for both test arms
+        run: |
+          diagnostic_bundle="$RUNNER_TEMP/Diagnostic Preview Chrome.app"
+          ditto "/Applications/Google Chrome.app" "$diagnostic_bundle"
+          chflags -R uchg "$diagnostic_bundle"
+          echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$diagnostic_bundle/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          find "$diagnostic_bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/preview-chrome.sha256"
+      - run: python3 .github/scripts/pin-gradient-chrome.py
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - name: Compare the unchanged assertions on both trees
+        run: |
+          candidate=ac9d96ada0fb3e13051f8c05cf4e9d06eaaba4ce
+          baseline=26afaf0d015c336b6695c68530abe33ea3edce1c
+          git diff --binary "$baseline" "$candidate" > "$RUNNER_TEMP/gradient-feature.patch"
+          mkdir -p qualification
+          diagnostic_failed=0
+          for arm in gradient main; do
+            if [ "$arm" = main ]; then
+              git apply --reverse "$RUNNER_TEMP/gradient-feature.patch"
+              git diff --exit-code "$baseline" -- packages/web-renderer/src ':!packages/web-renderer/src/test/html-in-canvas.test.tsx'
+            fi
+            git diff --exit-code "$baseline" -- packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx bun.lock
+            bunx turbo run make --filter=@remotion/web-renderer
+            result_dir="qualification/$arm"
+            mkdir -p "$result_dir" packages/web-renderer/test/__results__
+            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > "$result_dir/chrome.txt"
+            shasum -a 256 packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/html-in-canvas.test.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx bun.lock > "$result_dir/inputs.txt"
+            if (cd packages/web-renderer && bunx vitest run src/test/html-in-canvas.test.tsx --project chromium -t 'preserves the displayed frame while HtmlInCanvas resizes in preview' --reporter=default --reporter=json --outputFile=./test/__results__/result.json); then
+              diagnostic_exit=0
+            else
+              diagnostic_exit=$?
+              diagnostic_failed=1
+            fi
+            printf '%s\n' "$diagnostic_exit" > "$result_dir/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "$result_dir/web-renderer"
+          done
+          cmp qualification/gradient/chrome.txt qualification/main/chrome.txt
+          cmp qualification/gradient/inputs.txt qualification/main/inputs.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/preview-chrome.sha256"
+          exit "$diagnostic_failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-preview-resize-paint
+          path: qualification
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Diagnostic Preview Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Diagnostic Preview Chrome.app"
+          fi
