@@ -72,7 +72,7 @@ jobs:
           mkdir -p qualification
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
           git rev-parse dd6f20c5f74d8710047a89733271257f4f90c214 HEAD > qualification/revisions.txt
-          shasum -a 256 "$drawing"/{turn-svg-into-drawable,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
+          shasum -a 256 "$drawing"/{turn-svg-into-drawable,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 packages/web-renderer/src/test/fixtures/svg-external-font-selection.tsx packages/web-renderer/src/test/fixtures/svg-font-family-lifetime.tsx packages/web-renderer/src/test/utils.ts bun.lock > qualification/inputs.sha256
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
           exit_status=0
           for arm in baseline candidate; do
