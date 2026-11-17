@@ -66,6 +66,7 @@ jobs:
             bun run teste2e > "$artifacts/$arm/e2e.log" 2>&1 || status=$?
             shasum -a 256 --quiet -c "$artifacts/browser.sha256"
             shasum -a 256 --quiet -c "$artifacts/$arm/package-effective.sha256"
+            shasum -a 256 --quiet -c "$artifacts/$arm/inputs.sha256"
             tail -80 "$artifacts/$arm/e2e.log"
             printf '%s\n' "$status" > "$artifacts/$arm/status.txt"
             if [ -d packages/example/test-results ]; then
