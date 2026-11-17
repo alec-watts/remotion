@@ -1,7 +1,7 @@
-name: Keep bounded affine CSS filter input surfaces
+name: Sample bounded affine filters at projected density
 on:
   push:
-    branches: [codex/3d-bounded-affine-filter]
+    branches: [codex/3d-affine-filter-oversampling]
 permissions:
   contents: read
 jobs:
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: 3d-bounded-affine-filter-${{ matrix.os }}
+          name: 3d-affine-filter-oversampling-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

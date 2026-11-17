@@ -139,6 +139,7 @@ export const processNode = async ({
 
 		let precomposeRect: DOMRect | null = null;
 		let projectedRect: DOMRect | null = null;
+		let affineFilterScale: number | null = null;
 		if (
 			internalState.experimental3DRendering &&
 			(precompositing.needsOpacityPrecompositing || forceSubtreePrecompositing)
@@ -237,6 +238,29 @@ export const processNode = async ({
 				width <= 16384 &&
 				height <= 16384 &&
 				width * height <= 16777216;
+			if (
+				retainAffineFilterInput &&
+				totalMatrix.b === 0 &&
+				totalMatrix.c === 0
+			) {
+				const horizontalScale = Math.abs(totalMatrix.a);
+				const verticalScale = Math.abs(totalMatrix.d);
+				const density = scale * Math.max(horizontalScale, verticalScale);
+				const sourceWidth = Math.ceil(precomposeRect.width * density);
+				const sourceHeight = Math.ceil(precomposeRect.height * density);
+				if (
+					horizontalScale !== verticalScale &&
+					density > scale &&
+					sourceWidth <= 16384 &&
+					sourceHeight <= 16384 &&
+					sourceWidth * sourceHeight <= 16777216
+				) {
+					// Keep enough source samples for the magnified axis. The existing
+					// draw reduces the other axis as part of the affine transform.
+					affineFilterScale = density;
+				}
+			}
+
 			const visibilityViewport = retainAffineFilterInput
 				? parentRect
 				: captureViewport;
@@ -292,6 +316,7 @@ export const processNode = async ({
 			scale,
 			is3DPrecomposition,
 		});
+		const filterLayerScale = affineFilterScale ?? layerScale;
 
 		const tempContext = await createLayer({
 			transparent: true,
@@ -300,7 +325,7 @@ export const processNode = async ({
 			element,
 			logLevel,
 			internalState,
-			scale: layerScale,
+			scale: filterLayerScale,
 			onlyBackgroundClipText: false,
 			waitForPageResponsiveness,
 		});
@@ -329,12 +354,12 @@ export const processNode = async ({
 			precompositing.needsFilterPrecompositing?.includes('url(')
 				? applySvgFilterToPrecomposedCanvas({
 						source: drawable,
-						scale: layerScale,
+						scale: filterLayerScale,
 						sourceRect: new DOMRect(
-							(dimensions.left - layerRect.left) * layerScale,
-							(dimensions.top - layerRect.top) * layerScale,
-							dimensions.width * layerScale,
-							dimensions.height * layerScale,
+							(dimensions.left - layerRect.left) * filterLayerScale,
+							(dimensions.top - layerRect.top) * filterLayerScale,
+							dimensions.width * filterLayerScale,
+							dimensions.height * filterLayerScale,
 						),
 						filter: precompositing.needsFilterPrecompositing,
 						ownerDocument: element.ownerDocument,
@@ -363,7 +388,7 @@ export const processNode = async ({
 				context: tempContext,
 				filter: scaleFilterLengths(
 					precompositing.needsFilterPrecompositing,
-					layerScale,
+					filterLayerScale,
 				),
 				drawFn: () => tempContext.drawImage(tempContext.canvas, 0, 0),
 			});
@@ -386,7 +411,7 @@ export const processNode = async ({
 				maskRect: dimensions,
 				precomposeRect: layerRect,
 				tempContext,
-				scale: layerScale,
+				scale: filterLayerScale,
 				internalState,
 			});
 			if (waitForPageResponsiveness !== null) {
