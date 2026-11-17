@@ -26,6 +26,7 @@ import {
 	applyFilterToDrawOperation,
 	applySvgFilterToPrecomposedCanvas,
 	scaleFilterLengths,
+	supportsCanvasDropShadow,
 	getPrecomposeRectForFilter,
 } from './handle-filter';
 import {
@@ -374,11 +375,16 @@ export const processNode = async ({
 		}
 
 		if (precompositing.needsFilterPrecompositing && !svgFilteredLayer) {
-			const filteredImage = layerRasterScale
+			const filterRasterScale =
+				layerRasterScale ??
+				(knownFilterFootprint && !supportsCanvasDropShadow()
+					? {x: layerScale, y: layerScale}
+					: null);
+			const filteredImage = filterRasterScale
 				? await rasterizeCssFilter({
 						source: tempContext.canvas,
 						filter: precompositing.needsFilterPrecompositing,
-						rasterScale: layerRasterScale,
+						rasterScale: filterRasterScale,
 						color: computedStyle.color,
 						ownerDocument: element.ownerDocument,
 						signal: internalState.rasterImageLoaderState.signal,

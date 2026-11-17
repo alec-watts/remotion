@@ -17,6 +17,16 @@ export const rasterizeCssFilter = async ({
 	signal: AbortSignal | null;
 }) => {
 	signal?.throwIfAborted();
+	const resource = createSvgFilterFromCss({
+		filter,
+		rasterScale,
+		width: source.width,
+		height: source.height,
+		color,
+		ownerDocument,
+	});
+	if (!resource) return null;
+
 	const blob = await source.convertToBlob({type: 'image/png'});
 	signal?.throwIfAborted();
 	const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -29,15 +39,6 @@ export const rasterizeCssFilter = async ({
 	);
 	svg.setAttribute('width', String(source.width));
 	svg.setAttribute('height', String(source.height));
-	const resource = createSvgFilterFromCss({
-		filter,
-		rasterScale,
-		width: source.width,
-		height: source.height,
-		color,
-		ownerDocument,
-	});
-	if (!resource) throw new Error(`Cannot rasterize CSS filter: ${filter}`);
 	svg.appendChild(resource);
 	const input = ownerDocument.createElementNS(
 		'http://www.w3.org/2000/svg',

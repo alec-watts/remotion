@@ -4,6 +4,31 @@ import {getWiderRectAndExpand} from './clamp-rect-to-parent-bounds';
 import {parseFilterOutsets} from './filter-outsets';
 import {getSvgFilterGeometry, rebaseSvgFilter} from './svg-filter-geometry';
 
+let canvasDropShadowSupported: boolean | null = null;
+
+export const supportsCanvasDropShadow = () => {
+	if (canvasDropShadowSupported !== null) return canvasDropShadowSupported;
+
+	const canvas = new OffscreenCanvas(2, 1);
+	try {
+		const context = canvas.getContext('2d');
+		if (!context || typeof context.filter !== 'string') {
+			canvasDropShadowSupported = false;
+			return false;
+		}
+
+		context.filter = 'drop-shadow(1px 0px 0px blue)';
+		context.fillStyle = 'red';
+		context.fillRect(0, 0, 1, 1);
+		const pixel = context.getImageData(1, 0, 1, 1).data;
+		canvasDropShadowSupported = pixel[2] === 255 && pixel[3] === 255;
+		return canvasDropShadowSupported;
+	} finally {
+		canvas.width = 0;
+		canvas.height = 0;
+	}
+};
+
 /**
  * Gets the precompose rect for an element with a filter that requires precompositing.
  * Expands the element's bounding rect (including all children) to accommodate drop-shadow spread.
