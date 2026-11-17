@@ -1,7 +1,7 @@
-name: Compare current gradient group positioning and filter inputs
+name: Compare opaque gradient painting and alpha controls
 on:
   push:
-    branches: [codex/qualify-gradient-device-origin-current]
+    branches: [codex/qualify-gradient-opaque-source]
 permissions:
   contents: read
 jobs:
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gradient-device-origin-current-${{ matrix.os }}
+          name: gradient-opaque-source-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

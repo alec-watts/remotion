@@ -1,10 +1,16 @@
 import type {LogLevel} from 'remotion';
+import {NoReactInternals} from 'remotion/no-react';
 import type {InternalState} from '../internal-state';
 import {createLayer} from '../take-screenshot';
+import {getBackgroundImageRect} from './background-image-rect';
 import {getBlendMode} from './calculate-transforms';
 import {getBackgroundFill, isColorTransparent} from './get-background-fill';
 import {getBoxBasedOnBackgroundClip} from './get-padding-box';
 import {parseUrlFunction} from './mask-image';
+import {
+	createCanvasGradient,
+	parseLinearGradient,
+} from './parse-linear-gradient';
 
 export const drawBackground = async ({
 	hasCssTransform,
@@ -175,6 +181,37 @@ export const drawBackground = async ({
 	};
 
 	const blendMode = getBlendMode(computedStyle.backgroundBlendMode);
+	const opaqueGradient =
+		blendMode === null ? parseLinearGradient(backgroundImage) : null;
+	if (
+		opaqueGradient &&
+		opaqueGradient.colorStops.every(
+			({color}) =>
+				!/^(?:rgba|hsla)\(/.test(color) &&
+				!color.includes('/') &&
+				NoReactInternals.processColor(color) >>> 24 === 255,
+		)
+	) {
+		const {gradient, hasInterpolation} = createCanvasGradient({
+			ctx: contextToDraw,
+			rect: getBackgroundImageRect({
+				backgroundPosition: computedStyle.backgroundPosition,
+				backgroundSize: computedStyle.backgroundSize,
+				positioningArea: boundingRect,
+				intrinsicSize: null,
+			}),
+			gradientInfo: opaqueGradient,
+			offsetLeft,
+			offsetTop,
+		});
+		// An opaque interpolating fill covers the color below it. Paint it
+		// once at the destination rather than sampling another surface.
+		if (hasInterpolation) {
+			paintFill(contextToDraw, gradient, offsetLeft, offsetTop);
+			return;
+		}
+	}
+
 	if (
 		backgroundImage !== 'none' &&
 		(blendMode ||
