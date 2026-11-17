@@ -1,0 +1,42 @@
+name: Verify exact preview-resize renderer revision
+on:
+  push:
+    branches: [codex/13365-exact-renderer-ci]
+permissions:
+  contents: read
+env:
+  FORCE_COLOR: 1
+  TURBO_TELEMETRY_DISABLED: 1
+  TURBO_NO_UPDATE_NOTIFIER: 1
+jobs:
+  renderer:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: bd6cce48843f4b3fc3149824d8c56b933c5ec449
+          persist-credentials: false
+      - name: Verify the public source revision
+        run: test "$(git rev-parse HEAD)" = bd6cce48843f4b3fc3149824d8c56b933c5ec449
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Install
+        run: bun ci
+      - name: Install deps
+        run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Test web renderer
+        run: bun run testwebrenderer --log-order=stream
+      - name: Upload native pixel failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-resize-native-pixel-failures
+          path: packages/web-renderer/src/test/__screenshots__/native-pixel-failures/
+          if-no-files-found: ignore
+          retention-days: 7
