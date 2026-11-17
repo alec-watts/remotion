@@ -74,6 +74,81 @@ for (const {kind} of filterInputCases)
 						devicePixelRatio,
 					}),
 				);
+				if (
+					kind === 'gradient-visible' &&
+					!preserving &&
+					experimental3DRendering
+				) {
+					const referenceCanvas = new OffscreenCanvas(300, 300);
+					const referenceContext = referenceCanvas.getContext('2d')!;
+					const referenceImage = await createImageBitmap(native);
+					try {
+						referenceContext.drawImage(referenceImage, 0, 0);
+					} finally {
+						referenceImage.close();
+					}
+
+					const reference = referenceContext.getImageData(
+						25,
+						100,
+						100,
+						50,
+					).data;
+					const matrix: {
+						x: number;
+						y: number;
+						readback: boolean;
+						wrong: number;
+					}[] = [];
+					for (const readback of [false, true]) {
+						for (let y = 0; y < 8; y++) {
+							for (let x = 0; x < 8; x++) {
+								const canvas = new OffscreenCanvas(232, 56 + 8);
+								const ctx = canvas.getContext('2d', {
+									willReadFrequently: readback,
+								})!;
+								ctx.setTransform(2, 0, 0, 1, x, y);
+								const gradient = ctx.createLinearGradient(0, 25, 50, 25);
+								gradient.addColorStop(0, 'red');
+								gradient.addColorStop(1, 'lime');
+								ctx.fillStyle = gradient;
+								ctx.fillRect(0, 0, 50, 50);
+								const image = await createImageBitmap(
+									await canvas.convertToBlob({type: 'image/png'}),
+								);
+								const readCanvas = new OffscreenCanvas(100, 50);
+								const read = readCanvas.getContext('2d')!;
+								try {
+									read.drawImage(image, -x, -y);
+								} finally {
+									image.close();
+								}
+
+								const {data} = read.getImageData(0, 0, 100, 50);
+								let wrong = 0;
+								for (let i = 0; i < data.length; i += 4) {
+									if (
+										data[i] !== reference[i] ||
+										data[i + 1] !== reference[i + 1] ||
+										data[i + 2] !== reference[i + 2] ||
+										data[i + 3] !== reference[i + 3]
+									)
+										wrong++;
+								}
+
+								matrix.push({x, y, readback, wrong});
+								canvas.width = 0;
+								readCanvas.width = 0;
+							}
+						}
+					}
+
+					await server.commands.writeFile(
+						`${path}/paint-origins.json`,
+						JSON.stringify(matrix),
+					);
+				}
+
 				expect(result.mismatchedPixels).toBe(0);
 			});
 		}
