@@ -46,6 +46,7 @@ export const projectiveFilterInput = (
 		willChange?: 'transform';
 		order?: 'transform-outside' | 'filter-outside';
 		paint?: 'filtered' | 'source-only' | 'blue-text';
+		mixedMarkup?: 'textured' | 'rounded-clip' | 'masked';
 	} | null = null,
 ) => {
 	const scene = filterInputCases.find((item) => item.kind === kind)!;
@@ -56,6 +57,7 @@ export const projectiveFilterInput = (
 	const transform = geometry?.transform ?? scene.transform;
 	const order = geometry?.order;
 	const paint = geometry?.paint ?? 'filtered';
+	const mixedMarkup = geometry?.mixedMarkup;
 	const filter =
 		paint !== 'filtered'
 			? undefined
@@ -91,7 +93,30 @@ export const projectiveFilterInput = (
 					filter: order === 'filter-outside' ? undefined : filter,
 				}}
 			>
-				{kind.startsWith('text') ? 'Aa' : null}
+				{mixedMarkup ? (
+					<div
+						style={{
+							position: 'absolute',
+							inset: '1px 3px 4px 2px',
+							backgroundImage:
+								'repeating-linear-gradient(35deg, #fee295 0px, #fee295 4px, #93d7f9 4px, #93d7f9 8px)',
+							borderRadius:
+								mixedMarkup === 'rounded-clip'
+									? '16px 12px 5px 9px'
+									: undefined,
+							overflow: mixedMarkup === 'rounded-clip' ? 'hidden' : undefined,
+							maskImage:
+								mixedMarkup === 'masked'
+									? 'linear-gradient(0deg, transparent, black 75%), linear-gradient(90deg, black 65%, transparent)'
+									: undefined,
+							maskComposite: mixedMarkup === 'masked' ? 'intersect' : undefined,
+						}}
+					>
+						<span style={{position: 'absolute', left: 1, top: -4}}>Aa</span>
+					</div>
+				) : kind.startsWith('text') ? (
+					'Aa'
+				) : null}
 				{kind === 'masked-visible' ? (
 					<div
 						style={{
@@ -140,7 +165,7 @@ export const projectiveFilterInput = (
 
 	return {
 		component: Component,
-		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}${paint === 'filtered' ? '' : `-${paint}`}${order ? `-${order}` : ''}`,
+		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}${paint === 'filtered' ? '' : `-${paint}`}${order ? `-${order}` : ''}${mixedMarkup ? `-${mixedMarkup}` : ''}`,
 		width: 300,
 		height: 300,
 		fps: 30,

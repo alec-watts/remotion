@@ -61,15 +61,25 @@ const renderMarkup = async (markup: HTMLElement, size: number) => {
 
 test.for(
 	[false, true].flatMap((preserving) =>
-		[1, 1.5].flatMap((scale) =>
-			[1, 2].map((horizontalScale) => ({preserving, scale, horizontalScale})),
-		),
+		[1, 1.5].flatMap((scale) => [
+			{preserving, scale, horizontalScale: 1, mixedMarkup: undefined},
+			{preserving, scale, horizontalScale: 2, mixedMarkup: undefined},
+			...(['textured', 'rounded-clip', 'masked'] as const).map(
+				(mixedMarkup) => ({
+					preserving,
+					scale,
+					horizontalScale: 2,
+					mixedMarkup,
+				}),
+			),
+		]),
 	),
 )(
-	'compares text and shadow at preserving=$preserving scale=$scale horizontalScale=$horizontalScale',
-	async ({preserving, scale, horizontalScale}) => {
+	'compares text and shadow at preserving=$preserving scale=$scale horizontalScale=$horizontalScale mixedMarkup=$mixedMarkup',
+	async ({preserving, scale, horizontalScale, mixedMarkup}) => {
 		const geometry = {
 			transform: horizontalScale === 1 ? 'none' : 'scaleX(2)',
+			mixedMarkup,
 		};
 		const filtered = projectiveFilterInput(
 			'text-visible',
@@ -90,7 +100,7 @@ test.for(
 			'text-visible',
 			preserving,
 			{left: 25 + 60 * horizontalScale, top: 100, shadowOffset: 60},
-			{...geometry, paint: 'blue-text'},
+			{...geometry, mixedMarkup: undefined, paint: 'blue-text'},
 		);
 		const split = (
 			order: 'transform-outside' | 'filter-outside',
@@ -180,7 +190,7 @@ test.for(
 			renderMarkup(sourceMarkup, source.width * scale),
 		]);
 
-		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}`;
+		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}${mixedMarkup ? `/${mixedMarkup}` : ''}`;
 		await server.commands.writeFile(
 			`${folder}/svg-replay.json`,
 			JSON.stringify(

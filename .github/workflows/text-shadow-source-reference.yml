@@ -1,7 +1,7 @@
-name: Compare SVG rasterization of filtered HTML glyph markup
+name: Compare SVG replay of filtered mixed HTML layers
 on:
   push:
-    branches: [codex/3d-glyph-markup-filter]
+    branches: [codex/3d-mixed-markup-filter]
 permissions:
   contents: read
 jobs:
