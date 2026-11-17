@@ -1,7 +1,7 @@
-name: Compare glyph filter and transform ordering
+name: Compare SVG rasterization of filtered HTML glyph markup
 on:
   push:
-    branches: [codex/3d-glyph-filter-transform-order]
+    branches: [codex/3d-glyph-markup-filter]
 permissions:
   contents: read
 jobs:
