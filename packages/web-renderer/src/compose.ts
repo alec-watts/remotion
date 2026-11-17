@@ -267,10 +267,15 @@ const planPreserve3DPlanes = ({
 					bounds.width + filterOutsets.left + filterOutsets.right,
 					bounds.height + filterOutsets.top + filterOutsets.bottom,
 				);
+				const filter = transforms.precompositing.needsFilterPrecompositing;
+				const hasAffineCssFilter =
+					transforms.totalMatrix.is2D &&
+					filter !== null &&
+					!filter.includes('url(');
 				const paintRect = clipSourceRectToViewport(
 					paintBounds,
 					transforms.totalMatrix,
-					filterViewport,
+					hasAffineCssFilter ? parentRect : filterViewport,
 				);
 				if (!paintRect) {
 					// An invisible own plane does not invalidate the other context planes.

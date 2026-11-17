@@ -124,6 +124,10 @@ export const processNode = async ({
 			precompositing.needsFilterPrecompositing
 				? parseFilterOutsets(precompositing.needsFilterPrecompositing)
 				: {left: 0, right: 0, top: 0, bottom: 0};
+		const hasAffineCssFilter =
+			totalMatrix.is2D &&
+			precompositing.needsFilterPrecompositing !== null &&
+			!precompositing.needsFilterPrecompositing.includes('url(');
 		const captureViewport = internalState.experimental3DRendering
 			? new DOMRect(
 					parentRect.left - outsets.right,
@@ -223,23 +227,39 @@ export const processNode = async ({
 		}
 
 		if (internalState.experimental3DRendering) {
+			const width = Math.ceil(precomposeRect.width * scale);
+			const height = Math.ceil(precomposeRect.height * scale);
+			// Keep the complete affine source when its bitmap fits the allocation
+			// budget. The projected visible region is only used to cull paint.
+			const retainAffineFilterInput =
+				hasAffineCssFilter &&
+				!precompositing.needs3DTransformViaWebGL &&
+				width <= 16384 &&
+				height <= 16384 &&
+				width * height <= 16777216;
+			const visibilityViewport = retainAffineFilterInput
+				? parentRect
+				: captureViewport;
 			// Clip after every bounds union, including opacity and filter groups.
 			// Keep nearby offscreen input that can cast a drop-shadow into the viewport.
 			const visibleSourceRect = clipSourceRectToViewport(
 				precomposeRect,
 				totalMatrix,
-				captureViewport,
+				visibilityViewport,
 			);
 			if (!visibleSourceRect)
 				return {
 					type: preserves3D ? 'continue' : 'skip-children',
 					cleanupAfterChildren: null,
 				};
-			precomposeRect = roundToExpandRect(visibleSourceRect);
+			if (!retainAffineFilterInput) {
+				precomposeRect = roundToExpandRect(visibleSourceRect);
+			}
+
 			projectedRect = projectSourceRectToViewport(
-				precomposeRect,
+				retainAffineFilterInput ? visibleSourceRect : precomposeRect,
 				totalMatrix,
-				captureViewport,
+				visibilityViewport,
 			);
 		}
 
