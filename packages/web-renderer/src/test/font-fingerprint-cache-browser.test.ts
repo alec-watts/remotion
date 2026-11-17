@@ -227,15 +227,18 @@ test('reuses candidate rasters through public batch SVG captures across frames',
 	};
 
 	const onFontEvent = (event: Event) => {
+		const faces = (event as Partial<FontFaceSetLoadEvent>).fontfaces;
 		record(event.type, {
 			status: document.fonts.status,
-			faces: (event as FontFaceSetLoadEvent).fontfaces.map((face) => ({
-				family: face.family,
-				status: face.status,
-				candidate: candidates.has(face),
-				inSourceSet: document.fonts.has(face),
-				original: originalFonts.includes(face),
-			})),
+			trusted: event.isTrusted,
+			faces:
+				faces?.map((face) => ({
+					family: face.family,
+					status: face.status,
+					candidate: candidates.has(face),
+					inSourceSet: document.fonts.has(face),
+					original: originalFonts.includes(face),
+				})) ?? null,
 		});
 	};
 
