@@ -165,18 +165,26 @@ export const processNode = async ({
 
 		const is3DPrecomposition = precompositing.needs3DTransformViaWebGL;
 
-		const {
-			rect: layerRect,
-			scale: layerScale,
-			pixelWidth: layerPixelWidth,
-			pixelHeight: layerPixelHeight,
-		} = getPrecomposedLayerGeometry({
+		const geometry = getPrecomposedLayerGeometry({
 			precomposeRect,
 			totalMatrix,
 			parentRect,
 			scale,
 			is3DPrecomposition,
 		});
+		// Compose the source and its mask in layout coordinates before sampling
+		// the fractional transform. Separate device-pixel rasters lose the
+		// shared coverage at rounded edges.
+		const composeMaskBeforeScale =
+			precompositing.needsMaskImage?.type === 'layers' &&
+			geometry.pixelWidth !== null &&
+			!Number.isInteger(geometry.scale);
+		const layerRect = composeMaskBeforeScale ? precomposeRect : geometry.rect;
+		const layerScale = composeMaskBeforeScale ? 1 : geometry.scale;
+		const layerPixelWidth = composeMaskBeforeScale ? null : geometry.pixelWidth;
+		const layerPixelHeight = composeMaskBeforeScale
+			? null
+			: geometry.pixelHeight;
 
 		const tempContext = await createLayer({
 			transparent: true,
