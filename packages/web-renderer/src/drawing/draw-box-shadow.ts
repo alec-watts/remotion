@@ -213,15 +213,24 @@ export const drawBorderRadius = ({
 		newCtx.shadowOffsetY = shadow.offsetY;
 
 		newCtx.fillStyle = 'black';
-		drawRoundedRectPath({
-			ctx: newCtx,
-			x: leftOffset - spread - newCanvas.width * 2,
-			y: topOffset - spread,
-			width,
-			height,
-			borderRadius: shadowRadius,
-		});
-		newCtx.fill();
+		const casterX = leftOffset - spread - newCanvas.width * 2;
+		const casterY = topOffset - spread;
+		const squareCorners = Object.values(shadowRadius).every(
+			(radius) => radius.horizontal === 0 && radius.vertical === 0,
+		);
+		if (squareCorners) {
+			newCtx.fillRect(casterX, casterY, width, height);
+		} else {
+			drawRoundedRectPath({
+				ctx: newCtx,
+				x: casterX,
+				y: casterY,
+				width,
+				height,
+				borderRadius: shadowRadius,
+			});
+			newCtx.fill();
+		}
 
 		// Cut out the shape, leaving only shadow
 		newCtx.shadowColor = 'transparent';
