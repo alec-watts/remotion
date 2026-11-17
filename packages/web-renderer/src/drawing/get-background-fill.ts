@@ -7,6 +7,69 @@ import {
 } from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
 
+const hardGradientHasExactColors = async (willReadFrequently: boolean) => {
+	const source = new OffscreenCanvas(212, 92);
+	const reader = new OffscreenCanvas(212, 92);
+	using _canvas = {
+		[Symbol.dispose]: () => {
+			source.width = 0;
+			source.height = 0;
+			reader.width = 0;
+			reader.height = 0;
+		},
+	};
+	const context = source.getContext(
+		'2d',
+		willReadFrequently ? {willReadFrequently: true} : {},
+	);
+	const readback = reader.getContext('2d', {willReadFrequently: true});
+	if (!context || !readback) return null;
+
+	context.setTransform(2, 0, 0, 2, 6, 6);
+	const gradient = context.createLinearGradient(0, 0, 100, 0);
+	gradient.addColorStop(0.5, 'blue');
+	gradient.addColorStop(0.5, 'red');
+	context.fillStyle = gradient;
+	context.fillRect(0, 0, 100, 40);
+
+	// Read a serialized snapshot. Reading the producer canvas directly can
+	// change the backend before it rasterizes the pending gradient.
+	const image = await createImageBitmap(
+		await source.convertToBlob({type: 'image/png'}),
+	);
+	using _image = {[Symbol.dispose]: () => image.close()};
+	readback.drawImage(image, 0, 0);
+	const {data} = readback.getImageData(6, 6, 200, 80);
+	for (let i = 0; i < data.length; i += 4) {
+		const blue = (i / 4) % 200 < 100;
+		if (
+			data[i] !== (blue ? 0 : 255) ||
+			data[i + 1] !== 0 ||
+			data[i + 2] !== (blue ? 255 : 0) ||
+			data[i + 3] !== 255
+		) {
+			return false;
+		}
+	}
+
+	return true;
+};
+
+let readbackProbe: Promise<boolean> | null = null;
+const needsReadbackGradient = () => {
+	readbackProbe ??= (async () => {
+		try {
+			const normal = await hardGradientHasExactColors(false);
+			return (
+				normal === false && (await hardGradientHasExactColors(true)) === true
+			);
+		} catch {
+			return false;
+		}
+	})();
+	return readbackProbe;
+};
+
 const createReadbackGradientPattern = ({
 	target,
 	gradientOptions,
@@ -300,12 +363,15 @@ export const getBackgroundFill = async ({
 				offsetLeft,
 				offsetTop,
 			};
+			const raster = (await needsReadbackGradient())
+				? createReadbackGradientPattern({
+						target: contextToDraw,
+						boundingRect,
+						gradientOptions,
+					})
+				: null;
 			return (
-				createReadbackGradientPattern({
-					target: contextToDraw,
-					boundingRect,
-					gradientOptions,
-				}) ?? createCanvasGradient({ctx: contextToDraw, ...gradientOptions})
+				raster ?? createCanvasGradient({ctx: contextToDraw, ...gradientOptions})
 			);
 		}
 	}
