@@ -11,6 +11,7 @@ export const createCssMask = async ({
 	precomposeRect,
 	width,
 	height,
+	scale,
 	internalState,
 }: {
 	maskImageInfo: Extract<MaskImageInfo, {type: 'layers'}>;
@@ -19,6 +20,7 @@ export const createCssMask = async ({
 	precomposeRect: DOMRect;
 	width: number;
 	height: number;
+	scale: number;
 	internalState: InternalState;
 }) => {
 	const images = await Promise.all(
@@ -69,14 +71,17 @@ export const createCssMask = async ({
 			foreignObject.setAttribute('height', String(height));
 			const scaleX = width / precomposeRect.width;
 			const scaleY = height / precomposeRect.height;
-			// Uniform fractional layout scaling can keep mask edges on their
-			// device-pixel phase without resampling the HTML viewport.
+			// The layer already knows its raster scale. Dividing the rounded
+			// extent by its layout size can differ between axes by one ULP.
 			if (
-				scaleX === scaleY &&
-				!Number.isInteger(scaleX) &&
-				CSS.supports('zoom', String(scaleX))
+				!Number.isInteger(scale) &&
+				Math.abs(precomposeRect.width * scale - width) <=
+					width * Number.EPSILON &&
+				Math.abs(precomposeRect.height * scale - height) <=
+					height * Number.EPSILON &&
+				CSS.supports('zoom', String(scale))
 			) {
-				viewport.style.zoom = String(scaleX);
+				viewport.style.zoom = String(scale);
 			} else {
 				viewport.style.transformOrigin = '0 0';
 				viewport.style.transform = `scale(${scaleX}, ${scaleY})`;

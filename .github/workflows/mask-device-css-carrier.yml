@@ -1,7 +1,7 @@
-name: Compare CSS layout zoom at fractional mask scales
+name: Compare the actual raster scale for layered masks
 on:
   push:
-    branches: [codex/mask-fractional-layout-zoom]
+    branches: [codex/mask-carrier-known-raster-scale]
 permissions:
   contents: read
 jobs:
@@ -49,9 +49,9 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.MASK_GRADIENT_CHROME,"))
           PIN
-      - name: Compare layout zoom and CSS transforms on the same worker
+      - name: Compare raster scale selection on the same worker
         run: |
-          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing/css-mask.ts > "$RUNNER_TEMP/mask-zoom.patch"
+          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing/css-mask.ts packages/web-renderer/src/drawing/handle-mask.ts > "$RUNNER_TEMP/mask-zoom.patch"
           test -s "$RUNNER_TEMP/mask-zoom.patch"
           failed=0
           for arm in candidate control; do
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-fractional-layout-zoom-${{ matrix.os }}
+          name: mask-carrier-known-raster-scale-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
