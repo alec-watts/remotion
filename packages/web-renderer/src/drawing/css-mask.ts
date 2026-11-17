@@ -71,19 +71,20 @@ export const createCssMask = async ({
 			foreignObject.setAttribute('height', String(height));
 			const scaleX = width / precomposeRect.width;
 			const scaleY = height / precomposeRect.height;
-			// The layer already knows its raster scale. Dividing the rounded
-			// extent by its layout size can differ between axes by one ULP.
+			viewport.style.transformOrigin = '0 0';
 			if (
 				!Number.isInteger(scale) &&
 				Math.abs(precomposeRect.width * scale - width) <=
 					width * Number.EPSILON &&
 				Math.abs(precomposeRect.height * scale - height) <=
-					height * Number.EPSILON &&
-				CSS.supports('zoom', String(scale))
+					height * Number.EPSILON
 			) {
-				viewport.style.zoom = String(scale);
+				// Keep the mask in layout coordinates and shift the scaled
+				// viewport to the capture origin after layout.
+				target.style.left = `${maskRect.left}px`;
+				target.style.top = `${maskRect.top}px`;
+				viewport.style.transform = `translate(${-precomposeRect.left * scale}px, ${-precomposeRect.top * scale}px) scale(${scale})`;
 			} else {
-				viewport.style.transformOrigin = '0 0';
 				viewport.style.transform = `scale(${scaleX}, ${scaleY})`;
 			}
 		}
