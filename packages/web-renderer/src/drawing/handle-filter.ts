@@ -67,6 +67,73 @@ export const applyFilterToDrawOperation = ({
 	context.filter = previousFilter;
 };
 
+let paintsCanvasDropShadow: boolean | null = null;
+
+const canvasPaintsDropShadow = () => {
+	if (paintsCanvasDropShadow !== null) return paintsCanvasDropShadow;
+	const probe = new OffscreenCanvas(3, 1);
+	try {
+		const context = probe.getContext('2d');
+		if (!context) return false;
+		context.filter = 'drop-shadow(1px 0px 0px black)';
+		context.fillRect(0, 0, 1, 1);
+		paintsCanvasDropShadow = context.getImageData(1, 0, 1, 1).data[3] === 255;
+		return paintsCanvasDropShadow;
+	} finally {
+		probe.width = 0;
+		probe.height = 0;
+	}
+};
+
+export const applySharpShadowFallback = (
+	context: OffscreenCanvasRenderingContext2D,
+	filter: string,
+): boolean => {
+	const operations = splitAtTopLevel(filter, ' ');
+	const operation = operations[0];
+	if (operations.length !== 1 || !operation.startsWith('drop-shadow(')) {
+		return false;
+	}
+
+	const tokens = splitAtTopLevel(operation.slice(12, -1), ' ');
+	const isLength = (value: string) => /^[+-]?\d+(?:\.\d+)?px$/.test(value);
+	const lengths = tokens.filter(isLength).map((value) => parseFloat(value));
+	const colors = tokens.filter((value) => !isLength(value));
+	const [offsetX, offsetY, blurRadius = 0] = lengths;
+	if (
+		lengths.length < 2 ||
+		lengths.length > 3 ||
+		colors.length !== 1 ||
+		!Number.isInteger(offsetX) ||
+		!Number.isInteger(offsetY) ||
+		blurRadius !== 0 ||
+		(offsetX === 0 && offsetY === 0) ||
+		canvasPaintsDropShadow()
+	) {
+		return false;
+	}
+
+	const {width, height} = context.canvas;
+	if (width > 16384 || height > 16384 || width * height > 16777216) {
+		return false;
+	}
+
+	const scratch = new OffscreenCanvas(width, height);
+	try {
+		const target = scratch.getContext('2d');
+		if (!target) return false;
+		target.shadowColor = colors[0];
+		target.shadowOffsetX = offsetX;
+		target.shadowOffsetY = offsetY;
+		target.drawImage(context.canvas, 0, 0);
+		context.drawImage(scratch, 0, 0);
+		return true;
+	} finally {
+		scratch.width = 0;
+		scratch.height = 0;
+	}
+};
+
 // Canvas filter lengths use bitmap pixels independently of the context transform.
 export const scaleFilterLengths = (filter: string, scale: number) => {
 	if (scale === 1) return filter;
