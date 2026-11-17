@@ -1,7 +1,7 @@
-name: Compare WebKit CI failures against native painting
+name: Compare isolated SVG readback transfer against native painting
 on:
   push:
-    branches: [codex/qualify-webkit-ci-native-controls]
+    branches: [codex/qualify-webkit-svg-transfer]
 permissions:
   contents: read
 jobs:

@@ -32,14 +32,16 @@ const getReadableImageError = (
 	return null;
 };
 
-const drawFilteredSvgThroughOrdinaryCanvas = ({
+const drawSvgThroughCanvas = ({
 	drawable,
 	fitted,
 	context,
+	readback,
 }: {
 	drawable: HTMLImageElement;
 	fitted: ReturnType<typeof fitSvgIntoItsContainer>;
 	context: OffscreenCanvasRenderingContext2D;
+	readback: boolean;
 }) => {
 	const {width, height} = context.canvas;
 	if (
@@ -55,7 +57,7 @@ const drawFilteredSvgThroughOrdinaryCanvas = ({
 	try {
 		const ordinary = scratch.getContext('2d', {
 			alpha: true,
-			willReadFrequently: false,
+			willReadFrequently: readback,
 		});
 		if (!ordinary) return false;
 		ordinary.drawImage(context.canvas, 0, 0);
@@ -96,12 +98,12 @@ const drawFilteredSvgThroughOrdinaryCanvas = ({
  * Draw an SVG element using "contain" behavior (the default for SVGs).
  */
 const drawSvg = ({
-	ordinaryFilter,
+	readback,
 	drawable,
 	dimensions,
 	contextToDraw,
 }: {
-	ordinaryFilter: boolean;
+	readback: boolean | null;
 	drawable: HTMLImageElement;
 	dimensions: DOMRect;
 	contextToDraw: OffscreenCanvasRenderingContext2D;
@@ -114,8 +116,9 @@ const drawSvg = ({
 		},
 	});
 	if (
-		ordinaryFilter &&
-		drawFilteredSvgThroughOrdinaryCanvas({
+		readback !== null &&
+		drawSvgThroughCanvas({
+			readback,
 			drawable,
 			fitted,
 			context: contextToDraw,
@@ -290,11 +293,14 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 				drawable,
 				dimensions,
 				contextToDraw,
-				ordinaryFilter:
+				readback:
 					/AppleWebKit/.test(userAgent) &&
 					!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
 					!getMaskImageValue(computedStyle) &&
-					Boolean(node.querySelector('feImage')),
+					node.querySelector('text') &&
+					!node.querySelector('feImage')
+						? true
+						: null,
 			});
 			return;
 		}
