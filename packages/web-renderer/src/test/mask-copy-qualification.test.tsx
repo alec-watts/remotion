@@ -2,7 +2,7 @@ import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
-import {maskCopyOverflow} from './fixtures/mask-copy-overflow';
+import {maskCopyOffsets, maskCopyOverflow} from './fixtures/mask-copy-overflow';
 import {captureNativeReference, countNativePixels} from './native-reference';
 
 const qualifyMaskCopy = async ({
@@ -11,37 +11,42 @@ const qualifyMaskCopy = async ({
 	scale,
 	frame,
 	opaqueReference,
+	position,
 }: {
 	mode: 'hard' | 'soft' | 'fractional';
 	overflow: 'hidden' | 'visible';
 	scale: number;
 	frame: number;
 	opaqueReference: boolean;
+	position: {left: number; top: number} | null;
 }) => {
-	const composition = maskCopyOverflow({mode, overflow});
+	const composition = maskCopyOverflow({mode, overflow, position});
 	const Component = composition.component;
-	const reference = await captureNativeReference(
-		{
-			...composition,
-			width: composition.width * scale,
-			height: composition.height * scale,
-			component: () => (
-				<div
-					style={{
-						position: 'absolute',
-						width: composition.width,
-						height: composition.height,
-						transform: `scale(${scale})`,
-						transformOrigin: '0 0',
-					}}
-				>
-					<Component />
-				</div>
-			),
-		},
-		frame,
-		{omitBackground: !opaqueReference},
-	);
+	const captureAtScale = (layoutZoom: boolean) =>
+		captureNativeReference(
+			{
+				...composition,
+				width: composition.width * scale,
+				height: composition.height * scale,
+				component: () => (
+					<div
+						style={{
+							position: 'absolute',
+							width: composition.width,
+							height: composition.height,
+							...(layoutZoom
+								? {zoom: scale}
+								: {transform: `scale(${scale})`, transformOrigin: '0 0'}),
+						}}
+					>
+						<Component />
+					</div>
+				),
+			},
+			frame,
+			{omitBackground: !opaqueReference},
+		);
+	const reference = await captureAtScale(false);
 	const serializedSvgs: string[] = [];
 	const serialize = XMLSerializer.prototype.serializeToString;
 	const observer = vi
@@ -68,11 +73,18 @@ const qualifyMaskCopy = async ({
 	}
 
 	const pixels = await countNativePixels(reference, actual);
-	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}`;
+	const nativeZoom =
+		position && CSS.supports('zoom', String(scale))
+			? await captureAtScale(true)
+			: null;
+	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}${position ? `-offset-${position.left}-${position.top}` : ''}`;
 	for (const [role, blob] of [
 		['reference', reference],
 		['actual', actual],
+		['native-zoom', nativeZoom],
 	] as const) {
+		if (blob === null) continue;
+
 		const bytes = new Uint8Array(await blob.arrayBuffer());
 		let binary = '';
 		for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -98,6 +110,7 @@ const qualifyMaskCopy = async ({
 			mode,
 			overflow,
 			opaqueReference,
+			position,
 			allowHtmlInCanvas: false,
 		}),
 	);
@@ -140,7 +153,8 @@ test.for(
 	),
 )(
 	'keeps mask copy pixels mode=$mode overflow=$overflow scale=$scale frame=$frame',
-	async (options) => qualifyMaskCopy({...options, opaqueReference: false}),
+	async (options) =>
+		qualifyMaskCopy({...options, opaqueReference: false, position: null}),
 );
 
 test.for(
@@ -152,7 +166,12 @@ test.for(
 )(
 	'keeps fully opaque mask pixels overflow=$overflow scale=$scale frame=$frame',
 	async (options) =>
-		qualifyMaskCopy({...options, mode: 'hard', opaqueReference: true}),
+		qualifyMaskCopy({
+			...options,
+			mode: 'hard',
+			opaqueReference: true,
+			position: null,
+		}),
 );
 
 test.for(
@@ -163,5 +182,27 @@ test.for(
 )(
 	'keeps mask copy pixels at scale $scale for $mode $overflow',
 	async (options) =>
-		qualifyMaskCopy({...options, frame: 0, opaqueReference: false}),
+		qualifyMaskCopy({
+			...options,
+			frame: 0,
+			opaqueReference: false,
+			position: null,
+		}),
+);
+
+test.for(
+	[1.75, 2.5].flatMap((scale) =>
+		maskCopyOffsets.map((position) => ({scale, position})),
+	),
+)(
+	'keeps mask pixels at scale $scale and offset $position.left,$position.top',
+	async ({scale, position}) =>
+		qualifyMaskCopy({
+			scale,
+			position,
+			mode: 'fractional',
+			overflow: 'visible',
+			frame: 0,
+			opaqueReference: false,
+		}),
 );

@@ -29,7 +29,11 @@ test('copies scaled overflow mask layers in device coordinates', async () => {
 	try {
 		await renderStillOnWeb({
 			licenseKey: 'free-license',
-			composition: maskCopyOverflow({overflow: 'hidden', mode: 'hard'}),
+			composition: maskCopyOverflow({
+				overflow: 'hidden',
+				mode: 'hard',
+				position: null,
+			}),
 			frame: 0,
 			inputProps: {},
 			scale: 2,

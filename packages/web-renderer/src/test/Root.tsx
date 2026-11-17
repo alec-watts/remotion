@@ -118,7 +118,7 @@ import {
 import {lineHeight} from './fixtures/line-height';
 import {linearGradient} from './fixtures/linear-gradient';
 import {manyLayers} from './fixtures/many-layers';
-import {maskCopyOverflow} from './fixtures/mask-copy-overflow';
+import {maskCopyOffsets, maskCopyOverflow} from './fixtures/mask-copy-overflow';
 import {
 	maskGradientLayers,
 	maskGradientLayersTransparent,
@@ -489,8 +489,20 @@ export const Root: React.FC = () => {
 				<Composition {...maskImageLayers} />
 				<Composition {...maskGradientLayers} />
 				<Composition
-					{...maskCopyOverflow({overflow: 'hidden', mode: 'hard'})}
+					{...maskCopyOverflow({
+						overflow: 'hidden',
+						mode: 'hard',
+						position: null,
+					})}
 				/>
+				{maskCopyOffsets.map((position) => {
+					const composition = maskCopyOverflow({
+						overflow: 'visible',
+						mode: 'fractional',
+						position,
+					});
+					return <Composition key={composition.id} {...composition} />;
+				})}
 				<Composition {...maskGradientLayersTransparent} />
 				<Composition {...maskGradientLayersUrl} />
 				<Composition {...maskGradientLayersUrlTransparent} />

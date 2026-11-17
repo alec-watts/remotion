@@ -1,11 +1,23 @@
 import {useCurrentFrame} from 'remotion';
 
+export const maskCopyOffsets = [
+	{left: -0.25, top: 0},
+	{left: 0, top: 0},
+	{left: 0.25, top: 0},
+	{left: 0.5, top: 0},
+	{left: 0.75, top: 0},
+	{left: 0, top: 0.25},
+	{left: 0.25, top: 0.25},
+];
+
 export const maskCopyOverflow = ({
 	overflow,
 	mode,
+	position,
 }: {
 	overflow: 'hidden' | 'visible';
 	mode: 'hard' | 'soft' | 'fractional';
+	position: {left: number; top: number} | null;
 }) => {
 	const Component = () => {
 		const frame = useCurrentFrame();
@@ -13,8 +25,8 @@ export const maskCopyOverflow = ({
 			<div
 				style={{
 					position: 'absolute',
-					left: mode === 'fractional' ? 0.25 : 0,
-					top: 0,
+					left: position?.left ?? (mode === 'fractional' ? 0.25 : 0),
+					top: position?.top ?? 0,
 					width: 100,
 					height: 40,
 					overflow,
@@ -27,9 +39,12 @@ export const maskCopyOverflow = ({
 		);
 	};
 
+	const suffix = position
+		? `-${position.left}-${position.top}`.replaceAll('.', 'p')
+		: '';
 	return {
 		component: Component,
-		id: `mask-copy-overflow-${overflow}-${mode}`,
+		id: `mask-copy-overflow-${overflow}-${mode}${suffix}`,
 		width: 100,
 		height: 40,
 		fps: 30,
