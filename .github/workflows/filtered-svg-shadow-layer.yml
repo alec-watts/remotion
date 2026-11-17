@@ -1,7 +1,7 @@
-name: Compare sharp shadow compositing with the original filter
+name: Compare a separate SVG shadow layer with the original filter
 on:
   push:
-    branches: [codex/filtered-sharp-shadow-composite]
+    branches: [codex/filtered-svg-shadow-layer]
 permissions:
   contents: read
 jobs:
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: filtered-sharp-shadow-composite-${{ matrix.os }}
+          name: filtered-svg-shadow-layer-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

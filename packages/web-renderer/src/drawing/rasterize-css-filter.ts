@@ -24,24 +24,12 @@ export const rasterizeCssFilter = async ({
 			? /^drop-shadow\((.*)\)$/i.exec(operations[0])
 			: null;
 	const shadow = sharpShadow ? parseCssDropShadow(sharpShadow[1], color) : null;
-	if (shadow?.blur === 0) {
-		const x = shadow.x * rasterScale.x;
-		const y = shadow.y * rasterScale.y;
-		if (Number.isInteger(x) && Number.isInteger(y)) {
-			// A sharp shadow is a translated, tinted copy of the painted alpha.
-			// Composite the original over it directly to preserve the input pixels.
-			const output = new OffscreenCanvas(source.width, source.height);
-			const context = output.getContext('2d');
-			if (!context) throw new Error('Could not create shadow context');
-			context.drawImage(source, x, y);
-			context.globalCompositeOperation = 'source-in';
-			context.fillStyle = shadow.color;
-			context.fillRect(0, 0, output.width, output.height);
-			context.globalCompositeOperation = 'source-over';
-			context.drawImage(source, 0, 0);
-			return output;
-		}
-	}
+	const separateShadow =
+		shadow?.blur === 0 &&
+		Number.isInteger(shadow.x * rasterScale.x) &&
+		Number.isInteger(shadow.y * rasterScale.y)
+			? shadow
+			: null;
 
 	const blob = await source.convertToBlob({type: 'image/png'});
 	signal?.throwIfAborted();
@@ -64,6 +52,24 @@ export const rasterizeCssFilter = async ({
 		ownerDocument,
 	});
 	if (!resource) throw new Error(`Cannot rasterize CSS filter: ${filter}`);
+	if (separateShadow) {
+		// Rasterize the shadow in SVG while preserving the original source colors.
+		const ns = 'http://www.w3.org/2000/svg';
+		const offset = ownerDocument.createElementNS(ns, 'feOffset');
+		offset.setAttribute('in', 'SourceAlpha');
+		offset.setAttribute('dx', String(separateShadow.x * rasterScale.x));
+		offset.setAttribute('dy', String(separateShadow.y * rasterScale.y));
+		offset.setAttribute('result', 'shadow-alpha');
+		const flood = ownerDocument.createElementNS(ns, 'feFlood');
+		flood.setAttribute('flood-color', separateShadow.color);
+		flood.setAttribute('result', 'shadow-color');
+		const mask = ownerDocument.createElementNS(ns, 'feComposite');
+		mask.setAttribute('in', 'shadow-color');
+		mask.setAttribute('in2', 'shadow-alpha');
+		mask.setAttribute('operator', 'in');
+		resource.replaceChildren(offset, flood, mask);
+	}
+
 	svg.appendChild(resource);
 	const input = ownerDocument.createElementNS(
 		'http://www.w3.org/2000/svg',
@@ -116,7 +122,13 @@ export const rasterizeCssFilter = async ({
 			image.src = url;
 		});
 		signal?.throwIfAborted();
-		return image;
+		if (!separateShadow) return image;
+		const output = new OffscreenCanvas(source.width, source.height);
+		const context = output.getContext('2d');
+		if (!context) throw new Error('Could not create shadow context');
+		context.drawImage(image, 0, 0);
+		context.drawImage(source, 0, 0);
+		return output;
 	} finally {
 		URL.revokeObjectURL(url);
 	}
