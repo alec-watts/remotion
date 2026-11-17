@@ -25,29 +25,20 @@ const paintOnWhite = async (blob: Blob) => {
 	}
 };
 
-const alternativePaths = [
-	'readback',
-	'html-canvas',
-	'bitmap',
-	'blob-bitmap',
-	'unpremultiplied-bitmap',
-] as const;
+const alternativePaths = ['readback', 'readback-transfer'] as const;
 type CanvasPath = 'canvas' | (typeof alternativePaths)[number];
 
 const drawSvgImage = async (
 	image: HTMLImageElement,
-	blob: Blob,
 	onWhite: boolean,
 	path: CanvasPath,
 ) => {
 	const {naturalWidth, naturalHeight} = image;
-	const canvas =
-		path === 'html-canvas'
-			? document.createElement('canvas')
-			: new OffscreenCanvas(naturalWidth, naturalHeight);
-	canvas.width = naturalWidth;
-	canvas.height = naturalHeight;
-	let bitmap: ImageBitmap | null = null;
+	const canvas = new OffscreenCanvas(naturalWidth, naturalHeight);
+	const scratch =
+		path === 'readback-transfer'
+			? new OffscreenCanvas(naturalWidth, naturalHeight)
+			: null;
 	try {
 		const context = canvas.getContext('2d', {
 			alpha: true,
@@ -59,27 +50,25 @@ const drawSvgImage = async (
 			context.fillRect(0, 0, canvas.width, canvas.height);
 		}
 
-		if (path === 'bitmap') {
-			bitmap = await createImageBitmap(image);
-		} else if (path === 'blob-bitmap') {
-			bitmap = await createImageBitmap(blob);
-		} else if (path === 'unpremultiplied-bitmap') {
-			bitmap = await createImageBitmap(image, {premultiplyAlpha: 'none'});
+		if (scratch) {
+			const source = scratch.getContext('2d', {
+				alpha: true,
+				willReadFrequently: true,
+			});
+			if (!source) throw new Error('Cannot create readback scratch context');
+			source.drawImage(image, 0, 0);
+			context.drawImage(scratch, 0, 0);
+		} else {
+			context.drawImage(image, 0, 0);
 		}
 
-		context.drawImage(bitmap ?? image, 0, 0);
-		if (canvas instanceof OffscreenCanvas) {
-			return await canvas.convertToBlob({type: 'image/png'});
-		}
-
-		return await new Promise<Blob>((resolve, reject) => {
-			canvas.toBlob((png) => {
-				if (png) resolve(png);
-				else reject(new Error('Cannot encode drawable canvas'));
-			}, 'image/png');
-		});
+		return await canvas.convertToBlob({type: 'image/png'});
 	} finally {
-		bitmap?.close();
+		if (scratch) {
+			scratch.width = 0;
+			scratch.height = 0;
+		}
+
 		canvas.width = 0;
 		canvas.height = 0;
 	}
@@ -215,7 +204,7 @@ test.for(
 						);
 						for (const path of ['canvas', ...alternativePaths] as const) {
 							await capture(`${path}-${suffix}`, () =>
-								drawSvgImage(image, blob, onWhite, path),
+								drawSvgImage(image, onWhite, path),
 							);
 						}
 					}

@@ -1,7 +1,7 @@
-name: Compare Canvas paths for SVG root masks
+name: Compare readback transfer for SVG root masks
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-canvas-paths]
+    branches: [codex/qualify-svg-root-mask-readback-transfer]
 permissions:
   contents: read
 jobs:
@@ -49,7 +49,7 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare exact SVG across Canvas contexts and bitmap decoders
+      - name: Compare exact SVG direct and readback-transferred Canvas pixels
         run: |
           drawing=packages/web-renderer/src/drawing
           mkdir -p qualification packages/web-renderer/test/__results__
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-canvas-paths-${{ matrix.os }}
+          name: svg-root-mask-readback-transfer-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
