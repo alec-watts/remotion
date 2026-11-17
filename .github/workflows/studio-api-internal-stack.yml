@@ -1,0 +1,83 @@
+name: Trace Studio API context closure with internal stacks
+on:
+  push:
+    branches: [codex/qualify-studio-internal-stack]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 6
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25.9.0
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Compare the complete Example E2E command
+        run: |
+          main=e6b9083c4984609e48db0453f3274e2123f30430
+          candidate=be676101052422d7bba00db9d2da378633939573
+          artifacts="$RUNNER_TEMP/studio-api-internal-stack"
+          mkdir -p "$artifacts"
+          uname -a > "$artifacts/runner.txt"
+          node --version > "$artifacts/node-version.txt"
+          bun --version > "$artifacts/bun-version.txt"
+
+          # Both revisions retain identical Studio test sources and dependencies.
+          git diff --exit-code "$main" "$candidate" -- bun.lock packages/example/playwright.config.ts packages/example/e2e
+          # Turbo strict mode drops custom browser paths. Install into the default cache.
+          browser_cache="$HOME/Library/Caches/ms-playwright"
+          bun ci
+          (cd packages/example && bunx playwright install --with-deps chromium)
+          headless_shell="$(find "$browser_cache"/chromium_headless_shell-* -type f \( -name chrome-headless-shell -o -name headless_shell \) -print -quit)"
+          test -x "$headless_shell"
+          find "$browser_cache" -type f -exec shasum -a 256 {} + > "$artifacts/browser.sha256"
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
+          last_failure=0
+          for arm in main candidate; do
+            revision="$candidate"
+            if [ "$arm" = main ]; then revision="$main"; fi
+            git checkout --force --detach "$revision"
+            mkdir -p "$artifacts/$arm"
+            git rev-parse HEAD > "$artifacts/$arm/revision.txt"
+            shasum -a 256 bun.lock packages/example/playwright.config.ts packages/example/e2e/{studio-server,node-fetch,suppress-rebuild.test,studio-protocol.test}.mts > "$artifacts/$arm/inputs.sha256"
+            shasum -a 256 packages/example/package.json > "$artifacts/$arm/package-original.sha256"
+            python3 - <<'STACK'
+          from pathlib import Path
+          package = Path('packages/example/package.json')
+          source = package.read_text()
+          marker = '"teste2e": "playwright test"'
+          assert source.count(marker) == 1
+          package.write_text(source.replace(marker, '"teste2e": "PWDEBUGIMPL=1 playwright test"'))
+          STACK
+            shasum -a 256 packages/example/package.json > "$artifacts/$arm/package-effective.sha256"
+
+            bun ci
+            shasum -a 256 --quiet -c "$artifacts/browser.sha256"
+            (cd packages/example && bunx playwright --version) > "$artifacts/$arm/playwright-version.txt"
+            status=0
+            bun run teste2e > "$artifacts/$arm/e2e.log" 2>&1 || status=$?
+            shasum -a 256 --quiet -c "$artifacts/browser.sha256"
+            shasum -a 256 --quiet -c "$artifacts/$arm/package-effective.sha256"
+            tail -80 "$artifacts/$arm/e2e.log"
+            printf '%s\n' "$status" > "$artifacts/$arm/status.txt"
+            if [ -d packages/example/test-results ]; then
+              mv packages/example/test-results "$artifacts/$arm/test-results"
+            fi
+            if [ "$status" -ne 0 ]; then last_failure="$status"; fi
+          done
+          exit "$last_failure"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-api-internal-stack-macos
+          path: ${{ runner.temp }}/studio-api-internal-stack
+          if-no-files-found: error
+          retention-days: 7
