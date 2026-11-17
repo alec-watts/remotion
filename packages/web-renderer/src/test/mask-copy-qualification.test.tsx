@@ -12,6 +12,7 @@ const qualifyMaskCopy = async ({
 	frame,
 	opaqueReference,
 	position,
+	captureStages,
 }: {
 	mode: 'hard' | 'soft' | 'fractional';
 	overflow: 'hidden' | 'visible';
@@ -19,6 +20,7 @@ const qualifyMaskCopy = async ({
 	frame: number;
 	opaqueReference: boolean;
 	position: {left: number; top: number} | null;
+	captureStages: boolean;
 }) => {
 	const composition = maskCopyOverflow({mode, overflow, position});
 	const Component = composition.component;
@@ -77,14 +79,8 @@ const qualifyMaskCopy = async ({
 		position && CSS.supports('zoom', String(scale))
 			? await captureAtScale(true)
 			: null;
-	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}${position ? `-offset-${position.left}-${position.top}` : ''}`;
-	for (const [role, blob] of [
-		['reference', reference],
-		['actual', actual],
-		['native-zoom', nativeZoom],
-	] as const) {
-		if (blob === null) continue;
-
+	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}${position ? `-offset-${position.left}-${position.top}` : ''}${captureStages ? '-stages' : ''}`;
+	const savePng = async (role: string, blob: Blob) => {
 		const bytes = new Uint8Array(await blob.arrayBuffer());
 		let binary = '';
 		for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -93,6 +89,16 @@ const qualifyMaskCopy = async ({
 			btoa(binary),
 			'base64',
 		);
+	};
+
+	for (const [role, blob] of [
+		['reference', reference],
+		['actual', actual],
+		['native-zoom', nativeZoom],
+	] as const) {
+		if (blob === null) continue;
+
+		await savePng(role, blob);
 	}
 
 	for (const [index, svg] of serializedSvgs.entries()) {
@@ -114,6 +120,41 @@ const qualifyMaskCopy = async ({
 			allowHtmlInCanvas: false,
 		}),
 	);
+	if (captureStages) {
+		expect(serializedSvgs).toHaveLength(1);
+		const image = new Image();
+		try {
+			image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvgs[0])}`;
+			await image.decode();
+			for (const willReadFrequently of [true, false]) {
+				const target = new OffscreenCanvas(
+					image.naturalWidth,
+					image.naturalHeight,
+				);
+				const backend = willReadFrequently ? 'readback' : 'default';
+				try {
+					const ctx = target.getContext('2d', {willReadFrequently})!;
+					ctx.drawImage(image, 0, 0);
+					await savePng(`mask-direct-${backend}`, await target.convertToBlob());
+					ctx.globalCompositeOperation = 'copy';
+					ctx.fillStyle = '#4078c0';
+					ctx.fillRect(0, 0, target.width, target.height);
+					ctx.globalCompositeOperation = 'destination-in';
+					ctx.drawImage(image, 0, 0);
+					await savePng(
+						`mask-applied-${backend}`,
+						await target.convertToBlob(),
+					);
+				} finally {
+					target.width = 0;
+					target.height = 0;
+				}
+			}
+		} finally {
+			image.removeAttribute('src');
+		}
+	}
+
 	expect.soft(pixels.mismatchedPixels).toBe(0);
 	if (mode === 'hard' && scale !== 1.25) {
 		const bitmap = await createImageBitmap(actual);
@@ -154,7 +195,12 @@ test.for(
 )(
 	'keeps mask copy pixels mode=$mode overflow=$overflow scale=$scale frame=$frame',
 	async (options) =>
-		qualifyMaskCopy({...options, opaqueReference: false, position: null}),
+		qualifyMaskCopy({
+			...options,
+			opaqueReference: false,
+			position: null,
+			captureStages: false,
+		}),
 );
 
 test.for(
@@ -171,6 +217,7 @@ test.for(
 			mode: 'hard',
 			opaqueReference: true,
 			position: null,
+			captureStages: false,
 		}),
 );
 
@@ -187,6 +234,7 @@ test.for(
 			frame: 0,
 			opaqueReference: false,
 			position: null,
+			captureStages: false,
 		}),
 );
 
@@ -204,5 +252,23 @@ test.for(
 			overflow: 'visible',
 			frame: 0,
 			opaqueReference: false,
+			captureStages: false,
+		}),
+);
+
+test.for(
+	[0.75, 1.25, 1.75, 2.5].flatMap((scale) => [
+		{scale, mode: 'soft' as const, overflow: 'hidden' as const},
+		{scale, mode: 'fractional' as const, overflow: 'visible' as const},
+	]),
+)(
+	'qualifies intermediate mask alpha at scale $scale for $mode $overflow',
+	async (options) =>
+		qualifyMaskCopy({
+			...options,
+			frame: 0,
+			opaqueReference: false,
+			position: null,
+			captureStages: true,
 		}),
 );
