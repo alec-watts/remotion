@@ -1,7 +1,7 @@
-name: Compare SVG mask geometry inside a device viewport
+name: Compare masked SVG root viewBox and readback transfers
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-device-viewport]
+    branches: [codex/qualify-svg-root-mask-root-viewbox]
 permissions:
   contents: read
 jobs:
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-device-viewport-${{ matrix.os }}
+          name: svg-root-mask-root-viewbox-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

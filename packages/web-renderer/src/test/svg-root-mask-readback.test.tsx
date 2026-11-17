@@ -163,52 +163,108 @@ test.for(
 			const wrapped = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g transform="matrix(${a} ${b} ${c} ${d} ${e} ${f})">${svg}</g></svg>`;
 			await server.commands.writeFile(`${folder}/serialized.svg`, svg);
 			await server.commands.writeFile(`${folder}/wrapped.svg`, wrapped);
-			const url = createObjectUrl(new Blob([wrapped], {type: 'image/svg+xml'}));
-			const image = new Image();
-			const canvas = new OffscreenCanvas(width, height);
-			try {
-				image.src = url;
-				await image.decode();
-				if (image.naturalWidth !== width || image.naturalHeight !== height) {
-					throw new Error(
-						`Unexpected device SVG size ${image.naturalWidth}×${image.naturalHeight}`,
-					);
-				}
-
-				await capture('svg-device-dom', () =>
-					captureNativeReference(
-						{
-							...native,
-							component: () => (
-								<div style={{background, width, height}}>
-									<img
-										src={url}
-										width={width}
-										height={height}
-										alt=""
-										style={{display: 'block'}}
-									/>
-								</div>
-							),
-						},
-						frame,
-						{omitBackground: background === 'transparent'},
-					),
+			const paint = async (
+				markup: string,
+				label: string,
+				captureDom: boolean,
+				readback: boolean,
+			) => {
+				const url = createObjectUrl(
+					new Blob([markup], {type: 'image/svg+xml'}),
 				);
-				const ctx = canvas.getContext('2d', {
-					alpha: true,
-					willReadFrequently: server.browser === 'webkit',
+				const image = new Image();
+				const canvas = new OffscreenCanvas(width, height);
+				try {
+					image.src = url;
+					await image.decode();
+					if (image.naturalWidth !== width || image.naturalHeight !== height) {
+						throw new Error(
+							`Unexpected device SVG size ${image.naturalWidth}×${image.naturalHeight}`,
+						);
+					}
+
+					if (captureDom) {
+						await capture(`${label}-dom`, () =>
+							captureNativeReference(
+								{
+									...native,
+									component: () => (
+										<div style={{background, width, height}}>
+											<img
+												src={url}
+												width={width}
+												height={height}
+												alt=""
+												style={{display: 'block'}}
+											/>
+										</div>
+									),
+								},
+								frame,
+								{omitBackground: background === 'transparent'},
+							),
+						);
+					}
+
+					const context = canvas.getContext('2d', {
+						alpha: true,
+						willReadFrequently: readback,
+					});
+					if (!context)
+						throw new Error('Cannot create the device replay Canvas');
+					context.fillStyle = background;
+					context.fillRect(0, 0, width, height);
+					context.drawImage(image, 0, 0);
+					return await canvas.convertToBlob({type: 'image/png'});
+				} finally {
+					URL.revokeObjectURL(url);
+					canvas.width = 0;
+					canvas.height = 0;
+				}
+			};
+
+			const wrapperCanvas = await paint(
+				wrapped,
+				'svg-device',
+				true,
+				server.browser === 'webkit',
+			);
+			await capture('svg-device-readback', () =>
+				paint(wrapped, 'svg-device-readback', false, true),
+			);
+
+			if (a > 0 && d > 0 && b === 0 && c === 0) {
+				await capture('svg-root-viewbox', async () => {
+					const root = new DOMParser().parseFromString(
+						svg,
+						'image/svg+xml',
+					).documentElement;
+					if (root.localName !== 'svg' || root.hasAttribute('viewBox')) {
+						throw new Error('Expected the authored root SVG without a viewBox');
+					}
+
+					root.setAttribute('width', String(width));
+					root.setAttribute('height', String(height));
+					root.setAttribute(
+						'viewBox',
+						`${-e / a} ${-f / d} ${width / a} ${height / d}`,
+					);
+					root.setAttribute('preserveAspectRatio', 'none');
+					const rootViewBox = new XMLSerializer().serializeToString(root);
+					await server.commands.writeFile(
+						`${folder}/root-viewbox.svg`,
+						rootViewBox,
+					);
+					return paint(
+						rootViewBox,
+						'svg-root-viewbox',
+						true,
+						server.browser === 'webkit',
+					);
 				});
-				if (!ctx) throw new Error('Cannot create the device replay Canvas');
-				ctx.fillStyle = background;
-				ctx.fillRect(0, 0, width, height);
-				ctx.drawImage(image, 0, 0);
-				return await canvas.convertToBlob({type: 'image/png'});
-			} finally {
-				URL.revokeObjectURL(url);
-				canvas.width = 0;
-				canvas.height = 0;
 			}
+
+			return wrapperCanvas;
 		});
 		const svgComparison =
 			replay.png && reference.png
