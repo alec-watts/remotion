@@ -23,9 +23,8 @@ jobs:
           diagnostic_bundle="$RUNNER_TEMP/Diagnostic Preview Chrome.app"
           ditto "/Applications/Google Chrome.app" "$diagnostic_bundle"
           chflags -R uchg "$diagnostic_bundle"
-          echo "REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE=$diagnostic_bundle/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
+          echo "REMOTION_CHROME_EXECUTABLE=$diagnostic_bundle/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
           find "$diagnostic_bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/preview-chrome.sha256"
-      - run: python3 .github/scripts/pin-gradient-chrome.py
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -49,9 +48,9 @@ jobs:
             bunx turbo run make --filter=@remotion/web-renderer
             result_dir="qualification/$arm"
             mkdir -p "$result_dir" packages/web-renderer/test/__results__
-            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > "$result_dir/chrome.txt"
+            "$REMOTION_CHROME_EXECUTABLE" --version > "$result_dir/chrome.txt"
             shasum -a 256 packages/core/src/HtmlInCanvas.tsx packages/web-renderer/src/test/html-in-canvas.test.tsx packages/web-renderer/src/test/fixtures/html-in-canvas-resize.tsx bun.lock > "$result_dir/inputs.txt"
-            if (cd packages/web-renderer && bunx vitest run src/test/html-in-canvas.test.tsx --project chromium -t 'preserves the displayed frame while HtmlInCanvas resizes in preview' --reporter=default --reporter=json --outputFile=./test/__results__/result.json); then
+            if (cd packages/web-renderer && bunx vitest run --config vitest.html-in-canvas.config.ts -t 'preserves the displayed frame while HtmlInCanvas resizes in preview' --reporter=default --reporter=json --outputFile=./test/__results__/result.json); then
               diagnostic_exit=0
             else
               diagnostic_exit=$?
