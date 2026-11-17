@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 4
+          fetch-depth: 5
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -32,10 +32,13 @@ jobs:
 
           # Both arms use the same lockfile, browser and Example E2E harness.
           git diff --exit-code "$main" "$candidate" -- bun.lock packages/example/e2e packages/example/playwright.config.ts
-          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/studio-e2e-chromium"
+          # Turbo strict mode drops custom browser paths. Install into the default cache.
+          browser_cache="$HOME/.cache/ms-playwright"
           bun ci
           (cd packages/example && bunx playwright install --with-deps chromium)
-          find "$PLAYWRIGHT_BROWSERS_PATH" -type f -exec shasum -a 256 {} + > "$artifacts/browser.sha256"
+          headless_shell=("$browser_cache"/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell)
+          test -x "${headless_shell[0]}"
+          find "$browser_cache" -type f -exec shasum -a 256 {} + > "$artifacts/browser.sha256"
           git remote set-url origin https://github.com/remotion-dev/remotion.git
           last_failure=0
           for arm in main candidate; do
