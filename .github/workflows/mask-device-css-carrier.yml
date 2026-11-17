@@ -1,0 +1,96 @@
+name: Compare device-sized CSS mask carriers
+on:
+  push:
+    branches: [codex/mask-device-css-carrier]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Mask Gradient Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/mask-gradient-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "MASK_GRADIENT_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/mask-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.MASK_GRADIENT_CHROME,"))
+          PIN
+      - name: Compare mask production on the same source gradient and fixtures
+        run: |
+          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing > "$RUNNER_TEMP/mask-carrier.patch"
+          test -s "$RUNNER_TEMP/mask-carrier.patch"
+          failed=0
+          for arm in candidate control; do
+            if [ "$arm" = control ]; then
+              git apply --reverse "$RUNNER_TEMP/mask-carrier.patch"
+              git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing
+            fi
+            bunx turbo run make --filter=@remotion/web-renderer
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            cp "$RUNNER_TEMP/mask-carrier.patch" "qualification/$arm/producer.patch"
+            "$MASK_GRADIENT_CHROME" --version > "qualification/$arm/chrome.txt"
+            shasum -a 256 packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/mask-gradient-backend-qualification.test.ts packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > "qualification/$arm/inputs.txt"
+            if (cd packages/web-renderer && bunx vitest src/test/mask-gradient-backend-qualification.test.ts src/test/mask-copy-qualification.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image.test.tsx src/test/mask-image-url.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/backface-visibility-mask.test.tsx src/test/background-clip.test.tsx src/test/background-blend-mode.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-copy.json); then
+              result=0
+            else
+              result=$?
+              failed=1
+            fi
+            printf '%s\n' "$result" > "qualification/$arm/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then
+              mv packages/web-renderer/.vitest/attachments "qualification/$arm/attachments"
+            fi
+          done
+          cmp qualification/control/inputs.txt qualification/candidate/inputs.txt
+          cmp qualification/control/chrome.txt qualification/candidate/chrome.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/mask-chrome.sha256"
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mask-device-css-carrier-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Mask Gradient Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Mask Gradient Chrome.app"
+          fi

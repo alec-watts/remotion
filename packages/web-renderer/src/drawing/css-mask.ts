@@ -53,7 +53,7 @@ export const createCssMask = async ({
 			width: `${precomposeRect.width}px`,
 			height: `${precomposeRect.height}px`,
 		});
-		const {svg, target} = createNativeMaskSvg({
+		const {svg, target, foreignObject, viewport} = createNativeMaskSvg({
 			ownerDocument: document,
 			maskRect,
 			precomposeRect,
@@ -61,6 +61,16 @@ export const createCssMask = async ({
 			width,
 			height,
 		});
+		if (width !== precomposeRect.width || height !== precomposeRect.height) {
+			// Keep CSS mask lengths in the layout box's coordinate space. Size
+			// the SVG viewport in device pixels and project the HTML box once.
+			svg.removeAttribute('viewBox');
+			foreignObject.setAttribute('width', String(width));
+			foreignObject.setAttribute('height', String(height));
+			viewport.style.transformOrigin = '0 0';
+			viewport.style.transform = `scale(${width / precomposeRect.width}, ${height / precomposeRect.height})`;
+		}
+
 		target.replaceChildren(source);
 		Object.assign(target.style, maskImageInfo.style, {
 			maskImage: images.join(', '),

@@ -262,18 +262,19 @@ export const processNode = async ({
 			});
 		}
 
-		if (precompositing.needsMaskImage) {
-			await handleMask({
-				maskImageInfo: precompositing.needsMaskImage,
-				maskRect: dimensions,
-				precomposeRect: layerRect,
-				tempContext,
-				scale: layerScale,
-				internalState,
-			});
-			if (waitForPageResponsiveness !== null) {
-				await waitForPageResponsiveness();
-			}
+		using maskedLayer = precompositing.needsMaskImage
+			? await handleMask({
+					maskImageInfo: precompositing.needsMaskImage,
+					maskRect: dimensions,
+					precomposeRect: layerRect,
+					tempContext,
+					scale: layerScale,
+					internalState,
+				})
+			: null;
+		if (maskedLayer) drawable = maskedLayer.canvas;
+		if (precompositing.needsMaskImage && waitForPageResponsiveness !== null) {
+			await waitForPageResponsiveness();
 		}
 
 		if (precompositing.needs3DTransformViaWebGL) {

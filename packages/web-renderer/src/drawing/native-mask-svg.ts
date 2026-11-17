@@ -91,5 +91,5 @@ export const createNativeMaskSvg = ({
 	viewport.appendChild(target);
 	foreignObject.appendChild(viewport);
 	svg.appendChild(foreignObject);
-	return {svg, target};
+	return {svg, target, foreignObject, viewport};
 };

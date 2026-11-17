@@ -38,23 +38,26 @@ export const handleMask = async ({
 			height: tempContext.canvas.height,
 			internalState,
 		});
-		const masked = new OffscreenCanvas(
+		const canvas = new OffscreenCanvas(
 			tempContext.canvas.width,
 			tempContext.canvas.height,
-		).getContext('2d', {willReadFrequently: true});
-		if (!masked) throw new Error('Could not create mask group context');
-		try {
-			// Rasterize the native masked content before copying the completed layer. The
-			// readback context preserves fractional alpha at this SVG drawable seam.
-			masked.drawImage(groupImage, 0, 0);
-			tempContext.globalCompositeOperation = 'copy';
-			tempContext.drawImage(masked.canvas, 0, 0);
-		} finally {
-			masked.canvas.width = 0;
-			masked.canvas.height = 0;
-		}
+		);
+		const dispose = () => {
+			canvas.width = 0;
+			canvas.height = 0;
+		};
 
-		return;
+		try {
+			const masked = canvas.getContext('2d', {willReadFrequently: true});
+			if (!masked) throw new Error('Could not create mask group context');
+			// The drawable already uses device dimensions. Keep it as the group
+			// source instead of drawing it through the original layer's transform.
+			masked.drawImage(groupImage, 0, 0);
+			return {canvas, [Symbol.dispose]: dispose};
+		} catch (error) {
+			dispose();
+			throw error;
+		}
 	}
 
 	const rectToFill = new DOMRect(
@@ -81,7 +84,7 @@ export const handleMask = async ({
 			rectToFill.width,
 			rectToFill.height,
 		);
-		return;
+		return null;
 	}
 
 	const image = await getRasterImage({
@@ -108,7 +111,7 @@ export const handleMask = async ({
 			tempContext.canvas.width,
 			tempContext.canvas.height,
 		);
-		return;
+		return null;
 	}
 
 	const repetition =
@@ -181,6 +184,7 @@ export const handleMask = async ({
 		tempContext.canvas.height,
 	);
 	tempContext.restore();
+	return null;
 };
 
 // Use the existing group layer and SVG drawable rather than combining contours
