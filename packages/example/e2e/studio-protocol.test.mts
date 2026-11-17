@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {expect, test} from '@playwright/test';
+import {expect, test, type BrowserContext} from '@playwright/test';
 import {remotionBin} from './constants.mts';
 import {nodeFetch} from './node-fetch.mts';
 
@@ -34,17 +34,29 @@ const waitForUrl = async (url: string, process: ChildProcess) => {
 	throw new Error('Temporary Studio did not become ready');
 };
 
-const waitForFile = async (file: string) => {
+const waitForFile = async (file: string, signal?: AbortSignal) => {
 	const startedAt = Date.now();
 	while (Date.now() - startedAt < 20_000) {
-		if (fs.existsSync(file)) {
-			return;
-		}
+		if (signal?.aborted) return false;
+		if (fs.existsSync(file)) return true;
 
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
 
 	throw new Error(`Expected ${file} to be created`);
+};
+
+const closeStudioContext = async (context: BrowserContext) => {
+	try {
+		const routes = await Promise.allSettled([
+			...context.pages().map((page) => page.unrouteAll({behavior: 'wait'})),
+			context.unrouteAll({behavior: 'wait'}),
+		]);
+		const failed = routes.find((result) => result.status === 'rejected');
+		if (failed) throw failed.reason;
+	} finally {
+		await context.close();
+	}
 };
 
 test('installs an Element from a website into a clean Studio project', async ({
@@ -257,6 +269,9 @@ const CloseupPlaceholder = () => {
 	const externalLibraryRequests: string[] = [];
 	const studioProtocolRequests: string[] = [];
 	const context = await browser.newContext();
+	const routeCleanup = new AbortController();
+	let releaseNewCompositionPreflight = () => {};
+	let releaseCurrentCompositionPreflight = () => {};
 	context.on('request', (request) => {
 		if (new URL(request.url()).pathname.startsWith('/api/studio-protocol')) {
 			studioProtocolRequests.push(request.url());
@@ -422,7 +437,6 @@ const CloseupPlaceholder = () => {
 			name: 'New composition',
 		});
 		await expect(currentDestination).toHaveAttribute('aria-pressed', 'true');
-		let releaseNewCompositionPreflight = () => {};
 		const newCompositionPreflightGate = new Promise<void>((resolve) => {
 			releaseNewCompositionPreflight = resolve;
 		});
@@ -617,7 +631,6 @@ const CloseupPlaceholder = () => {
 		await expect(
 			newCompositionDialog.getByRole('radio', {name: 'Create a copy'}),
 		).toBeChecked();
-		let releaseCurrentCompositionPreflight = () => {};
 		const currentCompositionPreflightGate = new Promise<void>((resolve) => {
 			releaseCurrentCompositionPreflight = resolve;
 		});
@@ -659,8 +672,11 @@ const CloseupPlaceholder = () => {
 			}
 
 			const response = await route.fetch();
-			await waitForFile(independentFile);
-			await route.fulfill({response});
+			if (await waitForFile(independentFile, routeCleanup.signal)) {
+				await route.fulfill({response});
+			} else {
+				await route.abort();
+			}
 		});
 		const destinationRow = newCompositionDialog
 			.getByText('Destination', {exact: true})
@@ -984,19 +1000,22 @@ const CloseupPlaceholder = () => {
 	} catch (error) {
 		throw new Error(`${String(error)}\nTemporary Studio logs:\n${studioLogs}`);
 	} finally {
-		await Promise.race([
-			context.close().catch(() => undefined),
-			new Promise((resolve) => setTimeout(resolve, 1000)),
-		]);
-		senderServer.closeAllConnections();
-		await new Promise<void>((resolve) => senderServer.close(() => resolve()));
-		if (studioProcess.exitCode === null) {
-			studioProcess.kill('SIGTERM');
+		routeCleanup.abort();
+		releaseNewCompositionPreflight();
+		releaseCurrentCompositionPreflight();
+		try {
+			await closeStudioContext(context);
+		} finally {
+			senderServer.closeAllConnections();
+			await new Promise<void>((resolve) => senderServer.close(() => resolve()));
+			if (studioProcess.exitCode === null) {
+				studioProcess.kill('SIGTERM');
+			}
+			await new Promise<void>((resolve) => {
+				studioProcess.once('exit', () => resolve());
+				setTimeout(resolve, 5000);
+			});
+			fs.rmSync(temporaryProject, {force: true, recursive: true});
 		}
-		await new Promise<void>((resolve) => {
-			studioProcess.once('exit', () => resolve());
-			setTimeout(resolve, 5000);
-		});
-		fs.rmSync(temporaryProject, {force: true, recursive: true});
 	}
 });
