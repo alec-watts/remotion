@@ -201,6 +201,11 @@ import {scaleFixture} from './fixtures/scale';
 import {scalePrecomposeFixture} from './fixtures/scale-precompose';
 import {scaledTranslatedSvg} from './fixtures/scaled-translated-svg';
 import {selfTransformOrigin} from './fixtures/self-transform-origin';
+import {
+	sharpShadowModes,
+	sharpShadowSampling,
+	sharpShadowScales,
+} from './fixtures/sharp-shadow-sampling';
 import {simpleRotatedSvg} from './fixtures/simple-rotated-svg';
 import {stackingContextSiblings} from './fixtures/stacking-context-siblings';
 import {styleAttributeCleanupFixture} from './fixtures/style-attribute-cleanup';
@@ -472,6 +477,14 @@ export const Root: React.FC = () => {
 					/>
 				)),
 			)}
+			<Folder name="SharpShadowSampling">
+				{sharpShadowScales.flatMap((scale) =>
+					sharpShadowModes.map((mode) => {
+						const composition = sharpShadowSampling({scale, mode});
+						return <Composition key={composition.id} {...composition} />;
+					}),
+				)}
+			</Folder>
 			<Composition {...perspectiveFilter} />
 			<Composition {...preserve3DBlendIsolation} />
 			<Composition {...gridSamplerParent} />
