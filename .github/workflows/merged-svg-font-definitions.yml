@@ -1,7 +1,7 @@
-name: Compare local SVG readback with existing scene paint
+name: Compare SVG mask export and native backdrop
 on:
   push:
-    branches: [codex/qualify-svg-mask-readback-mixed-scene]
+    branches: [codex/qualify-svg-mask-native-backdrop]
 permissions:
   contents: read
 jobs:
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-mask-readback-mixed-scene-${{ matrix.os }}
+          name: svg-mask-native-backdrop-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

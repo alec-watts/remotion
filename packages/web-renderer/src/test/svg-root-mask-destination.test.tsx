@@ -104,7 +104,7 @@ test.for([
 			),
 		});
 		const composition = makeComposition(true);
-		const Composition = composition.component;
+		const controlComposition = makeComposition(false);
 		const folder = `test/__results__/svg-mask-destination/${server.browser}/${id}`;
 		const archive = async (label: string, png: Blob) => {
 			const bytes = Array.from(
@@ -121,7 +121,7 @@ test.for([
 
 		const render = async (withMask: boolean) => {
 			const still = await renderStillOnWeb({
-				composition: withMask ? composition : makeComposition(false),
+				composition: withMask ? composition : controlComposition,
 				frame: 1,
 				inputProps: {},
 				licenseKey: 'free-license',
@@ -143,11 +143,11 @@ test.for([
 			.soft((await countNativePixels(control, actual)).mismatchedPixels)
 			.toBeGreaterThan(0);
 
-		const reference = await archive(
-			'native',
-			await captureNativeReference(
+		const native = (source: typeof composition) => {
+			const Scene = source.component;
+			return captureNativeReference(
 				{
-					...composition,
+					...source,
 					width: width * scale,
 					height: height * scale,
 					component: () => (
@@ -160,14 +160,23 @@ test.for([
 								transformOrigin: '0 0',
 							}}
 						>
-							<Composition />
+							<Scene />
 						</div>
 					),
 				},
 				1,
 				{omitBackground: translucent},
-			),
+			);
+		};
+
+		const reference = await archive('native', await native(composition));
+		const nativeControl = await archive(
+			'native-control',
+			await native(controlComposition),
 		);
+		expect
+			.soft((await countNativePixels(nativeControl, control)).mismatchedPixels)
+			.toBe(0);
 		expect((await countNativePixels(reference, actual)).mismatchedPixels).toBe(
 			0,
 		);
