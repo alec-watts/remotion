@@ -1,7 +1,7 @@
-name: Trace layered mask alpha multiplication
+name: Compare native rounded layer and mask coverage
 on:
   push:
-    branches: [codex/mask-composite-alpha-trace]
+    branches: [codex/mask-native-coverage-controls]
 permissions:
   contents: read
 jobs:
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-composite-alpha-trace-${{ matrix.os }}
+          name: mask-native-coverage-controls-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

@@ -10,15 +10,22 @@ export const maskCopyOffsets = [
 	{left: 0.25, top: 0.25},
 ];
 
-export const maskCopyOverflow = ({
-	overflow,
-	mode,
-	position,
-}: {
-	overflow: 'hidden' | 'visible';
-	mode: 'hard' | 'soft' | 'fractional' | 'translucent';
-	position: {left: number; top: number} | null;
-}) => {
+export const maskCopyOverflow = (
+	{
+		overflow,
+		mode,
+		position,
+	}: {
+		overflow: 'hidden' | 'visible';
+		mode: 'hard' | 'soft' | 'fractional' | 'translucent';
+		position: {left: number; top: number} | null;
+	},
+	coverage:
+		| 'rounded-unmasked'
+		| 'rounded-opaque-mask'
+		| 'square-gradient-mask'
+		| null = null,
+) => {
 	const Component = () => {
 		const frame = useCurrentFrame();
 		return (
@@ -30,13 +37,20 @@ export const maskCopyOverflow = ({
 					width: 100,
 					height: 40,
 					overflow,
-					borderRadius: mode === 'fractional' ? 4.25 : 0,
+					borderRadius:
+						mode === 'fractional' && coverage !== 'square-gradient-mask'
+							? 4.25
+							: 0,
 					backgroundImage:
 						mode === 'translucent'
 							? `linear-gradient(90deg, rgb(0 0 255 / 60%) ${50 - frame * 10}%, rgb(255 0 0 / 35%) ${50 - frame * 10}%)`
 							: `linear-gradient(90deg, blue ${50 - frame * 10}%, red ${50 - frame * 10}%)`,
-					maskImage: `${mode === 'hard' ? 'linear-gradient(black, black)' : 'linear-gradient(90deg, black, transparent)'}, linear-gradient(black, black)`,
-					maskComposite: 'intersect',
+					maskImage:
+						coverage === 'rounded-unmasked'
+							? undefined
+							: `${mode === 'hard' || coverage === 'rounded-opaque-mask' ? 'linear-gradient(black, black)' : 'linear-gradient(90deg, black, transparent)'}, linear-gradient(black, black)`,
+					maskComposite:
+						coverage === 'rounded-unmasked' ? undefined : 'intersect',
 				}}
 			/>
 		);

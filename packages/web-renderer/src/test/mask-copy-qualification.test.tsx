@@ -88,13 +88,16 @@ const qualifyMaskCopy = async ({
 	captureStages: boolean;
 }) => {
 	const composition = maskCopyOverflow({mode, overflow, position});
-	const Component = composition.component;
-	const captureAtScale = (layoutZoom: boolean) =>
-		captureNativeReference(
+	const captureAtScale = (
+		layoutZoom: boolean,
+		nativeComposition = composition,
+	) => {
+		const Component = nativeComposition.component;
+		return captureNativeReference(
 			{
-				...composition,
-				width: composition.width * scale,
-				height: composition.height * scale,
+				...nativeComposition,
+				width: nativeComposition.width * scale,
+				height: nativeComposition.height * scale,
 				component: () => (
 					<div
 						style={{
@@ -113,6 +116,8 @@ const qualifyMaskCopy = async ({
 			frame,
 			{omitBackground: !opaqueReference},
 		);
+	};
+
 	const reference = await captureAtScale(false);
 	const serializedSvgs: string[] = [];
 	const serialize = XMLSerializer.prototype.serializeToString;
@@ -206,6 +211,17 @@ const qualifyMaskCopy = async ({
 			await saveBytes(`composite-source-${index}.rgba`, source.pixels);
 			await saveBytes(`composite-mask-${index}.rgba`, mask.pixels);
 			await saveBytes(`composite-output-${index}.rgba`, output);
+		}
+
+		if (mode === 'fractional') {
+			for (const coverage of [
+				'rounded-unmasked',
+				'rounded-opaque-mask',
+				'square-gradient-mask',
+			] as const) {
+				const control = maskCopyOverflow({mode, overflow, position}, coverage);
+				await savePng(coverage, await captureAtScale(false, control));
+			}
 		}
 
 		const image = new Image();
