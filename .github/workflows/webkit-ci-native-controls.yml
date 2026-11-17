@@ -18,6 +18,8 @@ jobs:
         with:
           fetch-depth: 6
           persist-credentials: false
+      - name: Fetch the exact comparison commits
+        run: git fetch --no-tags --depth=1 origin e6b9083c4984609e48db0453f3274e2123f30430 37ace5adafc3a815728332620148f81d6e716938
       - uses: actions/setup-node@v6
         with:
           node-version: 26
