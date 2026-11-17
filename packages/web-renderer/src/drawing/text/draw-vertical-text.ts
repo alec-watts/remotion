@@ -98,9 +98,65 @@ export const drawVerticalText = async ({
 	}
 
 	const document = block.ownerDocument;
+	const range = document.createRange();
+	range.selectNodeContents(span);
+	const textRect = range.getBoundingClientRect();
+	const padding = Math.max(
+		parseFloat(style.fontSize),
+		parseFloat(style.lineHeight) || 0,
+	);
+	// Keep the image origin aligned to both the SVG and output pixel grids.
+	const grid = [1, 2, 3, 4, 5, 6, 7, 8].find((step) =>
+		Number.isInteger(step * matrix.a),
+	);
+	const left = grid
+		? Math.max(
+				0,
+				Math.floor(
+					(Math.min(rect.left, textRect.left) - parentRect.left - padding) /
+						grid,
+				) * grid,
+			)
+		: 0;
+	const top = grid
+		? Math.max(
+				0,
+				Math.floor(
+					(Math.min(rect.top, textRect.top) - parentRect.top - padding) / grid,
+				) * grid,
+			)
+		: 0;
+	const right = grid
+		? Math.min(
+				width,
+				Math.ceil(
+					(Math.max(rect.right, textRect.right) - parentRect.left + padding) /
+						grid,
+				) * grid,
+			)
+		: width;
+	const bottom = grid
+		? Math.min(
+				height,
+				Math.ceil(
+					(Math.max(rect.bottom, textRect.bottom) - parentRect.top + padding) /
+						grid,
+				) * grid,
+			)
+		: height;
+	const cropWidth = right - left;
+	const cropHeight = bottom - top;
+	if (cropWidth <= 0 || cropHeight <= 0) {
+		return false;
+	}
+
 	const svg = document.createElementNS(svgNamespace, 'svg');
-	svg.setAttribute('width', String(width));
-	svg.setAttribute('height', String(height));
+	svg.setAttribute('width', String(cropWidth));
+	svg.setAttribute('height', String(cropHeight));
+	if (cropWidth !== width || cropHeight !== height) {
+		svg.setAttribute('viewBox', `${left} ${top} ${cropWidth} ${cropHeight}`);
+	}
+
 	svg.style.cssText =
 		'position: fixed; left: -100000px; top: 0; pointer-events: none;';
 	const carrier = document.createElementNS(svgNamespace, 'foreignObject');
@@ -137,6 +193,6 @@ export const drawVerticalText = async ({
 		svg.remove();
 	}
 
-	contextToDraw.drawImage(await image, 0, 0, width, height);
+	contextToDraw.drawImage(await image, left, top, cropWidth, cropHeight);
 	return true;
 };
