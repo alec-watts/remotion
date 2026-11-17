@@ -41,6 +41,7 @@ export const projectiveFilterInput = (
 	kind: (typeof filterInputCases)[number]['kind'],
 	preserving: boolean,
 	position: {left: number; top: number; shadowOffset: number} | null = null,
+	paint: 'filtered' | 'source-only' | 'blue-text' = 'filtered',
 ) => {
 	const scene = filterInputCases.find((item) => item.kind === kind)!;
 	const Component: React.FC = () => (
@@ -69,15 +70,17 @@ export const projectiveFilterInput = (
 							: undefined,
 					borderRadius: kind.startsWith('rounded') ? 20 : 0,
 					fontSize: 24,
-					color: 'red',
+					color: paint === 'blue-text' ? 'blue' : 'red',
 					transform: scene.transform,
 					transformOrigin: '0 0',
 					filter:
-						kind === 'blurred'
-							? 'blur(2px) drop-shadow(150px 0 0 blue)'
-							: kind.endsWith('visible')
-								? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
-								: 'drop-shadow(150px 0 0 blue)',
+						paint !== 'filtered'
+							? undefined
+							: kind === 'blurred'
+								? 'blur(2px) drop-shadow(150px 0 0 blue)'
+								: kind.endsWith('visible')
+									? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
+									: 'drop-shadow(150px 0 0 blue)',
 				}}
 			>
 				{kind.startsWith('text') ? 'Aa' : null}
@@ -99,7 +102,7 @@ export const projectiveFilterInput = (
 	);
 	return {
 		component: Component,
-		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}`,
+		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}${paint === 'filtered' ? '' : `-${paint}`}`,
 		width: 300,
 		height: 300,
 		fps: 30,
