@@ -3,6 +3,7 @@ import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
+	sharpShadowLayerDirections,
 	sharpShadowPlacements,
 	sharpShadowSampling,
 	sharpShadowScales,
@@ -69,6 +70,72 @@ test.for(sharpShadowScales)(
 		for (const result of Object.values(counts)) {
 			expect.soft(result.mismatchedPixels).toBe(0);
 		}
+	},
+);
+
+test.for(
+	sharpShadowScales
+		.slice(1)
+		.flatMap((scale) =>
+			sharpShadowLayerDirections.map((side) => ({scale, ...side})),
+		),
+)(
+	'preserves native sharp shadow coverage at scale $scale with extended $direction layer',
+	async ({scale, direction, placement}) => {
+		const baseline = sharpShadowSampling({scale, mode: 'filter'}, placement);
+		const extended = sharpShadowSampling(
+			{scale, mode: 'filter'},
+			placement,
+			true,
+		);
+		const images = {
+			baseline: await captureNativeReference(baseline, 0, {
+				omitBackground: false,
+			}),
+			extended: await captureNativeReference(extended, 0, {
+				omitBackground: false,
+			}),
+			exported: await (
+				await renderStillOnWeb({
+					composition: extended,
+					frame: 0,
+					licenseKey: 'free-license',
+					inputProps: {},
+					allowHtmlInCanvas: false,
+					experimental3DRendering: true,
+				})
+			).blob({format: 'png'}),
+		};
+		const output = `test/__results__/sharp-shadow-layer-extent/${server.browser}/${scale}/${direction}`;
+		for (const [role, blob] of Object.entries(images)) {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer())) {
+				binary += String.fromCharCode(byte);
+			}
+
+			await server.commands.writeFile(
+				`${output}/${role}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		const counts = {
+			nativeToExtended: await countNativePixels(
+				images.baseline,
+				images.extended,
+			),
+			exportToExtended: await countNativePixels(
+				images.extended,
+				images.exported,
+			),
+		};
+		await server.commands.writeFile(
+			`${output}/comparison.json`,
+			JSON.stringify({scale, direction, counts}),
+		);
+		expect.soft(counts.nativeToExtended.mismatchedPixels).toBeGreaterThan(0);
+		expect.soft(counts.exportToExtended.mismatchedPixels).toBe(0);
 	},
 );
 
