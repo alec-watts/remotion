@@ -4,6 +4,42 @@ import {scaleFilterLengths} from './handle-filter';
 import {setTransform} from './transform';
 import {transformDOMRect} from './transform-rect-with-matrix';
 
+const makeAxisBlur = ({
+	ownerDocument,
+	width,
+	height,
+	sigmaX,
+	sigmaY,
+}: {
+	ownerDocument: Document;
+	width: number;
+	height: number;
+	sigmaX: number;
+	sigmaY: number;
+}) => {
+	const ns = 'http://www.w3.org/2000/svg';
+	const svg = ownerDocument.createElementNS(ns, 'svg');
+	svg.setAttribute('width', '0');
+	svg.setAttribute('height', '0');
+	svg.style.position = 'absolute';
+	const filter = ownerDocument.createElementNS(ns, 'filter');
+	filter.id = `remotion-backdrop-blur-${crypto.randomUUID()}`;
+	filter.setAttribute('filterUnits', 'userSpaceOnUse');
+	filter.setAttribute('primitiveUnits', 'userSpaceOnUse');
+	filter.setAttribute('color-interpolation-filters', 'sRGB');
+	filter.setAttribute('x', '0');
+	filter.setAttribute('y', '0');
+	filter.setAttribute('width', String(width));
+	filter.setAttribute('height', String(height));
+	const blur = ownerDocument.createElementNS(ns, 'feGaussianBlur');
+	blur.setAttribute('stdDeviation', `${sigmaX} ${sigmaY}`);
+	filter.append(blur);
+	svg.append(filter);
+	ownerDocument.body.append(svg);
+
+	return {filter: `url(#${filter.id})`, [Symbol.dispose]: () => svg.remove()};
+};
+
 const mirrorBackdrop = ({
 	source,
 	left,
@@ -67,6 +103,7 @@ export const drawBackdropFilter = ({
 	scale,
 	layerScale,
 	borderRadius,
+	ownerDocument,
 }: {
 	source: OffscreenCanvas;
 	destination: OffscreenCanvasRenderingContext2D;
@@ -78,14 +115,22 @@ export const drawBackdropFilter = ({
 	scale: number;
 	layerScale: number;
 	borderRadius: string;
+	ownerDocument: Document;
 }) => {
 	if (!totalMatrix.is2D || filter.includes('url(')) return;
 	const inverse = totalMatrix.inverse();
 	if (!Number.isFinite(inverse.a)) return;
 
 	const bitmapFilter = scaleFilterLengths(filter, scale);
-	const blur = /^blur\(([\d.]+)px\)$/.exec(bitmapFilter);
-	const padding = blur ? Math.ceil(4 * Number(blur[1])) : 0;
+	const sigma = Number(/^blur\(([\d.]+)px\)$/.exec(bitmapFilter)?.[1] ?? 0);
+	const axisScaled =
+		sigma > 0 &&
+		totalMatrix.b === 0 &&
+		totalMatrix.c === 0 &&
+		(Math.abs(totalMatrix.a) !== 1 || Math.abs(totalMatrix.d) !== 1);
+	const sigmaX = axisScaled ? sigma * Math.abs(totalMatrix.a) : sigma;
+	const sigmaY = axisScaled ? sigma * Math.abs(totalMatrix.d) : sigma;
+	const padding = Math.ceil(4 * Math.max(sigma, sigmaX, sigmaY));
 	let sourceLeft = 0;
 	let sourceTop = 0;
 	let cropWidth = 0;
@@ -128,7 +173,26 @@ export const drawBackdropFilter = ({
 				})
 			: null;
 	const input = mirrored?.input ?? source;
-	const backdrop = new OffscreenCanvas(input.width, input.height);
+	using axisBlur =
+		mirrored && axisScaled
+			? makeAxisBlur({
+					ownerDocument,
+					width: input.width,
+					height: input.height,
+					sigmaX,
+					sigmaY,
+				})
+			: null;
+	// Canvas's blur() accepts a single radius. A document-backed SVG filter can
+	// apply both projected standard deviations without resampling the input.
+	const backdrop = axisBlur
+		? ownerDocument.createElement('canvas')
+		: new OffscreenCanvas(input.width, input.height);
+	if (axisBlur) {
+		backdrop.width = input.width;
+		backdrop.height = input.height;
+	}
+
 	using _backdrop = {
 		[Symbol.dispose]: () => {
 			backdrop.width = 0;
@@ -137,7 +201,11 @@ export const drawBackdropFilter = ({
 	};
 	const backdropContext = backdrop.getContext('2d');
 	if (!backdropContext || typeof backdropContext.filter !== 'string') return;
-	backdropContext.filter = bitmapFilter;
+	backdropContext.filter = axisBlur?.filter ?? bitmapFilter;
+	if (axisBlur && backdropContext.filter === 'none') {
+		backdropContext.filter = bitmapFilter;
+	}
+
 	if (backdropContext.filter === 'none') return;
 	backdropContext.drawImage(input, 0, 0);
 

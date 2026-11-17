@@ -215,6 +215,7 @@ export const processNode = async ({
 				scale,
 				layerScale,
 				borderRadius: computedStyle.borderRadius,
+				ownerDocument: element.ownerDocument,
 			});
 		}
 
