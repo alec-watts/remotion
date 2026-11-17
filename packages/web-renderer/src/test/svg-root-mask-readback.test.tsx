@@ -248,6 +248,20 @@ test.for(
 				});
 			});
 
+			await capture('svg-html-nested-transform', async () => {
+				const layoutStyle = `width:${fixture.width}px;height:${fixture.height}px;position:absolute;transform:scale(${scale});transform-origin:0 0`;
+				const sceneStyle = `position:absolute;inset:0;transform:${transform};transform-origin:0 0`;
+				const htmlWrapper = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="${layoutStyle}"><div style="${sceneStyle}">${svg}</div></div></foreignObject></svg>`;
+				await server.commands.writeFile(
+					`${folder}/html-nested-transform.svg`,
+					htmlWrapper,
+				);
+				return paint(htmlWrapper, 'svg-html-nested-transform', true, {
+					readback: server.browser === 'webkit',
+					useDataUrl: true,
+				});
+			});
+
 			if (a > 0 && d > 0 && b === 0 && c === 0) {
 				await capture('svg-root-viewbox', async () => {
 					const root = new DOMParser().parseFromString(
