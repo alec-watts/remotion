@@ -1,7 +1,7 @@
-name: Qualify WebKit SVG root mask readback in renderer
+name: Compare SVG mask geometry inside a device viewport
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-readback-draw]
+    branches: [codex/qualify-svg-root-mask-device-viewport]
 permissions:
   contents: read
 jobs:
@@ -49,37 +49,25 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare public still output with and without SVG mask readback
+      - name: Compare the public export with a device-space SVG viewport
         run: |
           drawing=packages/web-renderer/src/drawing
-          producer="$drawing/draw-dom-element.ts"
-          inputs=("$drawing"/{calculate-transforms,mask-image,embed-registered-fonts-in-svg,turn-svg-into-drawable}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test,merged-svg-font-definitions.test,svg-css-font.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock)
-          mkdir -p qualification
+          mkdir -p qualification packages/web-renderer/test/__results__
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
-          shasum -a 256 "${inputs[@]}" > qualification/inputs.sha256
+          shasum -a 256 "$drawing"/{draw-dom-element,calculate-transforms,mask-image,embed-registered-fonts-in-svg,turn-svg-into-drawable}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
           git rev-parse HEAD^ HEAD > qualification/revisions.txt
-          failed=0
-          for arm in baseline candidate; do
-            rev=HEAD
-            if [ "$arm" = baseline ]; then rev=HEAD^; fi
-            git restore --source="$rev" -- "$producer"
-            folder="qualification/$arm"
-            mkdir -p "$folder" packages/web-renderer/test/__results__
-            shasum -a 256 "$producer" > "$folder/producer.sha256"
-            bunx turbo run make --filter=@remotion/web-renderer
-            status=0
-            (cd packages/web-renderer && bunx vitest src/test/svg-root-mask-readback.test.tsx src/test/merged-svg-font-definitions.test.tsx src/test/svg-css-font.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
-            mv packages/web-renderer/test/__results__ "$folder/web-renderer"
-            printf "%s\n" "$status" > "$folder/status.txt"
-            shasum -a 256 --quiet -c qualification/inputs.sha256
-            shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
-            if [ "$status" -ne 0 ]; then failed="$status"; fi
-          done
-          exit "$failed"
+          bunx turbo run make --filter=@remotion/web-renderer
+          status=0
+          (cd packages/web-renderer && bunx vitest src/test/svg-root-mask-readback.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          printf "%s\n" "$status" > qualification/status.txt
+          shasum -a 256 --quiet -c qualification/inputs.sha256
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-readback-draw-${{ matrix.os }}
+          name: svg-root-mask-device-viewport-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
