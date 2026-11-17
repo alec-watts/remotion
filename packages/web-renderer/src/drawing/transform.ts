@@ -1,3 +1,4 @@
+import {contextRasterScales} from './raster-scale';
 export const setTransform = ({
 	ctx,
 	transform,
@@ -9,8 +10,9 @@ export const setTransform = ({
 	parentRect: DOMRect;
 	scale: number;
 }) => {
+	const rasterScale = contextRasterScales.get(ctx) ?? {x: scale, y: scale};
 	const offsetMatrix = new DOMMatrix()
-		.scale(scale, scale)
+		.scale(rasterScale.x, rasterScale.y)
 		.translate(-parentRect.x, -parentRect.y)
 		.multiply(transform)
 		.translate(parentRect.x, parentRect.y);

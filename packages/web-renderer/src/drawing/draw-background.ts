@@ -1,10 +1,11 @@
 import type {LogLevel} from 'remotion';
 import type {InternalState} from '../internal-state';
-import {createLayer} from '../take-screenshot';
+import {createLayerWithRasterScale} from '../take-screenshot';
 import {getBlendMode} from './calculate-transforms';
 import {getBackgroundFill, isColorTransparent} from './get-background-fill';
 import {getBoxBasedOnBackgroundClip} from './get-padding-box';
 import {parseUrlFunction} from './mask-image';
+import {contextRasterScales} from './raster-scale';
 
 export const drawBackground = async ({
 	hasCssTransform,
@@ -35,6 +36,7 @@ export const drawBackground = async ({
 	offsetTop: number;
 	scale: number;
 }) => {
+	const rasterScale = contextRasterScales.get(context) ?? {x: scale, y: scale};
 	let contextToDraw = context;
 
 	const originalCompositeOperation = context.globalCompositeOperation;
@@ -51,8 +53,8 @@ export const drawBackground = async ({
 					offsetTop,
 					// The context currently has a transform of `scale(scale, scale)`, and we requested
 					// a canvas with extra scale as well, dividing, since the context will multiply it again.
-					contextToDraw.canvas.width / scale,
-					contextToDraw.canvas.height / scale,
+					contextToDraw.canvas.width / rasterScale.x,
+					contextToDraw.canvas.height / rasterScale.y,
 				);
 			}
 		},
@@ -81,19 +83,22 @@ export const drawBackground = async ({
 			boundingRect.width,
 			boundingRect.height,
 		);
-		const onlyBackgroundClipText = await createLayer({
+		const onlyBackgroundClipText = await createLayerWithRasterScale({
 			transparent: true,
 			element,
 			cutout: textLayerCutout,
 			logLevel,
 			internalState,
 			scale,
+			rasterScale,
 			onlyBackgroundClipText: true,
 			waitForPageResponsiveness: null,
 
 			onlyOwnPlane: null,
 		});
-		onlyBackgroundClipText.setTransform(new DOMMatrix().scale(scale, scale));
+		onlyBackgroundClipText.setTransform(
+			new DOMMatrix().scale(rasterScale.x, rasterScale.y),
+		);
 		element.style.backgroundClip = originalBackgroundClip;
 		element.style.webkitBackgroundClip = originalWebkitBackgroundClip;
 		contextToDraw = onlyBackgroundClipText;
@@ -187,13 +192,13 @@ export const drawBackground = async ({
 	) {
 		// Blend inside the background group before applying element opacity, filters and text masks.
 		const backgroundCanvas = new OffscreenCanvas(
-			Math.ceil(boundingRect.width * scale),
-			Math.ceil(boundingRect.height * scale),
+			Math.ceil(boundingRect.width * rasterScale.x),
+			Math.ceil(boundingRect.height * rasterScale.y),
 		);
 		const backgroundContext = backgroundCanvas.getContext('2d');
 		if (!backgroundContext)
 			throw new Error('Could not create background compositing context');
-		backgroundContext.scale(scale, scale);
+		backgroundContext.scale(rasterScale.x, rasterScale.y);
 		backgroundContext.fillStyle = backgroundColor;
 		backgroundContext.fillRect(0, 0, boundingRect.width, boundingRect.height);
 		const groupFill = await getBackgroundFill({
@@ -219,8 +224,8 @@ export const drawBackground = async ({
 			backgroundCanvas,
 			boundingRect.left - offsetLeft,
 			boundingRect.top - offsetTop,
-			backgroundCanvas.width / scale,
-			backgroundCanvas.height / scale,
+			backgroundCanvas.width / rasterScale.x,
+			backgroundCanvas.height / rasterScale.y,
 		);
 		return;
 	}

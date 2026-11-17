@@ -34,6 +34,7 @@ export const filterInputCases = [
 	{kind: 'text-visible', left: 25, transform: 'scaleX(2)'},
 	{kind: 'rounded-visible', left: 25, transform: 'scaleX(2)'},
 	{kind: 'texture-visible', left: 25, transform: 'scaleX(2)'},
+	{kind: 'masked-visible', left: 25, transform: 'scale(2, 0.75)'},
 ] as const;
 
 export const projectiveFilterInput = (
@@ -57,7 +58,10 @@ export const projectiveFilterInput = (
 					top: position?.top ?? (kind === 'fractional' ? 100.25 : 100),
 					width: kind === 'fractional' ? 50.5 : 50,
 					height: kind === 'fractional' ? 49.25 : 50,
-					backgroundColor: kind.startsWith('text') ? 'transparent' : 'red',
+					backgroundColor:
+						kind.startsWith('text') || kind === 'masked-visible'
+							? 'transparent'
+							: 'red',
 					backgroundImage: kind.startsWith('gradient')
 						? 'linear-gradient(90deg, red, lime)'
 						: kind === 'texture-visible'
@@ -77,6 +81,19 @@ export const projectiveFilterInput = (
 				}}
 			>
 				{kind.startsWith('text') ? 'Aa' : null}
+				{kind === 'masked-visible' ? (
+					<div
+						style={{
+							position: 'absolute',
+							left: 0.5,
+							top: 0.25,
+							width: 48,
+							height: 46,
+							backgroundColor: 'red',
+							maskImage: 'linear-gradient(90deg, black, transparent)',
+						}}
+					/>
+				) : null}
 			</div>
 		</AbsoluteFill>
 	);

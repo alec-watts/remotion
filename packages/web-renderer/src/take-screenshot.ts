@@ -7,6 +7,7 @@ import {
 } from './drawing/calculate-transforms';
 import {makeDOMMatrix} from './drawing/make-dom-matrix';
 import {containsUrlMaskImage} from './drawing/mask-image';
+import {contextRasterScales, type RasterScale} from './drawing/raster-scale';
 import type {HtmlInCanvasContext} from './html-in-canvas';
 import {
 	containsLayoutSubtreeCanvas,
@@ -63,19 +64,7 @@ const containsPreserve3DDepth = (element: HTMLElement | SVGElement) => {
 	return false;
 };
 
-export const createLayer = async ({
-	element,
-	onlyOwnPlane: onlyOwnPlaneOption,
-	scale,
-	logLevel,
-	internalState,
-	onlyBackgroundClipText,
-	cutout,
-	transparent,
-	htmlInCanvasContext,
-	onHtmlInCanvasLayerOutcome,
-	waitForPageResponsiveness,
-}: {
+type CreateLayerOptions = {
 	element: HTMLElement | SVGElement;
 	onlyOwnPlane: boolean | null;
 	scale: number;
@@ -87,10 +76,26 @@ export const createLayer = async ({
 	htmlInCanvasContext?: HtmlInCanvasContext | null;
 	onHtmlInCanvasLayerOutcome?: (outcome: HtmlInCanvasLayerOutcome) => void;
 	waitForPageResponsiveness: (() => Promise<void>) | null;
-}) => {
+};
+
+export const createLayerWithRasterScale = async ({
+	element,
+	onlyOwnPlane: onlyOwnPlaneOption,
+	scale,
+	logLevel,
+	internalState,
+	onlyBackgroundClipText,
+	cutout,
+	transparent,
+	htmlInCanvasContext,
+	onHtmlInCanvasLayerOutcome,
+	waitForPageResponsiveness,
+
+	rasterScale,
+}: CreateLayerOptions & {rasterScale: RasterScale | null}) => {
 	const onlyOwnPlane = onlyOwnPlaneOption === null ? false : onlyOwnPlaneOption;
-	const scaledWidth = Math.ceil(cutout.width * scale);
-	const scaledHeight = Math.ceil(cutout.height * scale);
+	const scaledWidth = Math.ceil(cutout.width * (rasterScale?.x ?? scale));
+	const scaledHeight = Math.ceil(cutout.height * (rasterScale?.y ?? scale));
 
 	if (
 		!onlyBackgroundClipText &&
@@ -170,17 +175,25 @@ export const createLayer = async ({
 		context.fillRect(0, 0, scaledWidth, scaledHeight);
 	}
 
-	await compose({
-		element,
-		onlyOwnPlane,
-		context,
-		logLevel,
-		parentRect: cutout,
-		internalState,
-		onlyBackgroundClipText,
-		scale,
-		waitForPageResponsiveness,
-	});
+	if (rasterScale) contextRasterScales.set(context, rasterScale);
+	try {
+		await compose({
+			element,
+			onlyOwnPlane,
+			context,
+			logLevel,
+			parentRect: cutout,
+			internalState,
+			onlyBackgroundClipText,
+			scale,
+			waitForPageResponsiveness,
+		});
+	} finally {
+		contextRasterScales.delete(context);
+	}
 
 	return context;
 };
+
+export const createLayer = (options: CreateLayerOptions) =>
+	createLayerWithRasterScale({...options, rasterScale: null});
