@@ -545,10 +545,12 @@ export const Root: React.FC = () => {
 				<Composition {...textDecorationStyles} />
 				<Composition {...textDecorationWavy} />
 				{verticalTextCases.flatMap((entry) =>
-					(['html', 'svg'] as const).map((carrier) => {
-						const fixture = verticalTextNative({entry, carrier});
-						return <Composition key={fixture.id} {...fixture} />;
-					}),
+					(['html', 'svg'] as const).flatMap((carrier) =>
+						(['original', 'inset'] as const).map((placement) => {
+							const fixture = verticalTextNative({entry, carrier, placement});
+							return <Composition key={fixture.id} {...fixture} />;
+						}),
+					),
 				)}
 				<Composition {...fontStyle} />
 				<Composition {...fontStretch} />

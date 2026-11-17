@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import '../symbol-dispose';
 import {renderStillOnWeb} from '../render-still-on-web';
@@ -11,14 +11,20 @@ import {captureNativeReference, countNativePixels} from './native-reference';
 
 test.for(
 	verticalTextCases.flatMap((entry) =>
-		[1, 1.5].map((scale) => ({entry, scale})),
+		[1, 1.5].flatMap((scale) =>
+			(['original', 'inset'] as const).map((placement) => ({
+				entry,
+				scale,
+				placement,
+			})),
+		),
 	),
 )(
-	'matches browser writing mode $entry.id at scale $scale',
-	async ({entry, scale}) => {
+	'matches browser writing mode $entry.id at scale $scale with $placement positioning',
+	async ({entry, scale, placement}) => {
 		await verticalTextFontReady;
-		const html = verticalTextNative({entry, carrier: 'html'});
-		const svg = verticalTextNative({entry, carrier: 'svg'});
+		const html = verticalTextNative({entry, carrier: 'html', placement});
+		const svg = verticalTextNative({entry, carrier: 'svg', placement});
 		const Scene = html.component;
 		const reference = await captureNativeReference(
 			{
@@ -53,9 +59,29 @@ test.for(
 					allowHtmlInCanvas: false,
 				})
 			).blob({format: 'png'});
-		const actual = await render(html);
+		const draws = vi.spyOn(
+			OffscreenCanvasRenderingContext2D.prototype,
+			'drawImage',
+		);
+		let actual: Blob;
+		const textRasters: number[][] = [];
+		try {
+			actual = await render(html);
+			for (const [drawable, ...destination] of draws.mock.calls) {
+				if (
+					drawable instanceof HTMLImageElement &&
+					drawable.src.startsWith('data:image/svg+xml') &&
+					drawable.src.includes('foreignObject')
+				) {
+					textRasters.push([drawable.width, drawable.height, ...destination]);
+				}
+			}
+		} finally {
+			draws.mockRestore();
+		}
+
 		const svgExport = await render(svg);
-		const output = `test/__results__/vertical-text/${server.browser}/${entry.id}/${scale}`;
+		const output = `test/__results__/vertical-text/${server.browser}/${entry.id}/${scale}${placement === 'inset' ? '/inset' : ''}`;
 		for (const [name, blob] of [
 			['reference', reference],
 			['actual', actual],
@@ -80,6 +106,8 @@ test.for(
 			JSON.stringify({
 				entry,
 				scale,
+				placement,
+				textRasters,
 				counts,
 				writingModeSupported: CSS.supports('writing-mode', entry.writingMode),
 				orientationSupported: CSS.supports(

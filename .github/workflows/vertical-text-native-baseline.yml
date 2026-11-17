@@ -51,7 +51,7 @@ jobs:
           PIN
       - name: Capture native HTML, candidate DOM renderer and authored SVG
         run: |
-          git diff --exit-code HEAD^ -- packages/web-renderer/src/test packages/web-renderer/src/take-screenshot.ts bun.lock
+          git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts bun.lock
           source=packages/web-renderer/src/drawing/text/draw-vertical-text.ts
           baseline=56b11a711ec02792ad18313ff0647d52dbd820d2
           git diff "$baseline" HEAD -- "$source" > "$RUNNER_TEMP/vertical-text-crop.patch"

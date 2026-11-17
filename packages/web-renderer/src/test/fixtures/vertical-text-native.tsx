@@ -54,22 +54,24 @@ export const verticalTextCases = [
 	decorated: boolean;
 }[];
 
-const width = 220;
-const height = 180;
-
 export const verticalTextNative = ({
 	entry,
 	carrier,
+	placement = 'original',
 }: {
 	entry: (typeof verticalTextCases)[number];
 	carrier: 'html' | 'svg';
+	placement?: 'original' | 'inset';
 }) => {
+	const inset = placement === 'inset';
+	const width = inset ? 340 : 220;
+	const height = inset ? 260 : 180;
 	const paintedText = () => (
 		<div
 			style={{
 				position: 'absolute',
-				left: 24,
-				top: 20,
+				left: inset ? 76.25 : 24,
+				top: inset ? 62.5 : 20,
 				width: 116,
 				height: 146,
 				fontFamily: `"${fontFamily}", sans-serif`,
@@ -103,7 +105,7 @@ export const verticalTextNative = ({
 		</AbsoluteFill>
 	);
 	return {
-		id: `vertical-text-${entry.id}-${carrier}`,
+		id: `vertical-text-${entry.id}-${carrier}${inset ? '-inset' : ''}`,
 		component: Component,
 		width,
 		height,
