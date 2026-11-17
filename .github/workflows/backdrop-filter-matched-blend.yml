@@ -1,0 +1,55 @@
+name: Compare native backdrop blending on one Chrome build
+on:
+  push:
+    branches: [codex/backdrop-filter-matched-blend]
+permissions:
+  contents: read
+jobs:
+  capture:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - name: Freeze matching Chrome
+        run: |
+          version=157.0.8103.79
+          if [ "$RUNNER_OS" = macOS ]; then
+            platform=mac-arm64
+            suffix='Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
+          else
+            platform=linux64
+            suffix=chrome
+          fi
+          base="$RUNNER_TEMP/matched-chrome"
+          mkdir -p "$base"
+          curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/$version/$platform/chrome-$platform.zip" -o "$base/chrome.zip"
+          unzip -q "$base/chrome.zip" -d "$base"
+          bundle="$base/chrome-$platform"
+          binary="$bundle/$suffix"
+          "$binary" --version | grep -F "$version"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/matched-chrome.sha256"
+          echo "REMOTION_CHROME_EXECUTABLE=$binary" >> "$GITHUB_ENV"
+      - run: cd packages/web-renderer && bun ./test/backdrop-matched-blend.ts
+      - name: Verify browser immutability
+        run: shasum -a 256 --quiet -c "$RUNNER_TEMP/matched-chrome.sha256"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backdrop-matched-blend-${{ matrix.os }}
+          path: packages/web-renderer/test/__results__/backdrop-matched-blend
+          if-no-files-found: error
+          retention-days: 7
