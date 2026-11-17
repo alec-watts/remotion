@@ -1,5 +1,5 @@
 import '../symbol-dispose';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
@@ -16,25 +16,46 @@ for (const {kind} of filterInputCases)
 				const native = await captureNativeReference(composition, 0, {
 					omitBackground: false,
 				});
-				const actual = await (
-					await renderStillOnWeb({
-						composition,
-						frame: 0,
-						inputProps: {},
-						licenseKey: 'free-license',
-						allowHtmlInCanvas: false,
-						experimental3DRendering,
-					})
-				).blob({format: 'png'});
+				const inputs: Blob[] = [];
+				const original = OffscreenCanvas.prototype.convertToBlob;
+				const captureInput =
+					kind.endsWith('-visible') && experimental3DRendering;
+				const spy = captureInput
+					? vi
+							.spyOn(OffscreenCanvas.prototype, 'convertToBlob')
+							.mockImplementation(
+								async function (this: OffscreenCanvas, options) {
+									const blob = await original.call(this, options);
+									if (options?.type === 'image/png') inputs.push(blob);
+									return blob;
+								},
+							)
+					: null;
+				let actual: Blob;
+				try {
+					actual = await (
+						await renderStillOnWeb({
+							composition,
+							frame: 0,
+							inputProps: {},
+							licenseKey: 'free-license',
+							allowHtmlInCanvas: false,
+							experimental3DRendering,
+						})
+					).blob({format: 'png'});
+				} finally {
+					spy?.mockRestore();
+				}
+
 				const result = await compareNativePixels(native, actual);
 				const path = `test/__results__/filter-inputs/${server.browser}/${composition.id}-${experimental3DRendering}`;
 				await Promise.all(
-					[native, actual].map(async (blob, index) => {
+					[native, actual, ...inputs].map(async (blob, index) => {
 						let binary = '';
 						for (const byte of new Uint8Array(await blob.arrayBuffer()))
 							binary += String.fromCharCode(byte);
 						await server.commands.writeFile(
-							`${path}/${index === 0 ? 'reference' : 'actual'}.png`,
+							`${path}/${index === 0 ? 'reference' : index === 1 ? 'actual' : 'capture-' + (index - 2)}.png`,
 							btoa(binary),
 							'base64',
 						);
@@ -48,6 +69,7 @@ for (const {kind} of filterInputCases)
 						experimental3DRendering,
 						mismatchedPixels: result.mismatchedPixels,
 						maxChannelDelta: result.maxChannelDelta,
+						captureCount: inputs.length,
 						userAgent: navigator.userAgent,
 						devicePixelRatio,
 					}),
