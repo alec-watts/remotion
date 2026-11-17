@@ -391,6 +391,7 @@ export const processNode = async ({
 			);
 			try {
 				if (
+					!internalState.experimental3DRendering ||
 					is3DPrecomposition ||
 					!applySharpShadowFallback(tempContext, filter)
 				) {
