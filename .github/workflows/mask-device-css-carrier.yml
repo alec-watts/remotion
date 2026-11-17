@@ -1,14 +1,14 @@
-name: Isolate CSS mask sizing and bitmap handoff
+name: Compare CSS layout zoom at fractional mask scales
 on:
   push:
-    branches: [codex/mask-device-css-carrier]
+    branches: [codex/mask-fractional-layout-zoom]
 permissions:
   contents: read
 jobs:
   compare:
     if: github.repository == 'alec-watts/remotion'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -49,31 +49,19 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.MASK_GRADIENT_CHROME,"))
           PIN
-      - name: Compare both mask changes independently on the same worker
+      - name: Compare layout zoom and CSS transforms on the same worker
         run: |
-          drawing=packages/web-renderer/src/drawing
-          git diff --exit-code HEAD^ HEAD -- "$drawing"
-          git diff --binary HEAD^^ HEAD^ -- "$drawing" > "$RUNNER_TEMP/mask-carrier.patch"
-          git diff --binary HEAD^^ HEAD^ -- "$drawing/css-mask.ts" "$drawing/native-mask-svg.ts" > "$RUNNER_TEMP/mask-sizing.patch"
-          git diff --binary HEAD^^ HEAD^ -- "$drawing/handle-mask.ts" "$drawing/process-node.ts" > "$RUNNER_TEMP/mask-handoff.patch"
-          test -s "$RUNNER_TEMP/mask-sizing.patch"
-          test -s "$RUNNER_TEMP/mask-handoff.patch"
-          cat "$RUNNER_TEMP/mask-sizing.patch" "$RUNNER_TEMP/mask-handoff.patch" | git apply --reverse
-          git diff --exit-code HEAD^^ -- "$drawing"
+          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing/css-mask.ts > "$RUNNER_TEMP/mask-zoom.patch"
+          test -s "$RUNNER_TEMP/mask-zoom.patch"
           failed=0
-          for arm in control sizing handoff candidate; do
-            case "$arm" in
-              sizing) git apply "$RUNNER_TEMP/mask-sizing.patch" ;;
-              handoff) git apply "$RUNNER_TEMP/mask-handoff.patch" ;;
-              candidate)
-                git apply "$RUNNER_TEMP/mask-carrier.patch"
-                git diff --exit-code HEAD^ -- "$drawing"
-                ;;
-            esac
+          for arm in candidate control; do
+            if [ "$arm" = control ]; then
+              git apply --reverse "$RUNNER_TEMP/mask-zoom.patch"
+              git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing
+            fi
             bunx turbo run make --filter=@remotion/web-renderer
             mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
-            cp "$RUNNER_TEMP/mask-carrier.patch" "qualification/$arm/producer.patch"
-            shasum -a 256 "$drawing/css-mask.ts" "$drawing/native-mask-svg.ts" "$drawing/handle-mask.ts" "$drawing/process-node.ts" > "qualification/$arm/producer-inputs.txt"
+            cp "$RUNNER_TEMP/mask-zoom.patch" "qualification/$arm/producer.patch"
             "$MASK_GRADIENT_CHROME" --version > "qualification/$arm/chrome.txt"
             shasum -a 256 packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/mask-gradient-backend-qualification.test.ts packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > "qualification/$arm/inputs.txt"
             if (cd packages/web-renderer && bunx vitest src/test/mask-gradient-backend-qualification.test.ts src/test/mask-copy-qualification.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image.test.tsx src/test/mask-image-url.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/backface-visibility-mask.test.tsx src/test/background-clip.test.tsx src/test/background-blend-mode.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-copy.json); then
@@ -87,19 +75,15 @@ jobs:
             if [ -d packages/web-renderer/.vitest/attachments ]; then
               mv packages/web-renderer/.vitest/attachments "qualification/$arm/attachments"
             fi
-            case "$arm" in
-              sizing) git apply --reverse "$RUNNER_TEMP/mask-sizing.patch" ;;
-              handoff) git apply --reverse "$RUNNER_TEMP/mask-handoff.patch" ;;
-            esac
-            cmp qualification/control/inputs.txt "qualification/$arm/inputs.txt"
-            cmp qualification/control/chrome.txt "qualification/$arm/chrome.txt"
           done
+          cmp qualification/control/inputs.txt qualification/candidate/inputs.txt
+          cmp qualification/control/chrome.txt qualification/candidate/chrome.txt
           shasum -a 256 --quiet -c "$RUNNER_TEMP/mask-chrome.sha256"
           exit "$failed"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-device-css-carrier-${{ matrix.os }}
+          name: mask-fractional-layout-zoom-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

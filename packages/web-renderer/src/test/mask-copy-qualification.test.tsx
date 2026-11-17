@@ -154,3 +154,14 @@ test.for(
 	async (options) =>
 		qualifyMaskCopy({...options, mode: 'hard', opaqueReference: true}),
 );
+
+test.for(
+	[0.75, 1.5, 1.75, 2.5, 3].flatMap((scale) => [
+		{scale, mode: 'soft' as const, overflow: 'hidden' as const},
+		{scale, mode: 'fractional' as const, overflow: 'visible' as const},
+	]),
+)(
+	'keeps mask copy pixels at scale $scale for $mode $overflow',
+	async (options) =>
+		qualifyMaskCopy({...options, frame: 0, opaqueReference: false}),
+);
