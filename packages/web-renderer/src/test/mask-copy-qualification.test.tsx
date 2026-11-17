@@ -5,6 +5,71 @@ import {renderStillOnWeb} from '../render-still-on-web';
 import {maskCopyOffsets, maskCopyOverflow} from './fixtures/mask-copy-overflow';
 import {captureNativeReference, countNativePixels} from './native-reference';
 
+const observeCompositeAlpha = () => {
+	type Read = {
+		context: OffscreenCanvasRenderingContext2D;
+		image: ImageData;
+		pixels: Uint8ClampedArray;
+		top: number;
+	};
+	const reads: Read[] = [];
+	const bands: {source: Read; mask: Read; output: Uint8ClampedArray}[] = [];
+	const context = OffscreenCanvasRenderingContext2D.prototype;
+	const get = context.getImageData;
+	const put = context.putImageData;
+	const readObserver = vi
+		.spyOn(context, 'getImageData')
+		.mockImplementation(
+			function (
+				this: OffscreenCanvasRenderingContext2D,
+				x,
+				y,
+				width,
+				height,
+				options,
+			) {
+				const image = get.call(this, x, y, width, height, options);
+				reads.push({context: this, image, pixels: image.data.slice(), top: y});
+				if (reads.length > 2) reads.shift();
+				return image;
+			},
+		);
+	const writeObserver = vi
+		.spyOn(context, 'putImageData')
+		.mockImplementation(function (
+			this: OffscreenCanvasRenderingContext2D,
+			image,
+			x,
+			y,
+			...dirty
+		) {
+			const [mask, source] = reads;
+			if (
+				source?.image === image &&
+				mask.context === this &&
+				mask.context !== source.context &&
+				source.top === y &&
+				mask.top === y &&
+				x === 0 &&
+				mask.image.width === image.width &&
+				mask.image.height === image.height
+			) {
+				bands.push({source, mask, output: image.data.slice()});
+				reads.length = 0;
+			}
+
+			return Reflect.apply(put, this, [image, x, y, ...dirty]);
+		});
+	return {
+		bands,
+		[Symbol.dispose]: () => {
+			writeObserver.mockRestore();
+			readObserver.mockRestore();
+			reads.length = 0;
+		},
+	};
+};
+
 const qualifyMaskCopy = async ({
 	mode,
 	overflow,
@@ -59,6 +124,7 @@ const qualifyMaskCopy = async ({
 			return serialized;
 		});
 	let actual: Blob;
+	const composite = captureStages ? observeCompositeAlpha() : null;
 	try {
 		actual = await (
 			await renderStillOnWeb({
@@ -71,6 +137,7 @@ const qualifyMaskCopy = async ({
 			})
 		).blob({format: 'png'});
 	} finally {
+		composite?.[Symbol.dispose]();
 		observer.mockRestore();
 	}
 
@@ -80,16 +147,17 @@ const qualifyMaskCopy = async ({
 			? await captureAtScale(true)
 			: null;
 	const path = `test/__results__/mask-copy/${server.browser}/${opaqueReference ? 'opaque-' : ''}${mode}-${overflow}-${scale}-${frame}${position ? `-offset-${position.left}-${position.top}` : ''}${captureStages ? '-stages' : ''}`;
-	const savePng = async (role: string, blob: Blob) => {
-		const bytes = new Uint8Array(await blob.arrayBuffer());
+	const saveBytes = async (
+		file: string,
+		bytes: Uint8Array | Uint8ClampedArray,
+	) => {
 		let binary = '';
 		for (const byte of bytes) binary += String.fromCharCode(byte);
-		await server.commands.writeFile(
-			`${path}/${role}.png`,
-			btoa(binary),
-			'base64',
-		);
+		await server.commands.writeFile(`${path}/${file}`, btoa(binary), 'base64');
 	};
+
+	const savePng = async (role: string, blob: Blob) =>
+		saveBytes(`${role}.png`, new Uint8Array(await blob.arrayBuffer()));
 
 	for (const [role, blob] of [
 		['reference', reference],
@@ -122,6 +190,24 @@ const qualifyMaskCopy = async ({
 	);
 	if (captureStages) {
 		expect(serializedSvgs).toHaveLength(1);
+		const bands = composite?.bands ?? [];
+		expect(bands.length).toBeGreaterThan(0);
+		await server.commands.writeFile(
+			`${path}/alpha-bands.json`,
+			JSON.stringify(
+				bands.map(({source}) => ({
+					top: source.top,
+					width: source.image.width,
+					height: source.image.height,
+				})),
+			),
+		);
+		for (const [index, {source, mask, output}] of bands.entries()) {
+			await saveBytes(`composite-source-${index}.rgba`, source.pixels);
+			await saveBytes(`composite-mask-${index}.rgba`, mask.pixels);
+			await saveBytes(`composite-output-${index}.rgba`, output);
+		}
+
 		const image = new Image();
 		try {
 			image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvgs[0])}`;
