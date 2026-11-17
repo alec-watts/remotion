@@ -1,0 +1,52 @@
+name: Capture native backdrop filter baseline
+on:
+  push:
+    branches: [codex/backdrop-filter-native-baseline]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 8
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Capture native and software-composer output
+        run: |
+          baseline=26afaf0d015c336b6695c68530abe33ea3edce1c
+          git diff --exit-code "$baseline" -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts
+          mkdir -p qualification packages/web-renderer/test/__results__
+          if (cd packages/web-renderer && bunx vitest run src/test/backdrop-filter.test.tsx --reporter=default --reporter=json --outputFile=./test/__results__/backdrop-filter-suite.json); then
+            diagnostic_exit=0
+          else
+            diagnostic_exit=$?
+          fi
+          printf '%s\n' "$diagnostic_exit" > qualification/exit-code.txt
+          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
+            mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures qualification/native-pixel-failures
+          fi
+          exit "$diagnostic_exit"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backdrop-filter-baseline-${{ matrix.os }}
+          path: qualification
+          if-no-files-found: error
+          retention-days: 7

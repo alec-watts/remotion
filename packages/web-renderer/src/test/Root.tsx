@@ -2,6 +2,7 @@
 import React from 'react';
 import {Composition, Folder} from 'remotion';
 import {accumulatedTransforms} from './fixtures/accumulated-transforms';
+import {backdropFilter, backdropFilterCases} from './fixtures/backdrop-filter';
 import {backfaceVisibilityMask} from './fixtures/backface-visibility-mask';
 import {backgroundBlendMode} from './fixtures/background-blend-mode';
 import {backgroundColor} from './fixtures/background-color';
@@ -455,6 +456,12 @@ export const Root: React.FC = () => {
 			<Composition {...threeDTransformOpacity} />
 			<Composition {...backgroundColor} />
 			<Composition {...backgroundBlendMode} />
+			{backdropFilterCases.map((scene) => (
+				<Composition
+					key={scene.mode}
+					{...backdropFilter({scene, enabled: true})}
+				/>
+			))}
 			<Composition {...stackingContextSiblings} />
 			<Folder name="linear-gradient">
 				<Composition {...maskImage} />
