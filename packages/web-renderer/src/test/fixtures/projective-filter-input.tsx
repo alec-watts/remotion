@@ -43,6 +43,7 @@ export const projectiveFilterInput = (
 	position: {left: number; top: number; shadowOffset: number} | null = null,
 	geometry: {
 		transform: string;
+		perspective?: number;
 		willChange?: 'transform';
 		order?: 'transform-outside' | 'filter-outside';
 		paint?: 'filtered' | 'source-only' | 'blue-text';
@@ -69,6 +70,7 @@ export const projectiveFilterInput = (
 	const Component: React.FC = () => {
 		const source = (
 			<div
+				data-mask-stage={mixedMarkup ? 'content' : undefined}
 				style={{
 					position: 'absolute',
 					left: order ? 0 : left,
@@ -95,6 +97,7 @@ export const projectiveFilterInput = (
 			>
 				{mixedMarkup ? (
 					<div
+						data-mask-stage="texture"
 						style={{
 							position: 'absolute',
 							inset: '1px 3px 4px 2px',
@@ -137,12 +140,15 @@ export const projectiveFilterInput = (
 			<AbsoluteFill
 				style={{
 					backgroundColor: 'white',
-					perspective: kind.startsWith('projective') ? 400 : undefined,
+					perspective:
+						geometry?.perspective ??
+						(kind.startsWith('projective') ? 400 : undefined),
 					transformStyle: preserving ? 'preserve-3d' : 'flat',
 				}}
 			>
 				{order ? (
 					<div
+						data-mask-stage={mixedMarkup ? 'outer' : undefined}
 						style={{
 							position: 'absolute',
 							left,

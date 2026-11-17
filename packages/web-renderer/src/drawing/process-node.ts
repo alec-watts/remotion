@@ -32,6 +32,7 @@ import {
 	handleMask,
 	handleSvgClip,
 } from './handle-mask';
+import {traceMaskStage} from './mask-stage-trace';
 import {setOpacity} from './opacity';
 import {roundToExpandRect} from './round-to-expand-rect';
 import {scaleRect} from './scale-rect';
@@ -335,6 +336,14 @@ export const processNode = async ({
 		}
 
 		let drawable: OffscreenCanvas | null = tempContext.canvas;
+		const layerGeometry = () => ({
+			rect: layerRect.toJSON(),
+			scale: filterLayerScale,
+			matrix: Array.from(totalMatrix.toFloat64Array()),
+			pixelWidth: layerPixelWidth,
+			pixelHeight: layerPixelHeight,
+		});
+		traceMaskStage(element, 'layer-source', drawable, layerGeometry);
 
 		const rectAfterTransforms = roundToExpandRect(
 			scaleRect({
@@ -418,6 +427,7 @@ export const processNode = async ({
 
 		if (precompositing.needsMaskImage) {
 			await handleMask({
+				element,
 				maskImageInfo: precompositing.needsMaskImage,
 				maskRect: dimensions,
 				precomposeRect: layerRect,
@@ -429,6 +439,8 @@ export const processNode = async ({
 				await waitForPageResponsiveness();
 			}
 		}
+
+		traceMaskStage(element, 'layer-output', drawable, layerGeometry);
 
 		const destinationRect = is3DPrecomposition
 			? rectAfterTransforms
@@ -450,6 +462,12 @@ export const processNode = async ({
 			});
 			if (t) {
 				drawable = t;
+				traceMaskStage(element, 'projected-layer', t, () => ({
+					sourceRect: precomposeRect.toJSON(),
+					destinationRect: rectAfterTransforms.toJSON(),
+					matrix: Array.from(totalMatrix.toFloat64Array()),
+					scale,
+				}));
 			}
 
 			if (waitForPageResponsiveness !== null) {
@@ -498,6 +516,13 @@ export const processNode = async ({
 
 		try {
 			drawPrecomposedCanvas();
+			traceMaskStage(element, 'parent-after-copy', context.canvas, () => ({
+				copyX,
+				copyY,
+				destinationRect: destinationRect.toJSON(),
+				parentRect: parentRect.toJSON(),
+				transform: Array.from(context.getTransform().toFloat64Array()),
+			}));
 		} finally {
 			finishOpacity();
 			context.globalCompositeOperation = previousCompositeOperation;

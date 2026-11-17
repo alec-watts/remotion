@@ -3,6 +3,7 @@ import type {InternalState} from '../internal-state';
 import {getBackgroundImageRect} from './background-image-rect';
 import {createCssMask} from './css-mask';
 import type {MaskImageInfo} from './mask-image';
+import {traceMaskStage} from './mask-stage-trace';
 import {
 	createCanvasGradient,
 	createRadialGradientFill,
@@ -21,6 +22,7 @@ export const getPrecomposeRectForMask = (element: HTMLElement | SVGElement) => {
 };
 
 export const handleMask = async ({
+	element,
 	maskImageInfo,
 	maskRect,
 	precomposeRect,
@@ -28,6 +30,7 @@ export const handleMask = async ({
 	scale,
 	internalState,
 }: {
+	element: Element;
 	maskImageInfo: MaskImageInfo;
 	maskRect: DOMRect;
 	precomposeRect: DOMRect;
@@ -36,6 +39,13 @@ export const handleMask = async ({
 	internalState: InternalState;
 }) => {
 	if (maskImageInfo.type === 'layers') {
+		const geometry = () => ({
+			maskRect: maskRect.toJSON(),
+			precomposeRect: precomposeRect.toJSON(),
+			scale,
+			maskStyle: maskImageInfo.style,
+		});
+		traceMaskStage(element, 'mask-input', tempContext.canvas, geometry);
 		const groupImage = await createCssMask({
 			content: tempContext.canvas,
 			maskImageInfo,
@@ -54,6 +64,7 @@ export const handleMask = async ({
 			// Rasterize the native masked content before copying the completed layer. The
 			// readback context preserves fractional alpha at this SVG drawable seam.
 			masked.drawImage(groupImage, 0, 0);
+			traceMaskStage(element, 'mask-raster', masked.canvas, geometry);
 			tempContext.save();
 			try {
 				tempContext.resetTransform();

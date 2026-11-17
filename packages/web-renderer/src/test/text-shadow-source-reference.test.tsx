@@ -1,6 +1,7 @@
 import '../symbol-dispose';
 import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
+import {setMaskStageObserver} from '../drawing/mask-stage-trace';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {projectiveFilterInput} from './fixtures/projective-filter-input';
@@ -59,28 +60,67 @@ const renderMarkup = async (markup: HTMLElement, size: number) => {
 	}
 };
 
+const writePng = async (path: string, blob: Blob) => {
+	let binary = '';
+	for (const byte of new Uint8Array(await blob.arrayBuffer())) {
+		binary += String.fromCharCode(byte);
+	}
+
+	await server.commands.writeFile(path, btoa(binary), 'base64');
+};
+
 test.for(
 	[false, true].flatMap((preserving) =>
 		[1, 1.5].flatMap((scale) => [
-			{preserving, scale, horizontalScale: 1, mixedMarkup: undefined},
-			{preserving, scale, horizontalScale: 2, mixedMarkup: undefined},
+			{
+				preserving,
+				scale,
+				horizontalScale: 1,
+				mixedMarkup: undefined,
+				rotationY: 0,
+			},
+			{
+				preserving,
+				scale,
+				horizontalScale: 2,
+				mixedMarkup: undefined,
+				rotationY: 0,
+			},
 			...(['textured', 'rounded-clip', 'masked'] as const).map(
 				(mixedMarkup) => ({
 					preserving,
 					scale,
 					horizontalScale: 2,
+					rotationY: 0,
 					mixedMarkup,
 				}),
 			),
+			{
+				preserving,
+				scale,
+				horizontalScale: 2,
+				rotationY: 24,
+				mixedMarkup: 'masked' as const,
+			},
 		]),
 	),
 )(
-	'compares text and shadow at preserving=$preserving scale=$scale horizontalScale=$horizontalScale mixedMarkup=$mixedMarkup',
-	async ({preserving, scale, horizontalScale, mixedMarkup}) => {
+	'compares text and shadow at preserving=$preserving scale=$scale horizontalScale=$horizontalScale mixedMarkup=$mixedMarkup rotationY=$rotationY',
+	async ({preserving, scale, horizontalScale, mixedMarkup, rotationY}) => {
 		const geometry = {
-			transform: horizontalScale === 1 ? 'none' : 'scaleX(2)',
+			transform: rotationY
+				? `rotateY(${rotationY}deg) scaleX(${horizontalScale})`
+				: horizontalScale === 1
+					? 'none'
+					: 'scaleX(2)',
+			perspective: rotationY ? 400 : undefined,
 			mixedMarkup,
 		};
+		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}${mixedMarkup ? `/${mixedMarkup}` : ''}${rotationY ? '/perspective' : ''}`;
+		const stageComparisons: {name: string; mismatchedPixels: number | null}[] =
+			[];
+		const shouldTrace = mixedMarkup === 'masked' || mixedMarkup === 'textured';
+
 		const filtered = projectiveFilterInput(
 			'text-visible',
 			preserving,
@@ -166,24 +206,80 @@ test.for(
 			}
 		};
 
+		const renderWithTrace = async (
+			name: string,
+			composition: typeof filtered,
+		): Promise<PromiseSettledResult<Blob>> => {
+			if (!shouldTrace) {
+				return render(composition);
+			}
+
+			type Sample = Parameters<
+				NonNullable<Parameters<typeof setMaskStageObserver>[0]>
+			>[0];
+			const samples: Sample[] = [];
+			setMaskStageObserver((sample) => samples.push(sample));
+			let traced: PromiseSettledResult<Blob>;
+			try {
+				traced = await render(composition);
+			} finally {
+				setMaskStageObserver(null);
+			}
+
+			const manifest = await Promise.all(
+				samples.map(async ({png, ...sample}, index) => {
+					const file = `${index}-${sample.target}-${sample.stage}.png`;
+					try {
+						await writePng(`${folder}/stages/${name}/${file}`, await png);
+						return {...sample, file};
+					} catch (error) {
+						return {...sample, error: String(error)};
+					}
+				}),
+			);
+			await server.commands.writeFile(
+				`${folder}/stages/${name}/stages.json`,
+				JSON.stringify(manifest),
+			);
+
+			const control = await render(composition);
+			const diff =
+				traced.status === 'fulfilled' && control.status === 'fulfilled'
+					? (await countNativePixels(control.value, traced.value))
+							.mismatchedPixels
+					: null;
+			if (diff !== 0 && control.status === 'fulfilled') {
+				await writePng(`${folder}/stages/${name}/trace-off.png`, control.value);
+			}
+
+			stageComparisons.push({name, mismatchedPixels: diff});
+			return traced;
+		};
+
 		let filteredMarkup: HTMLElement | null = null;
 		let sourceMarkup: HTMLElement | null = null;
 		const nativeFiltered = await native(filtered, (host) => {
 			filteredMarkup = markupFromHost(host);
 		});
-		const actualFiltered = await render(filtered);
+		const actualFiltered = await renderWithTrace('actualFiltered', filtered);
 		const nativeSource = await native(source, (host) => {
 			sourceMarkup = markupFromHost(host);
 		});
-		const actualSource = await render(source);
+		const actualSource = await renderWithTrace('actualSource', source);
 		const nativeShifted = await native(shifted);
 		const nativeLayered = await native(layered);
 		const transformOutside = split('transform-outside', 'filtered');
 		const filterOutside = split('filter-outside', 'filtered');
 		const nativeTransformOutside = await native(transformOutside);
-		const actualTransformOutside = await render(transformOutside);
+		const actualTransformOutside = await renderWithTrace(
+			'actualTransformOutside',
+			transformOutside,
+		);
 		const nativeFilterOutside = await native(filterOutside);
-		const actualFilterOutside = await render(filterOutside);
+		const actualFilterOutside = await renderWithTrace(
+			'actualFilterOutside',
+			filterOutside,
+		);
 		const nativeTransformOutsideSource = await native(
 			split('transform-outside', 'source-only'),
 		);
@@ -197,7 +293,6 @@ test.for(
 			renderMarkup(sourceMarkup, source.width * scale),
 		]);
 
-		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}${mixedMarkup ? `/${mixedMarkup}` : ''}`;
 		const exportResults = {
 			actualFiltered,
 			actualSource,
@@ -239,14 +334,17 @@ test.for(
 				),
 			),
 		})) {
-			let binary = '';
-			for (const byte of new Uint8Array(await blob.arrayBuffer()))
-				binary += String.fromCharCode(byte);
+			await writePng(`${folder}/${name}.png`, blob);
+		}
+
+		if (shouldTrace) {
 			await server.commands.writeFile(
-				`${folder}/${name}.png`,
-				btoa(binary),
-				'base64',
+				`${folder}/stages/comparisons.json`,
+				JSON.stringify(stageComparisons),
 			);
+			for (const {name, mismatchedPixels} of stageComparisons) {
+				expect.soft(mismatchedPixels, `trace on versus off: ${name}`).toBe(0);
+			}
 		}
 
 		for (const [name, expected, capture] of [
