@@ -1,0 +1,98 @@
+name: Compare current gradient group positioning and filter inputs
+on:
+  push:
+    branches: [codex/qualify-gradient-device-origin-current]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 6
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/vertical-text-trace-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Compare the complete candidate against the public gradient PR
+        run: |
+          drawing=packages/web-renderer/src/drawing
+          producer=(packages/web-renderer/src/drawing/draw-background.ts)
+          fixtures=(src/test/scaled-gradient-group.test.tsx src/test/gradient-input-native-qualification.test.tsx)
+          if [ "$RUNNER_OS" = macOS ]; then
+            fixtures+=(src/test/gradient-pixel-stops.test.tsx src/test/gradient-mask-pixel-stops.test.tsx)
+          fi
+          mkdir -p qualification
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          git rev-parse e0d3c5f252275439628538631e643ff56cacf4e3 HEAD > qualification/revisions.txt
+          shasum -a 256 packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts packages/web-renderer/package.json packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/drawing/parse-linear-gradient.ts packages/web-renderer/src/drawing/get-linear-gradient-fill.ts packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/canvas-context-options.ts packages/web-renderer/src/internal-state.ts packages/web-renderer/src/test/utils.ts packages/web-renderer/src/test/fixtures/scaled-gradient-group.tsx packages/web-renderer/src/test/fixtures/gradient-filter-input.tsx packages/web-renderer/src/test/fixtures/gradient-pixel-stops.tsx packages/web-renderer/src/test/fixtures/gradient-paint-context.tsx packages/web-renderer/src/test/fixtures/gradient-mask-pixel-stops.tsx packages/web-renderer/src/test/scaled-gradient-group.test.tsx packages/web-renderer/src/test/gradient-input-native-qualification.test.tsx packages/web-renderer/src/test/gradient-pixel-stops.test.tsx packages/web-renderer/src/test/gradient-mask-pixel-stops.test.tsx bun.lock > qualification/inputs.sha256
+          exit_status=0
+          for arm in baseline candidate; do
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            revision=HEAD
+            if [ "$arm" = baseline ]; then revision=e0d3c5f252275439628538631e643ff56cacf4e3; fi
+            git restore --source="$revision" -- "${producer[@]}"
+            shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c qualification/inputs.sha256
+            bunx turbo run make --filter=@remotion/web-renderer
+            rm -rf packages/web-renderer/.vitest/attachments
+            status=0
+            (cd packages/web-renderer && bunx vitest "${fixtures[@]}" --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
+            printf "%s\n" "$status" > "qualification/$arm/status.txt"
+            shasum -a 256 --quiet -c "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
+            if [ "$status" -ne 0 ]; then exit_status="$status"; fi
+          done
+          git diff --exit-code -- "${producer[@]}"
+          exit "$exit_status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gradient-device-origin-current-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Vertical Text Trace Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+          fi

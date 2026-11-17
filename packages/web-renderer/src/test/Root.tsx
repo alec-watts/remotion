@@ -89,6 +89,11 @@ import {filterImage} from './fixtures/filter-image';
 import {flexContainer} from './fixtures/flex-container';
 import {flexPositionedScaled} from './fixtures/flex-positioned-scaled';
 import {
+	filteredGradientCases,
+	filteredGradientModes,
+	gradientFilterInput,
+} from './fixtures/gradient-filter-input';
+import {
 	gradientMaskPixelModes,
 	gradientMaskPixelStops,
 } from './fixtures/gradient-mask-pixel-stops';
@@ -199,6 +204,10 @@ import {
 import {rotatedCanvas} from './fixtures/rotated-canvas';
 import {scaleFixture} from './fixtures/scale';
 import {scalePrecomposeFixture} from './fixtures/scale-precompose';
+import {
+	scaledGradientGroup,
+	scaledGradientGroups,
+} from './fixtures/scaled-gradient-group';
 import {scaledTranslatedSvg} from './fixtures/scaled-translated-svg';
 import {selfTransformOrigin} from './fixtures/self-transform-origin';
 import {simpleRotatedSvg} from './fixtures/simple-rotated-svg';
@@ -659,6 +668,16 @@ export const Root: React.FC = () => {
 						{...backgroundImageMissingFilter(effect, scale)}
 					/>
 				)),
+			)}
+			{scaledGradientGroups.map((entry) => {
+				const composition = scaledGradientGroup(entry);
+				return <Composition key={composition.id} {...composition} />;
+			})}
+			{filteredGradientCases.flatMap(({side}) =>
+				filteredGradientModes.map((mode) => {
+					const composition = gradientFilterInput(side, mode);
+					return <Composition key={composition.id} {...composition} />;
+				}),
 			)}
 			<Composition {...queuedFrameCapturePreview} />
 		</>

@@ -184,9 +184,48 @@ export const drawBackground = async ({
 					(typeof context.filter === 'string' && context.filter !== 'none'))))
 	) {
 		// Blend inside the background group before applying element opacity, filters and text masks.
+		const transform = contextToDraw.getTransform();
+		const left = boundingRect.left - offsetLeft;
+		const top = boundingRect.top - offsetTop;
+		// Preserve authored transform offsets while aligning the layout origin
+		// of the temporary group to the CSS pixel grid.
+		const layoutLeft = rect.left + parentOffsetLeft;
+		const layoutTop = rect.top + parentOffsetTop;
+		const deviceLeft =
+			transform.a * left +
+			transform.e +
+			(Math.round(layoutLeft) - layoutLeft) * scale;
+		const deviceTop =
+			transform.d * top +
+			transform.f +
+			(Math.round(layoutTop) - layoutTop) * scale;
+		const rasterLeft = Math.floor(deviceLeft);
+		const rasterTop = Math.floor(deviceTop);
+		const rasterWidth =
+			Math.ceil(deviceLeft + transform.a * boundingRect.width) - rasterLeft;
+		const rasterHeight =
+			Math.ceil(deviceTop + transform.d * boundingRect.height) - rasterTop;
+		const paintAtDestinationResolution =
+			blendMode === null &&
+			contextToDraw === context &&
+			backgroundImage.startsWith('linear-gradient(') &&
+			transform.a > 0 &&
+			transform.d > 0 &&
+			transform.b === 0 &&
+			transform.c === 0 &&
+			(transform.a > scale || transform.d > scale) &&
+			rasterWidth > 0 &&
+			rasterHeight > 0 &&
+			rasterWidth <= 16384 &&
+			rasterHeight <= 16384 &&
+			rasterWidth * rasterHeight <= 16777216;
 		const backgroundCanvas = new OffscreenCanvas(
-			Math.ceil(boundingRect.width * scale),
-			Math.ceil(boundingRect.height * scale),
+			paintAtDestinationResolution
+				? rasterWidth
+				: Math.ceil(boundingRect.width * scale),
+			paintAtDestinationResolution
+				? rasterHeight
+				: Math.ceil(boundingRect.height * scale),
 		);
 		using _backgroundCanvas = {
 			[Symbol.dispose]: () => {
@@ -197,7 +236,19 @@ export const drawBackground = async ({
 		const backgroundContext = backgroundCanvas.getContext('2d');
 		if (!backgroundContext)
 			throw new Error('Could not create background compositing context');
-		backgroundContext.scale(scale, scale);
+		if (paintAtDestinationResolution) {
+			backgroundContext.setTransform(
+				transform.a,
+				0,
+				0,
+				transform.d,
+				deviceLeft - rasterLeft,
+				deviceTop - rasterTop,
+			);
+		} else {
+			backgroundContext.scale(scale, scale);
+		}
+
 		backgroundContext.fillStyle = backgroundColor;
 		backgroundContext.fillRect(0, 0, boundingRect.width, boundingRect.height);
 		const groupFill = await getBackgroundFill({
@@ -219,6 +270,18 @@ export const drawBackground = async ({
 			boundingRect.left,
 			boundingRect.top,
 		);
+		if (paintAtDestinationResolution) {
+			contextToDraw.save();
+			try {
+				contextToDraw.resetTransform();
+				contextToDraw.drawImage(backgroundCanvas, rasterLeft, rasterTop);
+			} finally {
+				contextToDraw.restore();
+			}
+
+			return;
+		}
+
 		if (blendMode) {
 			contextToDraw.drawImage(
 				backgroundCanvas,
