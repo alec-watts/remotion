@@ -1,0 +1,77 @@
+name: Trace native vertical text painting
+on:
+  push:
+    branches: [codex/vertical-text-native-baseline]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/vertical-text-trace-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Capture native HTML, DOM renderer and SVG carrier
+        run: |
+          git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts bun.lock
+          bunx turbo run make --filter=@remotion/web-renderer
+          mkdir -p qualification packages/web-renderer/test/__results__
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          shasum -a 256 packages/example/public/bangers.woff2 packages/web-renderer/src/drawing/text/draw-text.ts packages/web-renderer/src/test/vertical-text-native.test.tsx packages/web-renderer/src/test/fixtures/vertical-text-native.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > qualification/inputs.txt
+          failed=0
+          (cd packages/web-renderer && bunx vitest src/test/vertical-text-native.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/vertical-text.json) || failed=$?
+          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vertical-text-native-baseline-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Vertical Text Trace Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+          fi

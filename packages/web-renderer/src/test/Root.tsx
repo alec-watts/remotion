@@ -303,6 +303,10 @@ import {transitionClockWipe} from './fixtures/transition-clock-wipe';
 import {transitionIris} from './fixtures/transition-iris';
 import {transitionWipe} from './fixtures/transition-wipe';
 import {unwrapped} from './fixtures/unwrapped';
+import {
+	verticalTextCases,
+	verticalTextNative,
+} from './fixtures/vertical-text-native';
 import {whiteSpaceCollapsing} from './fixtures/whitespace-collapsing';
 import {whiteSpaceCollapsing2} from './fixtures/whitespace-collapsing-2';
 
@@ -540,6 +544,12 @@ export const Root: React.FC = () => {
 				<Composition {...textDecoration} />
 				<Composition {...textDecorationStyles} />
 				<Composition {...textDecorationWavy} />
+				{verticalTextCases.flatMap((entry) =>
+					(['html', 'svg'] as const).map((carrier) => {
+						const fixture = verticalTextNative({entry, carrier});
+						return <Composition key={fixture.id} {...fixture} />;
+					}),
+				)}
 				<Composition {...fontStyle} />
 				<Composition {...fontStretch} />
 				<Composition {...fontVariantCaps} />
