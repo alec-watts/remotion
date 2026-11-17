@@ -80,28 +80,15 @@ const drawTransformedMaskedSvg = async ({
 		return false;
 	}
 
-	const scratch = new OffscreenCanvas(width, height);
+	context.save();
 	try {
-		const readback = scratch.getContext('2d', {
-			alpha: true,
-			willReadFrequently: true,
-		});
-		if (!readback) return false;
-		readback.drawImage(image, 0, 0);
-
-		context.save();
-		try {
-			context.resetTransform();
-			context.drawImage(scratch, 0, 0);
-		} finally {
-			context.restore();
-		}
-
-		return true;
+		context.resetTransform();
+		context.drawImage(image, 0, 0);
 	} finally {
-		scratch.width = 0;
-		scratch.height = 0;
+		context.restore();
 	}
+
+	return true;
 };
 
 const drawMaskedSvgThroughReadback = ({

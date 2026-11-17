@@ -1,7 +1,7 @@
-name: Compare SVG mask exports with an HTML transform
+name: Compare direct SVG mask compositing
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-html-export]
+    branches: [codex/qualify-svg-root-mask-html-direct]
 permissions:
   contents: read
 jobs:
@@ -49,7 +49,7 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare existing and transformed SVG mask exports
+      - name: Compare scratch and direct SVG mask compositing
         run: |
           drawing=packages/web-renderer/src/drawing
           producer=("$drawing/draw-dom-element.ts" "$drawing/turn-svg-into-drawable.ts")
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-html-export-${{ matrix.os }}
+          name: svg-root-mask-html-direct-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
