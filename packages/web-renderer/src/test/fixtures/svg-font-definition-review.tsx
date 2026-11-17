@@ -32,9 +32,11 @@ export const svgDefinitionFontUrl = new URL(
 export const svgDefinitionFont = ({
 	mode,
 	fontUrl,
+	backgroundColor = 'white',
 }: {
 	mode: (typeof svgDefinitionModes)[number];
 	fontUrl: string;
+	backgroundColor?: string;
 }) => {
 	const Fixture = () => {
 		const frame = useCurrentFrame();
@@ -63,7 +65,7 @@ export const svgDefinitionFont = ({
 			mode === 'hidden-defs' ||
 			mode === 'hidden-source-group';
 		return (
-			<AbsoluteFill style={{backgroundColor: 'white'}}>
+			<AbsoluteFill style={{backgroundColor}}>
 				<style>{`@font-face{font-family:"Definition review font";src:url("${fontUrl}") format("woff2")}`}</style>
 				{[
 					'pattern',
