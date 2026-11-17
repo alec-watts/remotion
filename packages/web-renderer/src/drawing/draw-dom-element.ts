@@ -466,6 +466,7 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 			);
 			await drawSvg({
 				ordinaryFilter:
+					!useReadback &&
 					/AppleWebKit/.test(userAgent) &&
 					!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
 					Boolean(node.querySelector('feImage')),
