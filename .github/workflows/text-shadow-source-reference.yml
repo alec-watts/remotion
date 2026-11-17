@@ -1,7 +1,7 @@
-name: Compare native glyph coverage and sharp shadows
+name: Compare glyph filter and transform ordering
 on:
   push:
-    branches: [codex/3d-glyph-filter-raster-stage]
+    branches: [codex/3d-glyph-filter-transform-order]
 permissions:
   contents: read
 jobs:
@@ -49,7 +49,7 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Capture source, filtered and compositor-layer glyphs
+      - name: Capture combined and nested filter and transform layers
         run: |
           git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/compose.ts bun.lock
           bunx turbo run make --filter=@remotion/web-renderer

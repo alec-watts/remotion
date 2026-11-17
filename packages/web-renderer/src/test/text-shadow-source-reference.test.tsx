@@ -21,30 +21,38 @@ test.for(
 			'text-visible',
 			preserving,
 			null,
-			'filtered',
 			geometry,
 		);
-		const source = projectiveFilterInput(
-			'text-visible',
-			preserving,
-			null,
-			'source-only',
-			geometry,
-		);
-		const layered = projectiveFilterInput(
-			'text-visible',
-			preserving,
-			null,
-			'source-only',
-			{...geometry, willChange: 'transform'},
-		);
+		const source = projectiveFilterInput('text-visible', preserving, null, {
+			...geometry,
+			paint: 'source-only',
+		});
+		const layered = projectiveFilterInput('text-visible', preserving, null, {
+			...geometry,
+			paint: 'source-only',
+			willChange: 'transform',
+		});
 		const shifted = projectiveFilterInput(
 			'text-visible',
 			preserving,
 			{left: 25 + 60 * horizontalScale, top: 100, shadowOffset: 60},
-			'blue-text',
-			geometry,
+			{...geometry, paint: 'blue-text'},
 		);
+		const split = (
+			order: 'transform-outside' | 'filter-outside',
+			paint: 'filtered' | 'source-only',
+		) =>
+			projectiveFilterInput(
+				'text-visible',
+				preserving,
+				{
+					left: 25,
+					top: 100,
+					// An outer filter's shadow offset is already in the scaled coordinates.
+					shadowOffset: order === 'filter-outside' ? 60 * horizontalScale : 60,
+				},
+				{...geometry, order, paint},
+			);
 		const native = (composition: typeof filtered) => {
 			const Scene = composition.component;
 			return captureNativeReference(
@@ -89,6 +97,18 @@ test.for(
 		const actualSource = await render(source);
 		const nativeShifted = await native(shifted);
 		const nativeLayered = await native(layered);
+		const transformOutside = split('transform-outside', 'filtered');
+		const filterOutside = split('filter-outside', 'filtered');
+		const nativeTransformOutside = await native(transformOutside);
+		const actualTransformOutside = await render(transformOutside);
+		const nativeFilterOutside = await native(filterOutside);
+		const actualFilterOutside = await render(filterOutside);
+		const nativeTransformOutsideSource = await native(
+			split('transform-outside', 'source-only'),
+		);
+		const nativeFilterOutsideSource = await native(
+			split('filter-outside', 'source-only'),
+		);
 
 		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}`;
 		for (const [name, blob] of Object.entries({
@@ -98,6 +118,12 @@ test.for(
 			actualSource,
 			nativeShifted,
 			nativeLayered,
+			nativeTransformOutside,
+			actualTransformOutside,
+			nativeFilterOutside,
+			actualFilterOutside,
+			nativeTransformOutsideSource,
+			nativeFilterOutsideSource,
 		})) {
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer()))
@@ -118,6 +144,22 @@ test.for(
 		expect
 			.soft(
 				(await countNativePixels(nativeSource, actualSource)).mismatchedPixels,
+			)
+			.toBe(0);
+		expect
+			.soft(
+				(
+					await countNativePixels(
+						nativeTransformOutside,
+						actualTransformOutside,
+					)
+				).mismatchedPixels,
+			)
+			.toBe(0);
+		expect
+			.soft(
+				(await countNativePixels(nativeFilterOutside, actualFilterOutside))
+					.mismatchedPixels,
 			)
 			.toBe(0);
 	},

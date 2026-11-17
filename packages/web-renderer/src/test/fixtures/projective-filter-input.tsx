@@ -41,25 +41,38 @@ export const projectiveFilterInput = (
 	kind: (typeof filterInputCases)[number]['kind'],
 	preserving: boolean,
 	position: {left: number; top: number; shadowOffset: number} | null = null,
-	paint: 'filtered' | 'source-only' | 'blue-text' = 'filtered',
-	geometry: {transform: string; willChange?: 'transform'} | null = null,
+	geometry: {
+		transform: string;
+		willChange?: 'transform';
+		order?: 'transform-outside' | 'filter-outside';
+		paint?: 'filtered' | 'source-only' | 'blue-text';
+	} | null = null,
 ) => {
 	const scene = filterInputCases.find((item) => item.kind === kind)!;
-	const Component: React.FC = () => (
-		<AbsoluteFill
-			style={{
-				backgroundColor: 'white',
-				perspective: kind.startsWith('projective') ? 400 : undefined,
-				transformStyle: preserving ? 'preserve-3d' : 'flat',
-			}}
-		>
+	const left = position?.left ?? scene.left;
+	const top = position?.top ?? (kind === 'fractional' ? 100.25 : 100);
+	const width = kind === 'fractional' ? 50.5 : 50;
+	const height = kind === 'fractional' ? 49.25 : 50;
+	const transform = geometry?.transform ?? scene.transform;
+	const order = geometry?.order;
+	const paint = geometry?.paint ?? 'filtered';
+	const filter =
+		paint !== 'filtered'
+			? undefined
+			: kind === 'blurred'
+				? 'blur(2px) drop-shadow(150px 0 0 blue)'
+				: kind.endsWith('visible')
+					? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
+					: 'drop-shadow(150px 0 0 blue)';
+	const Component: React.FC = () => {
+		const source = (
 			<div
 				style={{
 					position: 'absolute',
-					left: position?.left ?? scene.left,
-					top: position?.top ?? (kind === 'fractional' ? 100.25 : 100),
-					width: kind === 'fractional' ? 50.5 : 50,
-					height: kind === 'fractional' ? 49.25 : 50,
+					left: order ? 0 : left,
+					top: order ? 0 : top,
+					width,
+					height,
 					backgroundColor:
 						kind.startsWith('text') || kind === 'masked-visible'
 							? 'transparent'
@@ -72,17 +85,10 @@ export const projectiveFilterInput = (
 					borderRadius: kind.startsWith('rounded') ? 20 : 0,
 					fontSize: 24,
 					color: paint === 'blue-text' ? 'blue' : 'red',
-					transform: geometry?.transform ?? scene.transform,
+					transform: order === 'transform-outside' ? undefined : transform,
 					transformOrigin: '0 0',
 					willChange: geometry?.willChange,
-					filter:
-						paint !== 'filtered'
-							? undefined
-							: kind === 'blurred'
-								? 'blur(2px) drop-shadow(150px 0 0 blue)'
-								: kind.endsWith('visible')
-									? `drop-shadow(${position?.shadowOffset ?? 60}px 0 0 blue)`
-									: 'drop-shadow(150px 0 0 blue)',
+					filter: order === 'filter-outside' ? undefined : filter,
 				}}
 			>
 				{kind.startsWith('text') ? 'Aa' : null}
@@ -100,11 +106,41 @@ export const projectiveFilterInput = (
 					/>
 				) : null}
 			</div>
-		</AbsoluteFill>
-	);
+		);
+
+		return (
+			<AbsoluteFill
+				style={{
+					backgroundColor: 'white',
+					perspective: kind.startsWith('projective') ? 400 : undefined,
+					transformStyle: preserving ? 'preserve-3d' : 'flat',
+				}}
+			>
+				{order ? (
+					<div
+						style={{
+							position: 'absolute',
+							left,
+							top,
+							width,
+							height,
+							transform: order === 'transform-outside' ? transform : undefined,
+							transformOrigin: '0 0',
+							filter: order === 'filter-outside' ? filter : undefined,
+						}}
+					>
+						{source}
+					</div>
+				) : (
+					source
+				)}
+			</AbsoluteFill>
+		);
+	};
+
 	return {
 		component: Component,
-		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}${paint === 'filtered' ? '' : `-${paint}`}`,
+		id: `filter-input-${kind}-${preserving ? 'preserving' : 'flat'}${position ? `-${position.left}-${position.top}-${position.shadowOffset}` : ''}${paint === 'filtered' ? '' : `-${paint}`}${order ? `-${order}` : ''}`,
 		width: 300,
 		height: 300,
 		fps: 30,
