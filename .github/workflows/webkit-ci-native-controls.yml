@@ -1,0 +1,108 @@
+name: Compare WebKit CI failures against native painting
+on:
+  push:
+    branches: [codex/qualify-webkit-ci-native-controls]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 6
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/vertical-text-trace-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Compare layer readback for SVG mask scenes
+        run: |
+          drawing=packages/web-renderer/src/drawing
+          producer=(packages/web-renderer/src/take-screenshot.ts packages/web-renderer/src/drawing/draw-dom-element.ts)
+          fixtures=(
+            src/test/webkit-ci-native-controls.test.tsx
+            src/test/background-clip.test.tsx
+            src/test/issue-7050-repro.test.tsx
+            src/test/text-shadow.test.tsx
+            src/test/webkit-text-stroke.test.tsx
+            src/test/mask-image-url.test.tsx
+            src/test/mask-image-url-sizing.test.tsx
+            src/test/background-image-url.test.tsx
+            src/test/svg-readback-colors.test.ts
+            src/test/webkit-layered-backdrop.test.tsx
+            src/test/svg-registered-font-selection.test.ts
+          )
+          mkdir -p qualification
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          git rev-parse e6b9083c4984609e48db0453f3274e2123f30430 HEAD > qualification/revisions.txt
+          shasum -a 256 packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts packages/web-renderer/package.json bun.lock packages/web-renderer/src/test/fixtures/text/background-clip-text.tsx packages/web-renderer/src/test/fixtures/issue-7050-repro.tsx packages/web-renderer/src/test/fixtures/text/text-shadow.tsx packages/web-renderer/src/test/fixtures/text/webkit-text-stroke.tsx packages/web-renderer/src/test/fixtures/mask-image-url.tsx packages/web-renderer/src/test/fixtures/mask-image-url-sizing.tsx packages/web-renderer/src/test/fixtures/background-image-pixelated-sampler-lifetime.tsx packages/web-renderer/src/test/fixtures/background-image-url-pixelated.tsx > qualification/inputs.sha256
+          printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
+          exit_status=0
+          for arm in baseline candidate; do
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            revision=HEAD
+            if [ "$arm" = baseline ]; then revision=e6b9083c4984609e48db0453f3274e2123f30430; fi
+            git restore --source="$revision" -- "${producer[@]}"
+            shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c qualification/inputs.sha256
+            bunx turbo run make --filter=@remotion/web-renderer
+            rm -rf packages/web-renderer/.vitest/attachments
+            status=0
+            (cd packages/web-renderer && bunx vitest "${fixtures[@]}" --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
+            printf "%s\n" "$status" > "qualification/$arm/status.txt"
+            shasum -a 256 --quiet -c "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
+            if [ "$status" -ne 0 ]; then exit_status="$status"; fi
+          done
+          git diff --exit-code -- "${producer[@]}"
+          exit "$exit_status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-ci-native-controls-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Vertical Text Trace Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+          fi
