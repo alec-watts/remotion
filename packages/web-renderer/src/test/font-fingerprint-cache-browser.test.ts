@@ -1,5 +1,10 @@
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {fingerprintCssFontGroups} from '../drawing/fingerprint-css-font-groups';
+import {
+	getFontFingerprintCache,
+	type FontFingerprintKey,
+} from '../drawing/font-fingerprint-cache';
 import {renderFramesOnWeb, renderStillOnWeb} from '../render-still-on-web';
 import {svgTitledFontCache} from './fixtures/svg-titled-font-groups';
 import {svgUseFontData} from './fixtures/svg-use-data-font';
@@ -203,6 +208,73 @@ test('reuses candidate rasters through public batch SVG captures across frames',
 	const nativeRead = CanvasRenderingContext2D.prototype.getImageData;
 	const nativeComputedStyle = window.getComputedStyle;
 	const originalFonts = Array.from(document.fonts);
+	const cache = getFontFingerprintCache(document);
+	const trace: Record<string, unknown>[] = [];
+	const candidates = new WeakSet<FontFace>();
+	const started = performance.now();
+	const record = (kind: string, data: Record<string, unknown>) => {
+		const frame =
+			document
+				.querySelector('[data-svg-font-cache-frame]')
+				?.getAttribute('data-svg-font-cache-frame') ?? null;
+		trace.push({
+			kind,
+			frame: frame === null ? null : Number(frame),
+			epoch: cache.epoch,
+			time: performance.now() - started,
+			...data,
+		});
+	};
+
+	const onFontEvent = (event: Event) => {
+		record(event.type, {
+			status: document.fonts.status,
+			faces: (event as FontFaceSetLoadEvent).fontfaces.map((face) => ({
+				family: face.family,
+				status: face.status,
+				candidate: candidates.has(face),
+				inSourceSet: document.fonts.has(face),
+				original: originalFonts.includes(face),
+			})),
+		});
+	};
+
+	const fontEvents = ['loading', 'loadingdone', 'loadingerror'];
+	for (const name of fontEvents) {
+		document.fonts.addEventListener(name, onFontEvent);
+	}
+
+	const originalGet = cache.get;
+	const originalPut = cache.put;
+	const originalDelete = cache.delete;
+	let previousKey: FontFingerprintKey | null = null;
+	cache.get = (key) => {
+		const value = originalGet.call(cache, key);
+		record('lookup', {
+			hit: value !== null,
+			keyLength: key.length,
+			previousKeyLength: previousKey?.length ?? null,
+			differentSlots:
+				previousKey === null
+					? []
+					: key.flatMap((entry, index) =>
+							entry === previousKey?.[index] ? [] : [index],
+						),
+		});
+		return value;
+	};
+
+	cache.put = (key, rasters) => {
+		previousKey = key.slice();
+		record('store', {groups: rasters.length, keyLength: key.length});
+		originalPut.call(cache, key, rasters);
+	};
+
+	cache.delete = (key) => {
+		record('delete', {keyLength: key.length});
+		originalDelete.call(cache, key);
+	};
+
 	const sourceTransitions: {
 		frame: number;
 		status: FontFaceSetLoadStatus;
@@ -221,8 +293,14 @@ test('reuses candidate rasters through public batch SVG captures across frames',
 	}[] = [];
 	window.FontFace = new Proxy(nativeFace, {
 		construct(target, args) {
-			if (String(args[0]).startsWith('Remotion private group ')) constructors++;
-			return Reflect.construct(target, args);
+			const face = Reflect.construct(target, args) as FontFace;
+			if (String(args[0]).startsWith('Remotion private group ')) {
+				constructors++;
+				candidates.add(face);
+				record('construct', {constructors});
+			}
+
+			return face;
 		},
 	});
 	window.getComputedStyle = function (element, pseudo) {
@@ -287,6 +365,17 @@ test('reuses candidate rasters through public batch SVG captures across frames',
 		window.FontFace = nativeFace;
 		window.getComputedStyle = nativeComputedStyle;
 		CanvasRenderingContext2D.prototype.getImageData = nativeRead;
+		cache.get = originalGet;
+		cache.put = originalPut;
+		cache.delete = originalDelete;
+		for (const name of fontEvents) {
+			document.fonts.removeEventListener(name, onFontEvent);
+		}
+
+		await server.commands.writeFile(
+			`test/__results__/font-batch-epoch/${server.browser}/${crypto.randomUUID()}.json`,
+			JSON.stringify({userAgent: navigator.userAgent, constructors, trace}),
+		);
 	}
 
 	await failure.record(
