@@ -1,6 +1,59 @@
 import {parseBorderRadius} from './border-radius';
 import {drawRoundedRectPath} from './draw-rounded';
 import {scaleFilterLengths} from './handle-filter';
+import {transformDOMRect} from './transform-rect-with-matrix';
+
+const mirrorBackdrop = ({
+	source,
+	left,
+	top,
+	width,
+	height,
+	padding,
+}: {
+	source: OffscreenCanvas;
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+	padding: number;
+}) => {
+	const input = new OffscreenCanvas(width + 2 * padding, height + 2 * padding);
+	const dispose = () => {
+		input.width = 0;
+		input.height = 0;
+	};
+
+	try {
+		const ctx = input.getContext('2d');
+		if (!ctx) {
+			dispose();
+			return null;
+		}
+
+		ctx.imageSmoothingEnabled = false;
+		// The middle tile is the original border box. Its neighbors repeat that
+		// box with alternate axes flipped, including at the corners.
+		for (const row of [-1, 0, 1]) {
+			for (const column of [-1, 0, 1]) {
+				ctx.setTransform(
+					column === 0 ? 1 : -1,
+					0,
+					0,
+					row === 0 ? 1 : -1,
+					padding + (column === 1 ? 2 * width : 0),
+					padding + (row === 1 ? 2 * height : 0),
+				);
+				ctx.drawImage(source, left, top, width, height, 0, 0, width, height);
+			}
+		}
+
+		return {input, [Symbol.dispose]: dispose};
+	} catch (error) {
+		dispose();
+		throw error;
+	}
+};
 
 export const drawBackdropFilter = ({
 	source,
@@ -29,7 +82,52 @@ export const drawBackdropFilter = ({
 	const inverse = totalMatrix.inverse();
 	if (!Number.isFinite(inverse.a)) return;
 
-	const backdrop = new OffscreenCanvas(source.width, source.height);
+	const bitmapFilter = scaleFilterLengths(filter, scale);
+	const blur = /^blur\(([\d.]+)px\)$/.exec(bitmapFilter);
+	const padding = blur ? Math.ceil(4 * Number(blur[1])) : 0;
+	let sourceLeft = 0;
+	let sourceTop = 0;
+	let cropWidth = 0;
+	let cropHeight = 0;
+	if (padding > 0 && totalMatrix.b === 0 && totalMatrix.c === 0) {
+		const bounds = transformDOMRect({rect: dimensions, matrix: totalMatrix});
+		sourceLeft = Math.max(
+			0,
+			Math.floor((bounds.left - parentRect.left) * scale),
+		);
+		sourceTop = Math.max(0, Math.floor((bounds.top - parentRect.top) * scale));
+		cropWidth =
+			Math.min(
+				source.width,
+				Math.ceil((bounds.right - parentRect.left) * scale),
+			) - sourceLeft;
+		cropHeight =
+			Math.min(
+				source.height,
+				Math.ceil((bounds.bottom - parentRect.top) * scale),
+			) - sourceTop;
+	}
+
+	const paddedWidth = cropWidth + 2 * padding;
+	const paddedHeight = cropHeight + 2 * padding;
+	using mirrored =
+		padding > 0 &&
+		cropWidth >= padding &&
+		cropHeight >= padding &&
+		paddedWidth <= 8192 &&
+		paddedHeight <= 8192 &&
+		paddedWidth * paddedHeight <= 16 * 1024 * 1024
+			? mirrorBackdrop({
+					source,
+					left: sourceLeft,
+					top: sourceTop,
+					width: cropWidth,
+					height: cropHeight,
+					padding,
+				})
+			: null;
+	const input = mirrored?.input ?? source;
+	const backdrop = new OffscreenCanvas(input.width, input.height);
 	using _backdrop = {
 		[Symbol.dispose]: () => {
 			backdrop.width = 0;
@@ -38,9 +136,9 @@ export const drawBackdropFilter = ({
 	};
 	const backdropContext = backdrop.getContext('2d');
 	if (!backdropContext || typeof backdropContext.filter !== 'string') return;
-	backdropContext.filter = scaleFilterLengths(filter, scale);
+	backdropContext.filter = bitmapFilter;
 	if (backdropContext.filter === 'none') return;
-	backdropContext.drawImage(source, 0, 0);
+	backdropContext.drawImage(input, 0, 0);
 
 	// Filter the painted backdrop in the parent bitmap's coordinate system.
 	// Map it back to the element's group before applying group opacity or effects.
@@ -71,7 +169,11 @@ export const drawBackdropFilter = ({
 		destination.globalAlpha = 1;
 		destination.globalCompositeOperation = 'destination-over';
 		destination.filter = 'none';
-		destination.drawImage(backdrop, 0, 0);
+		destination.drawImage(
+			backdrop,
+			mirrored ? sourceLeft - padding : 0,
+			mirrored ? sourceTop - padding : 0,
+		);
 	} finally {
 		destination.restore();
 	}
