@@ -1,22 +1,22 @@
-name: Compare Studio E2E on main and the 3D draft
+name: Compare Studio E2E on main and the 3D draft on Linux
 on:
   push:
-    branches: [codex/3d-studio-e2e-paired]
+    branches: [codex/3d-studio-e2e-paired-linux]
 permissions:
   contents: read
 jobs:
   compare:
     if: github.repository == 'alec-watts/remotion'
-    runs-on: macos-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 25
+          node-version: 25.9.0
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
         with:
           bun-version: 1.4.3
@@ -26,6 +26,7 @@ jobs:
           candidate=7ebcc9f8d48ae0071fe5a85afe3e884e86708a30
           artifacts="$RUNNER_TEMP/studio-e2e-paired"
           mkdir -p "$artifacts"
+          uname -a > "$artifacts/runner.txt"
           node --version > "$artifacts/node-version.txt"
           bun --version > "$artifacts/bun-version.txt"
 
@@ -35,6 +36,7 @@ jobs:
           bun ci
           (cd packages/example && bunx playwright install --with-deps chromium)
           find "$PLAYWRIGHT_BROWSERS_PATH" -type f -exec shasum -a 256 {} + > "$artifacts/browser.sha256"
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
           last_failure=0
           for arm in main candidate; do
             revision="$candidate"
@@ -59,7 +61,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: studio-e2e-paired-macos
+          name: studio-e2e-paired-linux
           path: ${{ runner.temp }}/studio-e2e-paired
           if-no-files-found: error
           retention-days: 7
