@@ -503,6 +503,13 @@ export const Root: React.FC = () => {
 					});
 					return <Composition key={composition.id} {...composition} />;
 				})}
+				<Composition
+					{...maskCopyOverflow({
+						overflow: 'visible',
+						mode: 'translucent',
+						position: null,
+					})}
+				/>
 				<Composition {...maskGradientLayersTransparent} />
 				<Composition {...maskGradientLayersUrl} />
 				<Composition {...maskGradientLayersUrlTransparent} />

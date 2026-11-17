@@ -14,7 +14,7 @@ const qualifyMaskCopy = async ({
 	position,
 	captureStages,
 }: {
-	mode: 'hard' | 'soft' | 'fractional';
+	mode: 'hard' | 'soft' | 'fractional' | 'translucent';
 	overflow: 'hidden' | 'visible';
 	scale: number;
 	frame: number;
@@ -270,5 +270,19 @@ test.for(
 			opaqueReference: false,
 			position: null,
 			captureStages: true,
+		}),
+);
+
+test.for([1.25, 1.75, 2.5])(
+	'applies the mask to partially transparent source pixels at scale %s',
+	async (scale) =>
+		qualifyMaskCopy({
+			scale,
+			mode: 'translucent',
+			overflow: 'visible',
+			frame: 0,
+			opaqueReference: false,
+			position: null,
+			captureStages: false,
 		}),
 );

@@ -16,7 +16,7 @@ export const maskCopyOverflow = ({
 	position,
 }: {
 	overflow: 'hidden' | 'visible';
-	mode: 'hard' | 'soft' | 'fractional';
+	mode: 'hard' | 'soft' | 'fractional' | 'translucent';
 	position: {left: number; top: number} | null;
 }) => {
 	const Component = () => {
@@ -31,7 +31,10 @@ export const maskCopyOverflow = ({
 					height: 40,
 					overflow,
 					borderRadius: mode === 'fractional' ? 4.25 : 0,
-					backgroundImage: `linear-gradient(90deg, blue ${50 - frame * 10}%, red ${50 - frame * 10}%)`,
+					backgroundImage:
+						mode === 'translucent'
+							? `linear-gradient(90deg, rgb(0 0 255 / 60%) ${50 - frame * 10}%, rgb(255 0 0 / 35%) ${50 - frame * 10}%)`
+							: `linear-gradient(90deg, blue ${50 - frame * 10}%, red ${50 - frame * 10}%)`,
 					maskImage: `${mode === 'hard' ? 'linear-gradient(black, black)' : 'linear-gradient(90deg, black, transparent)'}, linear-gradient(black, black)`,
 					maskComposite: 'intersect',
 				}}

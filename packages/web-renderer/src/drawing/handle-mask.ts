@@ -53,12 +53,29 @@ export const handleMask = async ({
 			if (!masked) throw new Error('Could not create mask group context');
 			// The drawable already uses device dimensions. Keep it as the group
 			// source instead of drawing it through the original layer's transform.
+			masked.drawImage(drawable, 0, 0);
 			if (alphaOnly) {
-				masked.drawImage(tempContext.canvas, 0, 0);
-				masked.globalCompositeOperation = 'destination-in';
+				// Read the already rasterized mask before applying it. Drawing an SVG
+				// directly with destination-in can change its decoded alpha values.
+				const {width: rasterWidth, height: rasterHeight} = canvas;
+				const rowsPerBand = Math.max(
+					1,
+					Math.floor((1024 * 1024) / rasterWidth),
+				);
+				for (let top = 0; top < rasterHeight; top += rowsPerBand) {
+					const rows = Math.min(rowsPerBand, rasterHeight - top);
+					const mask = masked.getImageData(0, top, rasterWidth, rows).data;
+					const source = tempContext.getImageData(0, top, rasterWidth, rows);
+					for (let alpha = 3; alpha < source.data.length; alpha += 4) {
+						source.data[alpha] = Math.round(
+							(source.data[alpha] * mask[alpha]) / 255,
+						);
+					}
+
+					masked.putImageData(source, 0, top);
+				}
 			}
 
-			masked.drawImage(drawable, 0, 0);
 			return {canvas, [Symbol.dispose]: dispose};
 		} catch (error) {
 			dispose();

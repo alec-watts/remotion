@@ -1,7 +1,7 @@
-name: Measure alpha at each native mask raster stage
+name: Compare explicit alpha multiplication for layered masks
 on:
   push:
-    branches: [codex/mask-alpha-stage-diagnostic]
+    branches: [codex/mask-premultiply-alpha]
 permissions:
   contents: read
 jobs:
@@ -49,22 +49,34 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.MASK_GRADIENT_CHROME,"))
           PIN
-      - name: Capture direct native mask alpha and Canvas compositing by context
+      - name: Compare CSS mask carriers with unchanged native references
         run: |
-          git diff --exit-code HEAD^ HEAD -- packages/web-renderer/src/drawing
-          bunx turbo run make --filter=@remotion/web-renderer
-          mkdir -p qualification packages/web-renderer/test/__results__
-          "$MASK_GRADIENT_CHROME" --version > qualification/chrome.txt
-          shasum -a 256 packages/web-renderer/src/drawing/css-mask.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > qualification/inputs.txt
-          status=0
-          (cd packages/web-renderer && bunx vitest src/test/mask-copy-qualification.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-copy.json) || status=$?
-          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing/handle-mask.ts > "$RUNNER_TEMP/mask-product.patch"
+          test -s "$RUNNER_TEMP/mask-product.patch"
+          failed=0
+          for arm in candidate control; do
+            if [ "$arm" = control ]; then
+              git apply --reverse "$RUNNER_TEMP/mask-product.patch"
+              git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing
+            fi
+            bunx turbo run make --filter=@remotion/web-renderer
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            cp "$RUNNER_TEMP/mask-product.patch" "qualification/$arm/producer.patch"
+            "$MASK_GRADIENT_CHROME" --version > "qualification/$arm/chrome.txt"
+            shasum -a 256 packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/css-mask.ts packages/web-renderer/src/test/mask-copy-qualification.test.tsx packages/web-renderer/src/test/mask-gradient-backend-qualification.test.ts packages/web-renderer/src/test/fixtures/mask-copy-overflow.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > "qualification/$arm/inputs.txt"
+            if ! (cd packages/web-renderer && bunx vitest src/test/mask-gradient-backend-qualification.test.ts src/test/mask-copy-qualification.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image.test.tsx src/test/mask-image-url.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/backface-visibility-mask.test.tsx src/test/background-clip.test.tsx src/test/background-blend-mode.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/mask-copy.json); then
+              failed=1
+            fi
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+          done
+          cmp qualification/control/inputs.txt qualification/candidate/inputs.txt
+          cmp qualification/control/chrome.txt qualification/candidate/chrome.txt
           shasum -a 256 --quiet -c "$RUNNER_TEMP/mask-chrome.sha256"
-          exit "$status"
+          exit "$failed"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-alpha-stage-${{ matrix.os }}
+          name: mask-premultiply-alpha-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
