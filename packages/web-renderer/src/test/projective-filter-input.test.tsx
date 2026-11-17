@@ -317,6 +317,27 @@ const gradientPaintVariants = [
 		top: 90,
 		transform: 'scale(1.5, 1.25)',
 	},
+	{
+		id: 'overlapping-translucent-shadow',
+		gradient: '90deg, rgb(255 0 0 / 30%), rgb(0 255 0 / 70%)',
+		width: 50,
+		height: 50,
+		left: 25,
+		top: 100,
+		transform: 'scaleX(2)',
+		backgroundColor: 'transparent',
+		filter: 'drop-shadow(12px -6px 0 rgb(0 0 255 / 60%))',
+	},
+	{
+		id: 'chained-shadows',
+		gradient: '90deg, red, lime',
+		width: 50,
+		height: 50,
+		left: 25,
+		top: 100,
+		transform: 'scaleX(2)',
+		filter: 'drop-shadow(15px 5px 0 blue) drop-shadow(10px 10px 0 red)',
+	},
 ] as const;
 
 for (const {id, gradient, ...geometry} of gradientPaintVariants) {
@@ -326,12 +347,12 @@ for (const {id, gradient, ...geometry} of gradientPaintVariants) {
 				<AbsoluteFill style={{backgroundColor: 'white'}}>
 					<div
 						style={{
-							...geometry,
 							position: 'absolute',
 							transformOrigin: '0 0',
 							filter: 'drop-shadow(60px 0 0 blue)',
 							backgroundColor: 'red',
 							backgroundImage: `linear-gradient(${gradient})`,
+							...geometry,
 						}}
 					/>
 				</AbsoluteFill>

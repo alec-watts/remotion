@@ -1,7 +1,7 @@
-name: Qualify local gradient painting across geometry
+name: Compare sharp shadow compositing with the original filter
 on:
   push:
-    branches: [codex/filtered-gradient-local-paint-matrix]
+    branches: [codex/filtered-sharp-shadow-composite]
 permissions:
   contents: read
 jobs:
@@ -77,22 +77,33 @@ jobs:
           if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
             mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "qualification/$diagnostic_arm/native-pixel-failures"
           fi
-          diagnostic_source=packages/web-renderer/src/drawing/draw-background.ts
-          candidate_source="$RUNNER_TEMP/candidate-draw-background.ts"
-          cp "$diagnostic_source" "$candidate_source"
-          trap 'cp "$candidate_source" "$diagnostic_source"' EXIT
-          git show "abba30cd0801f5d2290bf018e0b60711fc37613e:$diagnostic_source" > "$diagnostic_source"
+          drawing=packages/web-renderer/src/drawing
+          source_files=(css-filter-to-svg.ts rasterize-css-filter.ts)
+          restore_producer() {
+            for file in "${source_files[@]}"; do
+              cp "$RUNNER_TEMP/candidate-$file" "$drawing/$file"
+            done
+          }
+          for file in "${source_files[@]}"; do
+            cp "$drawing/$file" "$RUNNER_TEMP/candidate-$file"
+          done
+          trap restore_producer EXIT
+          for file in "${source_files[@]}"; do
+            git show "abba30cd0801f5d2290bf018e0b60711fc37613e:$drawing/$file" > "$drawing/$file"
+          done
           git diff --exit-code abba30cd0801f5d2290bf018e0b60711fc37613e -- packages/web-renderer/src/drawing
           git diff --exit-code HEAD -- packages/web-renderer/src/test bun.lock
           mkdir -p qualification/control packages/web-renderer/test/__results__
-          shasum -a 256 "$diagnostic_source" > qualification/control/draw-background.txt
+          shasum -a 256 "$drawing/css-filter-to-svg.ts" "$drawing/rasterize-css-filter.ts" > qualification/control/producer.txt
           bunx turbo run make --filter=@remotion/web-renderer
-          if (cd packages/web-renderer && bunx vitest src/test/projective-filter-input.test.tsx --run -t 'captures native gradient at|retains gradient-visible filter inputs|matches native filtered gradient geometry' --reporter=default --reporter=json --outputFile=./test/__results__/projective-filter-suite.json); then
+          if (cd packages/web-renderer && bunx vitest src/test/projective-filter-input.test.tsx src/test/preserve-3d-depth.test.tsx src/test/3d-grid-sampler.test.ts src/test/3d-flattening.test.tsx src/test/transforms.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/projective-filter-suite.json); then
             control_exit=0
           else
             control_exit=$?
           fi
           printf '%s\n' "$control_exit" > qualification/control/exit-code.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-gradient-chrome.sha256"
+          "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > packages/web-renderer/test/__results__/chrome-after.txt
           mv packages/web-renderer/test/__results__ qualification/control/web-renderer
           if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
             mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures qualification/control/native-pixel-failures
@@ -105,7 +116,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: filtered-gradient-local-paint-matrix-${{ matrix.os }}
+          name: filtered-sharp-shadow-composite-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

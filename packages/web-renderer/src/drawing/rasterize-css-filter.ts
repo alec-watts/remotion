@@ -1,4 +1,5 @@
-import {createSvgFilterFromCss} from './css-filter-to-svg';
+import {splitAtTopLevel} from './background-image-rect';
+import {createSvgFilterFromCss, parseCssDropShadow} from './css-filter-to-svg';
 import type {RasterScale} from './raster-scale';
 
 export const rasterizeCssFilter = async ({
@@ -17,6 +18,31 @@ export const rasterizeCssFilter = async ({
 	signal: AbortSignal | null;
 }) => {
 	signal?.throwIfAborted();
+	const operations = splitAtTopLevel(filter, ' ');
+	const sharpShadow =
+		operations.length === 1
+			? /^drop-shadow\((.*)\)$/i.exec(operations[0])
+			: null;
+	const shadow = sharpShadow ? parseCssDropShadow(sharpShadow[1], color) : null;
+	if (shadow?.blur === 0) {
+		const x = shadow.x * rasterScale.x;
+		const y = shadow.y * rasterScale.y;
+		if (Number.isInteger(x) && Number.isInteger(y)) {
+			// A sharp shadow is a translated, tinted copy of the painted alpha.
+			// Composite the original over it directly to preserve the input pixels.
+			const output = new OffscreenCanvas(source.width, source.height);
+			const context = output.getContext('2d');
+			if (!context) throw new Error('Could not create shadow context');
+			context.drawImage(source, x, y);
+			context.globalCompositeOperation = 'source-in';
+			context.fillStyle = shadow.color;
+			context.fillRect(0, 0, output.width, output.height);
+			context.globalCompositeOperation = 'source-over';
+			context.drawImage(source, 0, 0);
+			return output;
+		}
+	}
+
 	const blob = await source.convertToBlob({type: 'image/png'});
 	signal?.throwIfAborted();
 	const bytes = new Uint8Array(await blob.arrayBuffer());
