@@ -1,7 +1,7 @@
 name: Compare native glyph coverage and sharp shadows
 on:
   push:
-    branches: [codex/3d-text-shadow-source-reference]
+    branches: [codex/3d-glyph-filter-raster-stage]
 permissions:
   contents: read
 jobs:
@@ -49,7 +49,7 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Capture the source glyphs and translated native references
+      - name: Capture source, filtered and compositor-layer glyphs
         run: |
           git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/compose.ts bun.lock
           bunx turbo run make --filter=@remotion/web-renderer

@@ -7,23 +7,43 @@ import {captureNativeReference, countNativePixels} from './native-reference';
 
 test.for(
 	[false, true].flatMap((preserving) =>
-		[1, 1.5].map((scale) => ({preserving, scale})),
+		[1, 1.5].flatMap((scale) =>
+			[1, 2].map((horizontalScale) => ({preserving, scale, horizontalScale})),
+		),
 	),
 )(
-	'compares the text and its sharp shadow at preserving=$preserving scale=$scale',
-	async ({preserving, scale}) => {
-		const filtered = projectiveFilterInput('text-visible', preserving);
+	'compares text and shadow at preserving=$preserving scale=$scale horizontalScale=$horizontalScale',
+	async ({preserving, scale, horizontalScale}) => {
+		const geometry = {
+			transform: horizontalScale === 1 ? 'none' : 'scaleX(2)',
+		};
+		const filtered = projectiveFilterInput(
+			'text-visible',
+			preserving,
+			null,
+			'filtered',
+			geometry,
+		);
 		const source = projectiveFilterInput(
 			'text-visible',
 			preserving,
 			null,
 			'source-only',
+			geometry,
+		);
+		const layered = projectiveFilterInput(
+			'text-visible',
+			preserving,
+			null,
+			'source-only',
+			{...geometry, willChange: 'transform'},
 		);
 		const shifted = projectiveFilterInput(
 			'text-visible',
 			preserving,
-			{left: 145, top: 100, shadowOffset: 60},
+			{left: 25 + 60 * horizontalScale, top: 100, shadowOffset: 60},
 			'blue-text',
+			geometry,
 		);
 		const native = (composition: typeof filtered) => {
 			const Scene = composition.component;
@@ -68,14 +88,16 @@ test.for(
 		const nativeSource = await native(source);
 		const actualSource = await render(source);
 		const nativeShifted = await native(shifted);
+		const nativeLayered = await native(layered);
 
-		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}`;
+		const folder = `test/__results__/text-shadow-source/${server.browser}/${preserving}/${scale}/${horizontalScale}`;
 		for (const [name, blob] of Object.entries({
 			nativeFiltered,
 			actualFiltered,
 			nativeSource,
 			actualSource,
 			nativeShifted,
+			nativeLayered,
 		})) {
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer()))

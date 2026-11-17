@@ -42,6 +42,7 @@ export const projectiveFilterInput = (
 	preserving: boolean,
 	position: {left: number; top: number; shadowOffset: number} | null = null,
 	paint: 'filtered' | 'source-only' | 'blue-text' = 'filtered',
+	geometry: {transform: string; willChange?: 'transform'} | null = null,
 ) => {
 	const scene = filterInputCases.find((item) => item.kind === kind)!;
 	const Component: React.FC = () => (
@@ -71,8 +72,9 @@ export const projectiveFilterInput = (
 					borderRadius: kind.startsWith('rounded') ? 20 : 0,
 					fontSize: 24,
 					color: paint === 'blue-text' ? 'blue' : 'red',
-					transform: scene.transform,
+					transform: geometry?.transform ?? scene.transform,
 					transformOrigin: '0 0',
+					willChange: geometry?.willChange,
 					filter:
 						paint !== 'filtered'
 							? undefined
