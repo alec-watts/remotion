@@ -1,7 +1,7 @@
-name: Compare repeated main and SVG readback producers
+name: Compare repeated Linux main and SVG readback producers
 on:
   push:
-    branches: [codex/qualify-webkit-svg-main-repeat]
+    branches: [codex/qualify-webkit-svg-linux-repeat]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
         with:
