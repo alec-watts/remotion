@@ -1,7 +1,7 @@
-name: Compare SVG masks with local readback compositing
+name: Compare local SVG readback with existing scene paint
 on:
   push:
-    branches: [codex/qualify-svg-root-mask-local-readback]
+    branches: [codex/qualify-svg-mask-readback-mixed-scene]
 permissions:
   contents: read
 jobs:
@@ -55,6 +55,7 @@ jobs:
           producer=("$drawing/draw-dom-element.ts")
           fixtures=(
             src/test/svg-root-mask-readback.test.tsx
+            src/test/svg-root-mask-destination.test.tsx
             src/test/svg-registered-font-selection.test.ts
             src/test/svg-registered-cdata-font.test.tsx
             src/test/svg-disabled-styles.test.tsx
@@ -67,14 +68,14 @@ jobs:
           )
           mkdir -p qualification
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
-          git rev-parse HEAD^ HEAD > qualification/revisions.txt
+          git rev-parse aa0109f7a2bb6899d397dc7161d55275b8c91d13 HEAD > qualification/revisions.txt
           shasum -a 256 packages/web-renderer/src/take-screenshot.ts "$drawing"/{turn-svg-into-drawable,calculate-transforms,mask-image,embed-registered-fonts-in-svg}.ts packages/web-renderer/src/test/{fixtures/svg-font-definition-review,native-reference,svg-root-mask-readback.test}.tsx packages/web-renderer/vitest.config.ts packages/example/public/bangers.woff2 bun.lock > qualification/inputs.sha256
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
           exit_status=0
           for arm in baseline candidate; do
             mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
             revision=HEAD
-            if [ "$arm" = baseline ]; then revision=HEAD^; fi
+            if [ "$arm" = baseline ]; then revision=aa0109f7a2bb6899d397dc7161d55275b8c91d13; fi
             git restore --source="$revision" -- "${producer[@]}"
             shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c qualification/inputs.sha256
@@ -92,7 +93,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-root-mask-local-readback-${{ matrix.os }}
+          name: svg-mask-readback-mixed-scene-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
