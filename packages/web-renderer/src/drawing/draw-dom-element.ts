@@ -275,7 +275,10 @@ const drawReplacedElement = ({
 	);
 };
 
-export const drawDomElement = (node: HTMLElement | SVGElement) => {
+export const drawDomElement = (
+	node: HTMLElement | SVGElement,
+	maskedSvgElements: WeakSet<SVGSVGElement>,
+) => {
 	const domDrawFn: DrawFn = async ({
 		dimensions,
 		contextToDraw,
@@ -293,6 +296,7 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 				readback:
 					/AppleWebKit/.test(userAgent) &&
 					!/Chrome\/|Chromium\/|Android/.test(userAgent) &&
+					!maskedSvgElements.has(node) &&
 					!getMaskImageValue(computedStyle) &&
 					Boolean(node.querySelector('text')) &&
 					!node.querySelector('feImage'),

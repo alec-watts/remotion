@@ -70,6 +70,17 @@ export const processNode = async ({
 
 	const {opacity, computedStyle, totalMatrix, dimensions, precompositing} =
 		transforms;
+	const ownsMaskExclusion =
+		element instanceof SVGSVGElement &&
+		transforms.hasMaskImage &&
+		!internalState.maskedSvgElements.has(element);
+	if (ownsMaskExclusion) internalState.maskedSvgElements.add(element);
+	using _maskExclusion = {
+		[Symbol.dispose]: () => {
+			if (ownsMaskExclusion) internalState.maskedSvgElements.delete(element);
+		},
+	};
+
 	if (opacity === 0) {
 		return {type: 'skip-children'};
 	}

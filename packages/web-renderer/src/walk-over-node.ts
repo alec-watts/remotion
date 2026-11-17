@@ -35,7 +35,7 @@ export const walkOverNode = ({
 		return processNode({
 			element: node,
 			context,
-			draw: drawDomElement(node),
+			draw: drawDomElement(node, internalState.maskedSvgElements),
 			logLevel,
 			parentRect,
 			internalState,

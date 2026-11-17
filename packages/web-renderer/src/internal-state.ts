@@ -56,6 +56,7 @@ export const makeInternalState = ({
 			precomposedTextures++;
 		},
 		helperCanvasState,
+		maskedSvgElements: new WeakSet<SVGSVGElement>(),
 		rasterImageLoaderState,
 		[Symbol.dispose]: () => {
 			if (helperCanvasState.current) {

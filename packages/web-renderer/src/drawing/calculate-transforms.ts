@@ -224,6 +224,7 @@ export const calculateTransforms = ({
 	const toReset: (() => void)[] = [];
 
 	let opacity = 1;
+	let hasMaskImage = false;
 	let hasCssTransform = false;
 	let elementComputedStyle: CSSStyleDeclaration | null = null;
 	let maskImageInfo: MaskImageInfo | null = null;
@@ -279,6 +280,7 @@ export const calculateTransforms = ({
 			elementComputedStyle = computedStyle;
 			opacity = parseFloat(computedStyle.opacity);
 			const maskImageValue = getMaskImageValue(computedStyle);
+			hasMaskImage = maskImageValue !== null;
 			maskImageInfo = maskImageValue
 				? parseMaskImage(maskImageValue, computedStyle)
 				: null;
@@ -449,6 +451,7 @@ export const calculateTransforms = ({
 		computedStyle: elementComputedStyle,
 		opacity,
 		maskImageInfo,
+		hasMaskImage,
 		precompositing: {
 			needs3DTransformViaWebGL,
 			needsMaskImage: maskImageInfo,
