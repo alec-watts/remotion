@@ -1,7 +1,7 @@
-name: Compare SVG fallback for translated 1x shadows
+name: Trace native sharp shadow caster placement
 on:
   push:
-    branches: [codex/3d-translated-shadow-fallback]
+    branches: [codex/3d-native-shadow-caster-origin]
 permissions:
   contents: read
 jobs:
@@ -44,47 +44,18 @@ jobs:
       - run: bunx turbo run make --filter=@remotion/web-renderer
       - run: cd packages/web-renderer && bun run lint
       - run: cd packages/web-renderer && bunx playwright install --with-deps
-      - name: Compare all producers on the same immutable runner
+      - name: Compare the sharp shadow at fixed destination geometry
         run: |
-          diagnostic_patch="$RUNNER_TEMP/3d-scalar-css-filter.patch"
-          git diff --binary HEAD^ HEAD -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts > "$diagnostic_patch"
-          test -s "$diagnostic_patch"
-          diagnostic_failed=0
-          for diagnostic_arm in candidate baseline; do
-            if [ "$diagnostic_arm" = baseline ]; then
-              git apply --reverse "$diagnostic_patch"
-              git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts
-            fi
-            mkdir -p "qualification/$diagnostic_arm" packages/web-renderer/test/__results__/inputs
-            cp "$diagnostic_patch" packages/web-renderer/test/__results__/inputs/producer.patch
-            shasum -a 256 packages/web-renderer/src/drawing/process-node.ts packages/web-renderer/src/drawing/handle-filter.ts packages/web-renderer/src/drawing/rasterize-css-filter.ts > packages/web-renderer/test/__results__/inputs/producer.txt
-            shasum -a 256 packages/web-renderer/src/test/sharp-shadow-sampling.test.tsx packages/web-renderer/src/test/fixtures/sharp-shadow-sampling.tsx packages/web-renderer/src/test/projective-filter-input.test.tsx packages/web-renderer/src/test/fixtures/projective-filter-input.tsx packages/web-renderer/src/test/preserve-3d-depth.test.tsx packages/web-renderer/src/test/fixtures/preserve-3d-depth.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > packages/web-renderer/test/__results__/inputs/test-inputs.txt
-            git diff --exit-code HEAD -- packages/web-renderer/src/test bun.lock
-            bunx turbo run make --filter=@remotion/web-renderer
-            shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-gradient-chrome.sha256"
-            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > packages/web-renderer/test/__results__/chrome-before.txt
-            cp "$RUNNER_TEMP/remotion-gradient-chrome.sha256" packages/web-renderer/test/__results__/chrome.sha256
-            node -e 'const os=require("node:os");process.stdout.write(JSON.stringify({cpu:os.cpus()[0].model,cores:os.availableParallelism(),memory:os.totalmem()}))' > packages/web-renderer/test/__results__/runner.json
-            (cd packages/web-renderer && bun ./test/browser-info.ts) > packages/web-renderer/test/__results__/browser-info.txt 2>&1
-            cat packages/web-renderer/test/__results__/browser-info.txt
-            if (cd packages/web-renderer && bunx vitest src/test/sharp-shadow-sampling.test.tsx src/test/projective-filter-input.test.tsx src/test/preserve-3d-depth.test.tsx src/test/3d-grid-sampler.test.ts src/test/3d-flattening.test.tsx src/test/transforms.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/projective-filter-suite.json); then
-              diagnostic_exit=0
-            else
-              diagnostic_exit=$?
-              diagnostic_failed=1
-            fi
-            printf '%s\n' "$diagnostic_exit" > "qualification/$diagnostic_arm/exit-code.txt"
-            shasum -a 256 --quiet -c "$RUNNER_TEMP/remotion-gradient-chrome.sha256"
-            "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > packages/web-renderer/test/__results__/chrome-after.txt
-            mv packages/web-renderer/test/__results__ "qualification/$diagnostic_arm/web-renderer"
-            if [ -d packages/web-renderer/.vitest/attachments ]; then
-              mv packages/web-renderer/.vitest/attachments "qualification/$diagnostic_arm/attachments"
-            fi
-            if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then
-              mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "qualification/$diagnostic_arm/native-pixel-failures"
-            fi
-          done
-          exit "$diagnostic_failed"
+          git diff --exit-code HEAD^ -- packages/web-renderer/src/drawing packages/web-renderer/src/take-screenshot.ts bun.lock
+          mkdir -p packages/web-renderer/test/__results__/inputs
+          shasum -a 256 packages/web-renderer/src/drawing/process-node.ts packages/web-renderer/src/drawing/rasterize-css-filter.ts packages/web-renderer/src/test/sharp-shadow-sampling.test.tsx packages/web-renderer/src/test/fixtures/sharp-shadow-sampling.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > packages/web-renderer/test/__results__/inputs/source.txt
+          "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > packages/web-renderer/test/__results__/chrome-before.txt
+          cp "$RUNNER_TEMP/remotion-gradient-chrome.sha256" packages/web-renderer/test/__results__/chrome.sha256
+          failed=0
+          (cd packages/web-renderer && bunx vitest src/test/sharp-shadow-sampling.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/sharp-shadow-caster.json) || failed=$?
+          "$REMOTION_DIAGNOSTIC_CHROME_EXECUTABLE" --version > packages/web-renderer/test/__results__/chrome-after.txt
+          mv packages/web-renderer/test/__results__ qualification
+          exit "$failed"
       - name: Verify browser remains frozen
         if: always()
         run: |
@@ -92,7 +63,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: 3d-translated-shadow-fallback-${{ matrix.os }}
+          name: 3d-native-shadow-caster-origin-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

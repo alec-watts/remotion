@@ -203,6 +203,7 @@ import {scaledTranslatedSvg} from './fixtures/scaled-translated-svg';
 import {selfTransformOrigin} from './fixtures/self-transform-origin';
 import {
 	sharpShadowModes,
+	sharpShadowPlacements,
 	sharpShadowSampling,
 	sharpShadowScales,
 } from './fixtures/sharp-shadow-sampling';
@@ -481,6 +482,15 @@ export const Root: React.FC = () => {
 				{sharpShadowScales.flatMap((scale) =>
 					sharpShadowModes.map((mode) => {
 						const composition = sharpShadowSampling({scale, mode});
+						return <Composition key={composition.id} {...composition} />;
+					}),
+				)}
+				{sharpShadowScales.slice(1).flatMap((scale) =>
+					sharpShadowPlacements.map((placement) => {
+						const composition = sharpShadowSampling(
+							{scale, mode: 'filter'},
+							placement,
+						);
 						return <Composition key={composition.id} {...composition} />;
 					}),
 				)}
