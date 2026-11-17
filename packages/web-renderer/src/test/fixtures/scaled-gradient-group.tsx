@@ -30,6 +30,13 @@ export const scaledGradientGroups = [
 		opacity: 0.75,
 	},
 	{
+		id: 'fractional-transform',
+		transform: 'translate(0.25px, 0.5px) scale(1.5, 2)',
+		fractional: false,
+		hard: true,
+		opacity: 0.75,
+	},
+	{
 		id: 'color-stops',
 		transform: 'scale(2)',
 		fractional: false,

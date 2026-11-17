@@ -1,7 +1,7 @@
-name: Compare destination-resolution gradient groups
+name: Compare layout positioning of magnified gradient groups
 on:
   push:
-    branches: [codex/13312-device-background-group]
+    branches: [codex/13312-device-gradient-layout-origin]
 permissions:
   contents: read
 jobs:
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-background-group-${{ matrix.os }}
+          name: device-gradient-layout-origin-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

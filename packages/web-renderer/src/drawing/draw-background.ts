@@ -187,8 +187,18 @@ export const drawBackground = async ({
 		const transform = contextToDraw.getTransform();
 		const left = boundingRect.left - offsetLeft;
 		const top = boundingRect.top - offsetTop;
-		const deviceLeft = transform.a * left + transform.e;
-		const deviceTop = transform.d * top + transform.f;
+		// Preserve authored transform offsets while aligning the layout origin
+		// of the temporary group to the CSS pixel grid.
+		const layoutLeft = rect.left + parentOffsetLeft;
+		const layoutTop = rect.top + parentOffsetTop;
+		const deviceLeft =
+			transform.a * left +
+			transform.e +
+			(Math.round(layoutLeft) - layoutLeft) * scale;
+		const deviceTop =
+			transform.d * top +
+			transform.f +
+			(Math.round(layoutTop) - layoutTop) * scale;
 		const rasterLeft = Math.floor(deviceLeft);
 		const rasterTop = Math.floor(deviceTop);
 		const rasterWidth =
