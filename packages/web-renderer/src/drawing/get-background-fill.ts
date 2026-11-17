@@ -7,6 +7,69 @@ import {
 } from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
 
+const createReadbackGradientPattern = ({
+	target,
+	gradientOptions,
+	boundingRect,
+}: {
+	target: OffscreenCanvasRenderingContext2D;
+	gradientOptions: Omit<Parameters<typeof createCanvasGradient>[0], 'ctx'>;
+	boundingRect: DOMRect;
+}) => {
+	const matrix = target.getTransform();
+	if (matrix.b !== 0 || matrix.c !== 0 || !(matrix.a > 0) || !(matrix.d > 0)) {
+		return null;
+	}
+
+	const {offsetLeft, offsetTop} = gradientOptions;
+	// Extend the gradient field past the destination edges. The existing
+	// fillRect applies geometry and clipping once, in its original context.
+	const left =
+		Math.floor((boundingRect.left - offsetLeft) * matrix.a + matrix.e) - 1;
+	const top =
+		Math.floor((boundingRect.top - offsetTop) * matrix.d + matrix.f) - 1;
+	const width =
+		Math.ceil((boundingRect.right - offsetLeft) * matrix.a + matrix.e) +
+		1 -
+		left;
+	const height =
+		Math.ceil((boundingRect.bottom - offsetTop) * matrix.d + matrix.f) +
+		1 -
+		top;
+	if (
+		!(
+			width > 0 &&
+			height > 0 &&
+			width <= 8192 &&
+			height <= 8192 &&
+			width * height <= 4 * 1024 * 1024
+		)
+	) {
+		return null;
+	}
+
+	const paint = new OffscreenCanvas(width, height);
+	using _paint = {
+		[Symbol.dispose]: () => {
+			paint.width = 0;
+			paint.height = 0;
+		},
+	};
+	const ctx = paint.getContext('2d', {willReadFrequently: true});
+	if (!ctx) return null;
+	ctx.setTransform(matrix.a, 0, 0, matrix.d, matrix.e - left, matrix.f - top);
+	ctx.fillStyle = createCanvasGradient({ctx, ...gradientOptions});
+	ctx.fillRect(
+		(left - matrix.e) / matrix.a,
+		(top - matrix.f) / matrix.d,
+		width / matrix.a,
+		height / matrix.d,
+	);
+	const pattern = target.createPattern(paint, 'no-repeat');
+	pattern?.setTransform(matrix.inverse().translate(left, top));
+	return pattern;
+};
+
 export const isColorTransparent = (color: string) => {
 	return (
 		color === 'transparent' ||
@@ -231,15 +294,19 @@ export const getBackgroundFill = async ({
 				positioningArea: boundingRect,
 				intrinsicSize: null,
 			});
-			const gradient = createCanvasGradient({
-				ctx: contextToDraw,
+			const gradientOptions = {
 				rect: backgroundImageRect,
 				gradientInfo,
 				offsetLeft,
 				offsetTop,
-			});
-
-			return gradient;
+			};
+			return (
+				createReadbackGradientPattern({
+					target: contextToDraw,
+					boundingRect,
+					gradientOptions,
+				}) ?? createCanvasGradient({ctx: contextToDraw, ...gradientOptions})
+			);
 		}
 	}
 
