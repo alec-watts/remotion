@@ -25,8 +25,9 @@ import {
 import {
 	applyFilterToDrawOperation,
 	applySvgFilterToPrecomposedCanvas,
-	scaleFilterLengths,
 	getPrecomposeRectForFilter,
+	scaleFilterLengths,
+	supportsCanvasDropShadow,
 } from './handle-filter';
 import {
 	getPrecomposeRectForMask,
@@ -374,11 +375,24 @@ export const processNode = async ({
 		}
 
 		if (precompositing.needsFilterPrecompositing && !svgFilteredLayer) {
-			const filteredImage = layerRasterScale
+			// Translated layers can use the fallback without resampling the shadow.
+			const useTranslatedShadowFallback =
+				knownFilterFootprint &&
+				!is3DPrecomposition &&
+				layerScale === 1 &&
+				totalMatrix.a === 1 &&
+				totalMatrix.d === 1 &&
+				totalMatrix.b === 0 &&
+				totalMatrix.c === 0 &&
+				precompositing.needsFilterPrecompositing.includes('drop-shadow(') &&
+				!supportsCanvasDropShadow();
+			const filterRasterScale =
+				layerRasterScale ?? (useTranslatedShadowFallback ? {x: 1, y: 1} : null);
+			const filteredImage = filterRasterScale
 				? await rasterizeCssFilter({
 						source: tempContext.canvas,
 						filter: precompositing.needsFilterPrecompositing,
-						rasterScale: layerRasterScale,
+						rasterScale: filterRasterScale,
 						color: computedStyle.color,
 						ownerDocument: element.ownerDocument,
 						signal: internalState.rasterImageLoaderState.signal,
