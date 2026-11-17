@@ -116,22 +116,21 @@ export const drawBorderRadius = ({
 			// Only blur support can affect pixels outside the padding-box crop.
 			// Spread and offsets move the hole; they do not enlarge this surface.
 			const insetMargin = Math.ceil(shadow.blurRadius * 2 + 2);
-			const canvas = new OffscreenCanvas(
-				Math.ceil(paddingRect.width + insetMargin * 2),
-				Math.ceil(paddingRect.height + insetMargin * 2),
-			);
-			try {
-				const shadowCtx = canvas.getContext('2d');
-				if (!shadowCtx) throw new Error('Failed to get shadow context');
-				shadowCtx.fillStyle = shadow.color;
-				shadowCtx.filter = `blur(${shadow.blurRadius / 2}px)`;
-				shadowCtx.beginPath();
-				shadowCtx.rect(0, 0, canvas.width, canvas.height);
+			const surfaceWidth = Math.ceil(paddingRect.width + insetMargin * 2);
+			const surfaceHeight = Math.ceil(paddingRect.height + insetMargin * 2);
+			const fillInset = (
+				target: OffscreenCanvasRenderingContext2D,
+				left: number,
+				top: number,
+			) => {
+				target.fillStyle = shadow.color;
+				target.beginPath();
+				target.rect(left, top, surfaceWidth, surfaceHeight);
 				if (innerWidth > 0 && innerHeight > 0) {
 					drawRoundedRectPath({
-						ctx: shadowCtx,
-						x: insetMargin + spread + shadow.offsetX,
-						y: insetMargin + spread + shadow.offsetY,
+						ctx: target,
+						x: left + insetMargin + spread + shadow.offsetX,
+						y: top + insetMargin + spread + shadow.offsetY,
 						width: innerWidth,
 						height: innerHeight,
 						borderRadius: clampBorderRadius({
@@ -143,15 +142,38 @@ export const drawBorderRadius = ({
 					});
 				}
 
-				shadowCtx.fill('evenodd');
-				ctx.drawImage(
-					canvas,
-					paddingRect.left - insetMargin,
-					paddingRect.top - insetMargin,
-				);
+				target.fill('evenodd');
+			};
+
+			try {
+				const left = paddingRect.left - insetMargin;
+				const top = paddingRect.top - insetMargin;
+				if (shadow.blurRadius === 0) {
+					// A sharp inset can retain its subpixel geometry in the actual
+					// destination instead of resampling a local CSS-pixel surface.
+					const previousFill = ctx.fillStyle;
+					try {
+						fillInset(ctx, left, top);
+					} finally {
+						ctx.fillStyle = previousFill;
+					}
+
+					continue;
+				}
+
+				const canvas = new OffscreenCanvas(surfaceWidth, surfaceHeight);
+				using _surface = {
+					[Symbol.dispose]: () => {
+						canvas.width = 0;
+						canvas.height = 0;
+					},
+				};
+				const shadowCtx = canvas.getContext('2d');
+				if (!shadowCtx) throw new Error('Failed to get shadow context');
+				shadowCtx.filter = `blur(${shadow.blurRadius / 2}px)`;
+				fillInset(shadowCtx, 0, 0);
+				ctx.drawImage(canvas, left, top);
 			} finally {
-				canvas.width = 0;
-				canvas.height = 0;
 				finishClip();
 			}
 

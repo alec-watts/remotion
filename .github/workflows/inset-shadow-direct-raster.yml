@@ -1,0 +1,98 @@
+name: Compare direct and rasterized unblurred inset shadows
+on:
+  push:
+    branches: [codex/inset-shadow-direct-raster]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Inset Shadow Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/inset-shadow-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "INSET_SHADOW_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/inset-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.INSET_SHADOW_CHROME,"))
+          PIN
+      - name: Check original shadow and clip assertions on both producers
+        run: |
+          source=packages/web-renderer/src/drawing/draw-box-shadow.ts
+          baseline=76c715bade287f1e451633a620b65978632afc17
+          git diff --binary "$baseline" HEAD -- "$source" > "$RUNNER_TEMP/inset.patch"
+          test -s "$RUNNER_TEMP/inset.patch"
+          failed=0
+          for arm in candidate control; do
+            if [ "$arm" = control ]; then
+              git apply --reverse "$RUNNER_TEMP/inset.patch"
+              git diff --exit-code "$baseline" -- "$source"
+            fi
+            bunx turbo run make --filter=@remotion/web-renderer
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            cp "$RUNNER_TEMP/inset.patch" "qualification/$arm/inset.patch"
+            "$INSET_SHADOW_CHROME" --version > "qualification/$arm/chrome.txt"
+            shasum -a 256 packages/web-renderer/src/test/corner-paint-backends.test.tsx packages/web-renderer/src/test/fixtures/box-shadow-spread-inset.tsx packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts bun.lock > "qualification/$arm/inputs.txt"
+            if (cd packages/web-renderer && bunx vitest src/test/corner-paint-backends.test.tsx src/test/box-shadow.test.tsx src/test/border-radius.test.tsx src/test/background-clip.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/corner-paint.json); then
+              result=0
+            else
+              result=$?
+              failed=1
+            fi
+            printf '%s\n' "$result" > "qualification/$arm/exit-code.txt"
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then
+              mv packages/web-renderer/.vitest/attachments "qualification/$arm/attachments"
+            fi
+          done
+          cmp qualification/control/inputs.txt qualification/candidate/inputs.txt
+          cmp qualification/control/chrome.txt qualification/candidate/chrome.txt
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/inset-chrome.sha256"
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inset-shadow-direct-raster-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release the macOS browser bundle
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Inset Shadow Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Inset Shadow Chrome.app"
+          fi

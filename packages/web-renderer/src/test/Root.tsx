@@ -43,6 +43,7 @@ import {
 	boxShadowSpreadInsetAlpha,
 	boxShadowInsetReview,
 	boxShadowInsetContentClip,
+	boxShadowInsetFractional,
 	boxShadowInsetRoundingControl,
 } from './fixtures/box-shadow-spread-inset';
 import {clipPathShapes, clipPathReferences} from './fixtures/clip-path';
@@ -508,6 +509,7 @@ export const Root: React.FC = () => {
 			<Composition {...boxShadowSpreadInsetAlpha} />
 			<Composition {...boxShadowInsetReview} />
 			<Composition {...boxShadowInsetContentClip} />
+			<Composition {...boxShadowInsetFractional} />
 			<Composition {...boxShadowInsetRoundingControl} />
 			<Folder name="Filter">
 				<Composition {...filter} />

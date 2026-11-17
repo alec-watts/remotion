@@ -1,6 +1,47 @@
 import type {CSSProperties} from 'react';
 import {AbsoluteFill, useCurrentFrame} from 'remotion';
 
+const FractionalInset = () => {
+	const frame = useCurrentFrame();
+	return (
+		<AbsoluteFill style={{backgroundColor: 'white'}}>
+			{[
+				{borderRadius: 0, boxShadow: 'inset 3px 4px 0 8px blue'},
+				{borderRadius: 4, boxShadow: 'inset 0 0 0 10px blue'},
+				{borderRadius: '18px / 11px', boxShadow: 'inset -3px 4px 0 -4px blue'},
+				{borderRadius: 8, boxShadow: 'inset 0 0 0 10px rgba(0,0,255,.5)'},
+			].map((style, index) => (
+				<div
+					key={style.borderRadius}
+					style={{
+						position: 'absolute',
+						left: 17.25 + (index % 2) * 156 + frame * 0.5,
+						top: 16.5 + Math.floor(index / 2) * 124,
+						width: 100.5,
+						height: 80.25,
+						boxSizing: 'border-box',
+						backgroundColor: 'red',
+						backgroundClip: 'content-box',
+						padding: 20,
+						transform: index > 1 ? 'scale(1.25)' : undefined,
+						transformOrigin: '0 0',
+						...style,
+					}}
+				/>
+			))}
+		</AbsoluteFill>
+	);
+};
+
+export const boxShadowInsetFractional = {
+	component: FractionalInset,
+	id: 'box-shadow-inset-fractional',
+	width: 320,
+	height: 256,
+	fps: 30,
+	durationInFrames: 2,
+} as const;
+
 const cases: CSSProperties[] = [
 	{boxShadow: '4px 6px 0 8px blue'},
 	{boxShadow: '8px 6px 0 -4px blue'},
