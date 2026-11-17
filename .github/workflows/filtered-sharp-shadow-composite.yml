@@ -17,7 +17,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 8
+          fetch-depth: 16
+      - name: Verify control renderer revision
+        run: git merge-base --is-ancestor abba30cd0801f5d2290bf018e0b60711fc37613e HEAD
       - name: Freeze the complete Chrome bundle
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
