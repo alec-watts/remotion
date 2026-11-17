@@ -1,7 +1,7 @@
-name: Compare SVGs using the measured viewport
+name: Compare native backdrop Canvas modes
 on:
   push:
-    branches: [codex/qualify-svg-resolved-viewport]
+    branches: [codex/qualify-native-backdrop-canvas-mode]
 permissions:
   contents: read
 jobs:
@@ -49,7 +49,7 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
-      - name: Compare intrinsic and measured SVG viewports
+      - name: Compare backdrop rasterization on both Canvas modes
         run: |
           drawing=packages/web-renderer/src/drawing
           producer=("$drawing/turn-svg-into-drawable.ts")
@@ -95,7 +95,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-resolved-viewport-${{ matrix.os }}
+          name: native-backdrop-canvas-mode-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

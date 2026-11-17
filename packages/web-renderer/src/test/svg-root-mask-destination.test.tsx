@@ -174,6 +174,37 @@ test.for([
 			'native-control',
 			await native(controlComposition),
 		);
+		for (const readback of [false, true]) {
+			const canvas = new OffscreenCanvas(width * scale, height * scale);
+			try {
+				const context = canvas.getContext('2d', {
+					alpha: true,
+					willReadFrequently: readback,
+				});
+				if (!context) throw new Error('Cannot create backdrop replay canvas');
+				context.scale(scale, scale);
+				context.fillStyle = background;
+				context.fillRect(0, 0, width, height);
+				context.fillStyle = '#32bb574d';
+				context.fillRect(8, 22, width - 20, 40);
+				context.fillStyle = '#de299a77';
+				context.fillRect(254, 5, 70, 96);
+				const png = await archive(
+					readback ? 'backdrop-readback' : 'backdrop-ordinary',
+					await canvas.convertToBlob({type: 'image/png'}),
+				);
+				const difference = await countNativePixels(nativeControl, png);
+				await server.commands.writeFile(
+					`${folder}/backdrop-${readback ? 'readback' : 'ordinary'}.json`,
+					JSON.stringify(difference),
+				);
+				expect.soft(difference.mismatchedPixels).toBe(0);
+			} finally {
+				canvas.width = 0;
+				canvas.height = 0;
+			}
+		}
+
 		expect
 			.soft((await countNativePixels(nativeControl, control)).mismatchedPixels)
 			.toBe(0);
