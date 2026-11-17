@@ -1,0 +1,132 @@
+import type {DrawFn} from '../drawn-fn';
+import {turnSvgIntoDrawable} from '../turn-svg-into-drawable';
+
+const svgNamespace = 'http://www.w3.org/2000/svg';
+
+const textProperties = [
+	'color',
+	'direction',
+	'font-family',
+	'font-feature-settings',
+	'font-kerning',
+	'font-optical-sizing',
+	'font-size',
+	'font-stretch',
+	'font-style',
+	'font-synthesis',
+	'font-variant',
+	'font-weight',
+	'font-variation-settings',
+	'hyphens',
+	'letter-spacing',
+	'line-break',
+	'line-height',
+	'overflow-wrap',
+	'paint-order',
+	'tab-size',
+	'text-align',
+	'text-align-last',
+	'text-combine-upright',
+	'text-decoration-color',
+	'text-decoration-line',
+	'text-decoration-skip-ink',
+	'text-decoration-style',
+	'text-decoration-thickness',
+	'text-indent',
+	'text-orientation',
+	'text-rendering',
+	'text-transform',
+	'text-underline-offset',
+	'text-underline-position',
+	'unicode-bidi',
+	'white-space',
+	'word-break',
+	'word-spacing',
+	'writing-mode',
+	'-webkit-text-fill-color',
+	'-webkit-text-stroke',
+] as const;
+
+export const drawVerticalText = async ({
+	span,
+	parentRect,
+	contextToDraw,
+}: {
+	span: HTMLSpanElement;
+	parentRect: DOMRect;
+	contextToDraw: Parameters<DrawFn>[0]['contextToDraw'];
+}): Promise<boolean> => {
+	const block = span.parentElement;
+	if (!block || block.childNodes.length !== 1) {
+		return false;
+	}
+
+	const style = getComputedStyle(block);
+	if (
+		style.display !== 'block' ||
+		style.textShadow !== 'none' ||
+		[
+			style.paddingTop,
+			style.paddingRight,
+			style.paddingBottom,
+			style.paddingLeft,
+			style.borderTopWidth,
+			style.borderRightWidth,
+			style.borderBottomWidth,
+			style.borderLeftWidth,
+		].some((value) => value !== '0px')
+	) {
+		return false;
+	}
+
+	const rect = block.getBoundingClientRect();
+	if (
+		rect.width <= 0 ||
+		rect.height <= 0 ||
+		block.scrollWidth > block.clientWidth ||
+		block.scrollHeight > block.clientHeight
+	) {
+		return false;
+	}
+
+	const document = block.ownerDocument;
+	const width = Math.ceil(rect.width);
+	const height = Math.ceil(rect.height);
+	const svg = document.createElementNS(svgNamespace, 'svg');
+	svg.setAttribute('width', String(width));
+	svg.setAttribute('height', String(height));
+	svg.style.cssText =
+		'position: fixed; left: -100000px; top: 0; pointer-events: none;';
+	const carrier = document.createElementNS(svgNamespace, 'foreignObject');
+	carrier.setAttribute('width', String(width));
+	carrier.setAttribute('height', String(height));
+	const textBlock = document.createElement('div');
+	const language = block.closest('[lang]')?.getAttribute('lang');
+	if (language !== null && language !== undefined) {
+		textBlock.lang = language;
+	}
+
+	for (const property of textProperties) {
+		textBlock.style.setProperty(property, style.getPropertyValue(property));
+	}
+
+	textBlock.style.width = `${rect.width}px`;
+	textBlock.style.height = `${rect.height}px`;
+	textBlock.textContent = span.textContent;
+	carrier.append(textBlock);
+	svg.append(carrier);
+	document.body.append(svg);
+	let image: Promise<HTMLImageElement>;
+	try {
+		image = turnSvgIntoDrawable(svg);
+	} finally {
+		svg.remove();
+	}
+
+	contextToDraw.drawImage(
+		await image,
+		rect.x - parentRect.x,
+		rect.y - parentRect.y,
+	);
+	return true;
+};

@@ -40,23 +40,22 @@ export const handleTextNode = async ({
 	parent.insertBefore(span, node);
 	span.appendChild(node);
 
-	const value = await processNode({
-		context,
-		element: span,
-		draw: drawText({span, logLevel, onlyBackgroundClipText, parentRect}),
-		logLevel,
-		parentRect,
-		internalState,
-		rootElement,
-		scale,
-		waitForPageResponsiveness,
-		transformStyleCache,
-		isolatedElements,
-	});
-
-	// Undo the layout manipulation
-	parent.insertBefore(node, span);
-	parent.removeChild(span);
-
-	return value;
+	try {
+		return await processNode({
+			context,
+			element: span,
+			draw: drawText({span, logLevel, onlyBackgroundClipText, parentRect}),
+			logLevel,
+			parentRect,
+			internalState,
+			rootElement,
+			scale,
+			waitForPageResponsiveness,
+			transformStyleCache,
+			isolatedElements,
+		});
+	} finally {
+		parent.insertBefore(node, span);
+		parent.removeChild(span);
+	}
 };

@@ -3,6 +3,7 @@ import {Internals} from 'remotion';
 import type {DrawFn} from '../drawn-fn';
 import {setFilter} from '../filter';
 import {applyTextTransform} from './apply-text-transform';
+import {drawVerticalText} from './draw-vertical-text';
 import {findWords} from './find-line-breaks.text';
 import {getCanvasFontStretch} from './get-canvas-font-stretch';
 import {parsePaintOrder} from './parse-paint-order';
@@ -20,7 +21,7 @@ export const drawText = ({
 	parentRect: DOMRect;
 	onlyBackgroundClipText: boolean;
 }) => {
-	const drawFn: DrawFn = ({computedStyle, contextToDraw}) => {
+	const drawFn: DrawFn = async ({computedStyle, contextToDraw}) => {
 		const {
 			fontFamily,
 			fontSize,
@@ -44,6 +45,13 @@ export const drawText = ({
 		} = computedStyle;
 		const isVertical = writingMode !== 'horizontal-tb';
 		if (isVertical) {
+			if (
+				!onlyBackgroundClipText &&
+				(await drawVerticalText({span, parentRect, contextToDraw}))
+			) {
+				return;
+			}
+
 			// TODO: Only warn once per render.
 			Internals.Log.warn(
 				{
