@@ -1,0 +1,77 @@
+name: Compare Windows audio integration retry isolation
+on:
+  push:
+    branches: [codex/qualify-it-audio-format-attempt-isolation]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      BUN_INSTALL_CACHE_DIR: D:\.bun\install\cache
+      TURBO_SCM_BASE: e6b9083c4984609e48db0453f3274e2123f30430
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 16.20.2
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Compare the original and isolated audio test on the same runner
+        shell: pwsh
+        run: |
+          $main = $env:TURBO_SCM_BASE
+          $candidate = git rev-parse HEAD^
+          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the isolated test revision' }
+          $env:TURBO_SCM_HEAD = $candidate
+          $artifacts = Join-Path $env:RUNNER_TEMP 'audio-format-attempt-isolation-windows'
+          New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+          node --version | Set-Content (Join-Path $artifacts 'node-version.txt')
+          bun --version | Set-Content (Join-Path $artifacts 'bun-version.txt')
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
+          if ($LASTEXITCODE -ne 0) { throw 'Could not set the upstream test origin' }
+          git remote get-url origin | Set-Content (Join-Path $artifacts 'origin.txt')
+          git diff --exit-code $main $candidate -- bun.lock packages/it-tests/package.json packages/example packages/renderer
+          if ($LASTEXITCODE -ne 0) { throw 'The integration harness changed' }
+
+          $failed = 0
+          foreach ($arm in @('main', 'candidate')) {
+            $revision = if ($arm -eq 'main') { $main } else { $candidate }
+            $record = Join-Path $artifacts $arm
+            New-Item -ItemType Directory -Path $record -Force | Out-Null
+            git checkout --force --detach $revision
+            if ($LASTEXITCODE -ne 0) { throw "Checkout failed for $arm" }
+            git rev-parse HEAD | Set-Content (Join-Path $record 'revision.txt')
+            $env:TURBO_CACHE_DIR = Join-Path $env:RUNNER_TEMP "audio-format-isolation-turbo-$arm"
+
+            $files = @('bun.lock', 'packages/it-tests/package.json', 'packages/it-tests/src/rendering/rendering.test.ts')
+            Get-FileHash -Algorithm SHA256 -Path $files | Format-Table -AutoSize | Out-String -Width 4096 | Set-Content (Join-Path $record 'inputs.sha256')
+
+            bun ci
+            if ($LASTEXITCODE -ne 0) { throw "Install failed for $arm" }
+            bunx turbo run make --affected --concurrency=2 --no-update-notifier *> (Join-Path $record 'build.log')
+            if ($LASTEXITCODE -ne 0) {
+              Get-Content (Join-Path $record 'build.log') -Tail 80
+              throw "Build failed for $arm"
+            }
+            bunx turbo run test --affected --concurrency=1 --no-update-notifier *> (Join-Path $record 'test.log')
+            $status = $LASTEXITCODE
+            $status | Set-Content (Join-Path $record 'status.txt')
+            Get-Content (Join-Path $record 'test.log') -Tail 80
+            if ($status -ne 0) { $failed = $status }
+          }
+
+          exit $failed
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audio-format-attempt-isolation-windows
+          path: ${{ runner.temp }}/layered-mask-windows
+          if-no-files-found: error
+          retention-days: 7
