@@ -1,0 +1,72 @@
+name: Compare Studio protocol route teardown on macOS
+on:
+  push:
+    branches: [codex/qualify-studio-protocol-route-drain]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25.9.0
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Compare the complete Example E2E command
+        run: |
+          main=e6b9083c4984609e48db0453f3274e2123f30430
+          candidate="$(git rev-parse HEAD^)"
+          artifacts="$RUNNER_TEMP/studio-protocol-route-drain"
+          mkdir -p "$artifacts"
+          uname -a > "$artifacts/runner.txt"
+          node --version > "$artifacts/node-version.txt"
+          bun --version > "$artifacts/bun-version.txt"
+
+          # Compare the same test suite with and without the route cleanup.
+          fixture=packages/example/e2e/studio-protocol.test.mts
+          test "$(git diff --name-only "$main" "$candidate")" = "$fixture"
+          # Turbo strict mode drops custom browser paths. Install into the default cache.
+          browser_cache="$HOME/Library/Caches/ms-playwright"
+          bun ci
+          (cd packages/example && bunx playwright install --with-deps chromium)
+          headless_shell="$(find "$browser_cache"/chromium_headless_shell-* -type f \( -name chrome-headless-shell -o -name headless_shell \) -print -quit)"
+          test -x "$headless_shell"
+          find "$browser_cache" -type f -exec shasum -a 256 {} + > "$artifacts/browser.sha256"
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
+          last_failure=0
+          for arm in main candidate; do
+            revision="$candidate"
+            if [ "$arm" = main ]; then revision="$main"; fi
+            git checkout --force --detach "$revision"
+            mkdir -p "$artifacts/$arm"
+            git rev-parse HEAD > "$artifacts/$arm/revision.txt"
+            shasum -a 256 bun.lock packages/example/playwright.config.ts packages/example/e2e/{studio-server,node-fetch,suppress-rebuild.test,studio-protocol.test}.mts > "$artifacts/$arm/inputs.sha256"
+            bun ci
+            shasum -a 256 --quiet -c "$artifacts/browser.sha256"
+            (cd packages/example && bunx playwright --version) > "$artifacts/$arm/playwright-version.txt"
+            status=0
+            bun run teste2e > "$artifacts/$arm/e2e.log" 2>&1 || status=$?
+            shasum -a 256 --quiet -c "$artifacts/browser.sha256"
+            tail -80 "$artifacts/$arm/e2e.log"
+            printf '%s\n' "$status" > "$artifacts/$arm/status.txt"
+            if [ -d packages/example/test-results ]; then
+              mv packages/example/test-results "$artifacts/$arm/test-results"
+            fi
+            if [ "$status" -ne 0 ]; then last_failure="$status"; fi
+          done
+          exit "$last_failure"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-protocol-route-drain-macos
+          path: ${{ runner.temp }}/studio-protocol-route-drain
+          if-no-files-found: error
+          retention-days: 7
