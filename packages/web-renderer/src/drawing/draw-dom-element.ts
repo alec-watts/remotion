@@ -2,7 +2,7 @@ import {calculateObjectFit, parseObjectFit} from './calculate-object-fit';
 import type {DrawFn} from './drawn-fn';
 import {fitSvgIntoItsContainer} from './fit-svg-into-its-dimensions';
 import {getMaskImageValue, getSvgMaskForDrawable} from './mask-image';
-import {turnSvgIntoDrawable} from './turn-svg-into-drawable';
+import {getSvgDrawable} from './turn-svg-into-drawable';
 
 const getReadableImageError = (
 	err: unknown,
@@ -30,6 +30,78 @@ const getReadableImageError = (
 	}
 
 	return null;
+};
+
+const drawTransformedMaskedSvg = async ({
+	markup,
+	drawable,
+	fitted,
+	context,
+}: {
+	markup: string;
+	drawable: HTMLImageElement;
+	fitted: ReturnType<typeof fitSvgIntoItsContainer>;
+	context: OffscreenCanvasRenderingContext2D;
+}) => {
+	const {width, height} = context.canvas;
+	if (
+		context.globalCompositeOperation !== 'source-over' ||
+		width <= 0 ||
+		height <= 0 ||
+		width > 16384 ||
+		height > 16384 ||
+		width * height > 16 * 1024 ** 2
+	) {
+		return false;
+	}
+
+	const matrix = context
+		.getTransform()
+		.translateSelf(fitted.left, fitted.top)
+		.scaleSelf(fitted.width / drawable.width, fitted.height / drawable.height);
+	const components = [
+		matrix.a,
+		matrix.b,
+		matrix.c,
+		matrix.d,
+		matrix.e,
+		matrix.f,
+	];
+	if (!components.every(Number.isFinite)) return false;
+
+	const intrinsicSize = `width:${drawable.width}px;height:${drawable.height}px`;
+	const wrapper = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="${intrinsicSize};transform-origin:0 0;transform:matrix(${components.join(',')})">${markup}</div></foreignObject></svg>`;
+	const image = new Image();
+	image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(wrapper)}`;
+	try {
+		await image.decode();
+	} catch {
+		// Keep the existing SVG drawing path when the wrapper cannot be decoded.
+		return false;
+	}
+
+	const scratch = new OffscreenCanvas(width, height);
+	try {
+		const readback = scratch.getContext('2d', {
+			alpha: true,
+			willReadFrequently: true,
+		});
+		if (!readback) return false;
+		readback.drawImage(image, 0, 0);
+
+		context.save();
+		try {
+			context.resetTransform();
+			context.drawImage(scratch, 0, 0);
+		} finally {
+			context.restore();
+		}
+
+		return true;
+	} finally {
+		scratch.width = 0;
+		scratch.height = 0;
+	}
 };
 
 const drawMaskedSvgThroughReadback = ({
@@ -105,13 +177,13 @@ const drawMaskedSvgThroughReadback = ({
 /**
  * Draw an SVG element using "contain" behavior (the default for SVGs).
  */
-const drawSvg = ({
-	useReadback,
+const drawSvg = async ({
+	markup,
 	drawable,
 	dimensions,
 	contextToDraw,
 }: {
-	useReadback: boolean;
+	markup: Promise<string> | null;
 	drawable: HTMLImageElement;
 	dimensions: DOMRect;
 	contextToDraw: OffscreenCanvasRenderingContext2D;
@@ -124,8 +196,14 @@ const drawSvg = ({
 		},
 	});
 	if (
-		useReadback &&
-		drawMaskedSvgThroughReadback({drawable, fitted, context: contextToDraw})
+		markup &&
+		((await drawTransformedMaskedSvg({
+			markup: await markup,
+			drawable,
+			fitted,
+			context: contextToDraw,
+		})) ||
+			drawMaskedSvgThroughReadback({drawable, fitted, context: contextToDraw}))
 	) {
 		return;
 	}
@@ -290,7 +368,8 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 	}) => {
 		// Handle SVG elements separately - they use "contain" behavior by default
 		if (node instanceof SVGSVGElement) {
-			const drawable = await turnSvgIntoDrawable(node);
+			const svg = getSvgDrawable(node);
+			const drawable = await svg.drawable;
 			const maskImage = getMaskImageValue(computedStyle);
 			const userAgent =
 				node.ownerDocument.defaultView?.navigator.userAgent ?? '';
@@ -300,7 +379,12 @@ export const drawDomElement = (node: HTMLElement | SVGElement) => {
 				maskImage &&
 				getSvgMaskForDrawable(node, maskImage),
 			);
-			drawSvg({drawable, dimensions, contextToDraw, useReadback});
+			await drawSvg({
+				drawable,
+				dimensions,
+				contextToDraw,
+				markup: useReadback ? svg.markup : null,
+			});
 			return;
 		}
 

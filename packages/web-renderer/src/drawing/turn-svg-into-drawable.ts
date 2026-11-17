@@ -49,11 +49,12 @@ const drawableBySvg = new WeakMap<
 	{
 		fontStyleKey: string | null;
 		serializedSvg: string;
+		markup: Promise<string>;
 		drawable: Promise<HTMLImageElement>;
 	}
 >();
 
-export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
+export const getSvgDrawable = (svg: SVGSVGElement) => {
 	const {fill, color, width, height, opacity} = getComputedStyle(svg);
 	const textElements = getSvgTextElements(svg);
 	const referencedTemplates = textElements.length
@@ -283,10 +284,10 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		cached?.serializedSvg === serializedSvg &&
 		cached.fontStyleKey === fontStyleKey
 	) {
-		return cached.drawable;
+		return cached;
 	}
 
-	const drawable = (async () => {
+	const serializedMarkup = (async () => {
 		let markup = serializedSvg;
 		if (embeddedFontStyle) {
 			const css = await embeddedFontStyle.css;
@@ -304,9 +305,13 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 			markup = serializeSvg(svgForSerialization);
 		}
 
+		return markup;
+	})();
+
+	const drawable = serializedMarkup.then((svgMarkup) => {
 		return new Promise<HTMLImageElement>((resolve, reject) => {
 			const image = new Image();
-			const blob = new Blob([markup], {
+			const blob = new Blob([svgMarkup], {
 				type: 'image/svg+xml;charset=utf-8',
 			});
 			// Chromium taints canvases drawn from blob SVGs containing foreignObject.
@@ -329,18 +334,27 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 			} else {
 				blob
 					.text()
-					.then((svgMarkup) => {
-						image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+					.then((markupText) => {
+						image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markupText)}`;
 					})
 					.catch(reject);
 			}
 		});
-	})();
-	drawableBySvg.set(svg, {fontStyleKey, serializedSvg, drawable});
+	});
+	const entry = {
+		fontStyleKey,
+		serializedSvg,
+		markup: serializedMarkup,
+		drawable,
+	};
+	drawableBySvg.set(svg, entry);
 	drawable.catch(() => {
 		if (drawableBySvg.get(svg)?.drawable === drawable) {
 			drawableBySvg.delete(svg);
 		}
 	});
-	return drawable;
+	return entry;
 };
+
+export const turnSvgIntoDrawable = (svg: SVGSVGElement) =>
+	getSvgDrawable(svg).drawable;
