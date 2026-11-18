@@ -1,7 +1,7 @@
-name: Compare joint paint in a device-sized mask carrier
+name: Compare mask joint paint at the authored device phase
 on:
   push:
-    branches: [codex/qualify-mask-joint-device-paint]
+    branches: [codex/qualify-mask-joint-device-phase]
 permissions:
   contents: read
 jobs:
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-joint-device-paint-${{ matrix.os }}
+          name: mask-joint-phase-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
