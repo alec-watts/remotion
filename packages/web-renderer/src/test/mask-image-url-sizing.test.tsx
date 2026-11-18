@@ -284,8 +284,6 @@ test('clips a repeating mask to its border box when children overflow', async ()
 });
 
 for (const unsupported of [
-	{maskRepeat: 'space'},
-	{maskRepeat: 'round'},
 	{maskOrigin: 'content-box'},
 	{maskClip: 'content-box'},
 	{maskMode: 'luminance'},

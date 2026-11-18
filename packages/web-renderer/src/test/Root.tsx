@@ -148,6 +148,7 @@ import {
 	maskImageUrlMathSizeLiteral,
 } from './fixtures/mask-image-url-math-size';
 import {maskImageUrlPosition} from './fixtures/mask-image-url-position';
+import {maskImageUrlRepeat} from './fixtures/mask-image-url-repeat';
 import {maskImageUrlSizing} from './fixtures/mask-image-url-sizing';
 import {
 	mixBlendModeAllModes,
@@ -464,6 +465,7 @@ export const Root: React.FC = () => {
 				<Composition {...mixBlendModeGroups} />
 				<Composition {...maskImageUrl} />
 				<Composition {...maskImageUrlSizing} />
+				<Composition {...maskImageUrlRepeat} />
 				<Composition {...maskImageUrlMathSize} />
 				<Composition {...maskImageUrlMathSizeLiteral} />
 				<Composition {...maskMathExtendedOpaque} />

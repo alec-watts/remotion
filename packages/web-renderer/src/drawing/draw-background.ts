@@ -195,6 +195,7 @@ export const drawBackground = async ({
 		backgroundContext.fillStyle = backgroundColor;
 		backgroundContext.fillRect(0, 0, boundingRect.width, boundingRect.height);
 		const groupFill = await getBackgroundFill({
+			sourceProperty: null,
 			backgroundImage,
 			backgroundRepeat: computedStyle.backgroundRepeat,
 			internalState,
@@ -236,6 +237,7 @@ export const drawBackground = async ({
 	}
 
 	const backgroundFill = await getBackgroundFill({
+		sourceProperty: null,
 		backgroundImage,
 		backgroundRepeat: computedStyle.backgroundRepeat,
 		internalState,

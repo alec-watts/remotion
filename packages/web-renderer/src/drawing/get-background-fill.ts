@@ -35,9 +35,10 @@ const getTilePositions = ({
 	paintEnd: number;
 }) => {
 	const count = Math.floor(areaSize / size);
-	if (repeat === 'no-repeat' || count < 2) return [start];
-	const stride = (areaSize - size) / (count - 1);
-	const origin = areaStart;
+	if (repeat === 'no-repeat' || (repeat === 'space' && count < 2))
+		return [start];
+	const stride = repeat === 'space' ? (areaSize - size) / (count - 1) : size;
+	const origin = repeat === 'space' ? areaStart : start;
 	const positions: number[] = [];
 	let cursor = origin + Math.floor((paintStart - origin) / stride) * stride;
 	for (; cursor < paintEnd; cursor += stride) {
@@ -52,6 +53,7 @@ export const getBackgroundFill = async ({
 	backgroundPosition,
 	backgroundSize,
 	backgroundRepeat,
+	sourceProperty,
 	internalState,
 	positioningArea,
 	contextToDraw,
@@ -63,6 +65,7 @@ export const getBackgroundFill = async ({
 	backgroundPosition: string;
 	backgroundSize: string;
 	backgroundRepeat: string;
+	sourceProperty: 'background-image' | 'mask-image' | null;
 	internalState: InternalState;
 	positioningArea: DOMRect;
 	contextToDraw: OffscreenCanvasRenderingContext2D;
@@ -81,7 +84,7 @@ export const getBackgroundFill = async ({
 			const image = await getRasterImage({
 				src: url,
 				state: internalState.rasterImageLoaderState,
-				sourceProperty: 'background-image',
+				sourceProperty: sourceProperty ?? 'background-image',
 			});
 			const rect = getBackgroundImageRect({
 				backgroundPosition,
@@ -95,7 +98,7 @@ export const getBackgroundFill = async ({
 			if (repeatX === 'space' || repeatY === 'space') {
 				if (
 					![repeatX, repeatY].every((value) =>
-						['space', 'no-repeat'].includes(value),
+						['space', 'no-repeat', 'repeat', 'round'].includes(value),
 					)
 				) {
 					throw new Error(`Unsupported background-repeat: ${backgroundRepeat}`);

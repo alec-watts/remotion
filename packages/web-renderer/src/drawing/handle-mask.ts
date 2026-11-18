@@ -2,10 +2,28 @@ import {getBiggestBoundingClientRect} from '../get-biggest-bounding-client-rect'
 import type {InternalState} from '../internal-state';
 import {getBackgroundImageRect} from './background-image-rect';
 import {createCssMask} from './css-mask';
+import {getBackgroundFill} from './get-background-fill';
 import type {MaskImageInfo} from './mask-image';
 import {createCanvasGradient} from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
 import {createSvgClipMask} from './svg-clip-mask';
+
+const applyMaskCanvas = (
+	context: OffscreenCanvasRenderingContext2D,
+	mask: OffscreenCanvas,
+) => {
+	context.save();
+	try {
+		context.resetTransform();
+		context.globalAlpha = 1;
+		context.filter = 'none';
+		context.shadowColor = 'transparent';
+		context.globalCompositeOperation = 'destination-in';
+		context.drawImage(mask, 0, 0);
+	} finally {
+		context.restore();
+	}
+};
 
 export const getPrecomposeRectForMask = (element: HTMLElement | SVGElement) => {
 	const boundingRect = getBiggestBoundingClientRect(element);
@@ -46,8 +64,7 @@ export const handleMask = async ({
 			// Rasterize the native mask group before applying it to the content. The
 			// readback context preserves fractional alpha at this SVG drawable seam.
 			mask.drawImage(groupImage, 0, 0);
-			tempContext.globalCompositeOperation = 'destination-in';
-			tempContext.drawImage(mask.canvas, 0, 0);
+			applyMaskCanvas(tempContext, mask.canvas);
 		} finally {
 			mask.canvas.width = 0;
 			mask.canvas.height = 0;
@@ -80,6 +97,59 @@ export const handleMask = async ({
 			rectToFill.width,
 			rectToFill.height,
 		);
+		return;
+	}
+
+	if (/\b(?:space|round)\b/.test(maskImageInfo.maskRepeat)) {
+		const mask = new OffscreenCanvas(
+			tempContext.canvas.width,
+			tempContext.canvas.height,
+		);
+		try {
+			const maskContext = mask.getContext('2d', {willReadFrequently: true});
+			if (!maskContext) throw new Error('Could not create raster mask context');
+			maskContext.setTransform(scale, 0, 0, scale, 0, 0);
+			maskContext.imageSmoothingEnabled = tempContext.imageSmoothingEnabled;
+			maskContext.imageSmoothingQuality = tempContext.imageSmoothingQuality;
+			const left = maskRect.left - precomposeRect.left;
+			const top = maskRect.top - precomposeRect.top;
+			maskContext.beginPath();
+			maskContext.rect(left, top, maskRect.width, maskRect.height);
+			maskContext.clip();
+			const fill = await getBackgroundFill({
+				backgroundImage: `url(${JSON.stringify(maskImageInfo.src)})`,
+				backgroundPosition: maskImageInfo.maskPosition,
+				backgroundSize: maskImageInfo.maskSize,
+				backgroundRepeat: maskImageInfo.maskRepeat,
+				sourceProperty: 'mask-image',
+				internalState,
+				positioningArea: maskRect,
+				boundingRect: maskRect,
+				contextToDraw: maskContext,
+				offsetLeft: precomposeRect.left,
+				offsetTop: precomposeRect.top,
+			});
+			if (fill && 'image' in fill) {
+				for (const repeatedTile of fill.rects) {
+					maskContext.drawImage(
+						fill.image,
+						repeatedTile.left - precomposeRect.left,
+						repeatedTile.top - precomposeRect.top,
+						repeatedTile.width,
+						repeatedTile.height,
+					);
+				}
+			} else if (fill) {
+				maskContext.fillStyle = fill;
+				maskContext.fillRect(left, top, maskRect.width, maskRect.height);
+			}
+
+			applyMaskCanvas(tempContext, mask);
+		} finally {
+			mask.width = 0;
+			mask.height = 0;
+		}
+
 		return;
 	}
 
