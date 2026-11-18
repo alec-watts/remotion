@@ -149,6 +149,7 @@ import {
 } from './fixtures/mask-image-url-math-size';
 import {maskImageUrlPosition} from './fixtures/mask-image-url-position';
 import {maskImageUrlRepeat} from './fixtures/mask-image-url-repeat';
+import {rasterMaskRepeatControls} from './fixtures/mask-image-url-repeat-controls';
 import {maskImageUrlSizing} from './fixtures/mask-image-url-sizing';
 import {
 	mixBlendModeAllModes,
@@ -466,6 +467,9 @@ export const Root: React.FC = () => {
 				<Composition {...maskImageUrl} />
 				<Composition {...maskImageUrlSizing} />
 				<Composition {...maskImageUrlRepeat} />
+				{rasterMaskRepeatControls.map(({fixture}) => (
+					<Composition key={fixture.id} {...fixture} />
+				))}
 				<Composition {...maskImageUrlMathSize} />
 				<Composition {...maskImageUrlMathSizeLiteral} />
 				<Composition {...maskMathExtendedOpaque} />
