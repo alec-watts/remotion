@@ -1,5 +1,6 @@
 import '../symbol-dispose';
-import {expect, test} from 'vitest';
+import {Internals} from 'remotion';
+import {expect, test, vi} from 'vitest';
 import {server} from 'vitest/browser';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
 import {supportsNativeHtmlInCanvas} from '../html-in-canvas';
@@ -37,6 +38,8 @@ test.for(
 			'identity-readback',
 			'bitmap-direct',
 			'bitmap-readback',
+			'native-default',
+			'native-experimental',
 			'html-repeat',
 		] as const;
 		const probes: Record<
@@ -48,10 +51,12 @@ test.for(
 				{error: 'not-completed', mismatchedPixels: null},
 			]),
 		);
+		const nativeOutcomes: Record<string, {calls: number; messages: string[]}> =
+			{};
 		const checkpoint = () =>
 			server.commands.writeFile(
 				`${folder}/comparison.json`,
-				JSON.stringify({kind, preserving, frame: 0, probes}),
+				JSON.stringify({kind, preserving, frame: 0, probes, nativeOutcomes}),
 			);
 		const save = async (name: string, blob: Blob) => {
 			let binary = '';
@@ -147,7 +152,59 @@ test.for(
 				let output: OffscreenCanvas | null = null;
 				try {
 					let blob: Blob;
-					if (
+					if (mode.startsWith('native-')) {
+						const prototype =
+							CanvasRenderingContext2D.prototype as CanvasRenderingContext2D & {
+								drawElementImage: (...args: unknown[]) => void;
+							};
+						if (
+							!supportsNativeHtmlInCanvas() ||
+							typeof (
+								document.createElement('canvas') as HTMLCanvasElement & {
+									requestPaint?: () => void;
+								}
+							).requestPaint !== 'function'
+						)
+							throw new Error('Native HTML-in-Canvas is unavailable');
+						const draw = vi.spyOn(prototype, 'drawElementImage');
+						const warnings = vi.spyOn(Internals.Log, 'warn');
+						try {
+							blob = await (
+								await renderStillOnWeb({
+									composition,
+									frame: 0,
+									inputProps: {},
+									licenseKey: 'free-license',
+									allowHtmlInCanvas: true,
+									transparent: false,
+									experimental3DRendering: mode === 'native-experimental',
+								})
+							).blob({format: 'png'});
+						} finally {
+							nativeOutcomes[mode] = {
+								calls: draw.mock.calls.length,
+								messages: warnings.mock.calls.map((args) =>
+									args.filter((arg) => typeof arg === 'string').join(' '),
+								),
+							};
+
+							draw.mockRestore();
+							warnings.mockRestore();
+						}
+
+						const outcome = nativeOutcomes[mode];
+						if (
+							!outcome.calls ||
+							!outcome.messages.some((message) =>
+								message.startsWith(
+									'Using Chromium experimental HTML-in-canvas (drawElementImage)',
+								),
+							)
+						) {
+							await save(`${mode}-fallback`, blob);
+							throw new Error('Native capture used the DOM-composer fallback');
+						}
+					} else if (
 						mode === 'html-default' ||
 						mode === 'html-experimental' ||
 						mode === 'svg-default' ||
