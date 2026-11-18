@@ -1,7 +1,7 @@
-name: Compare explicit corner declarations in SVG image documents
+name: Compare physical SVG viewports for shaped corners
 on:
   push:
-    branches: [codex/qualify-corner-explicit-longhands]
+    branches: [codex/qualify-corner-device-viewport]
 permissions:
   contents: read
 jobs:

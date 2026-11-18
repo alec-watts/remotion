@@ -119,6 +119,10 @@ test.for(
 			'longhand-direct',
 			'longhand-readback',
 			'longhand-seeded-readback',
+			'device-svg-image',
+			'device-direct',
+			'device-readback',
+			'device-seeded-readback',
 		])
 			probes[name] = {error: 'not-completed', mismatchedPixels: null};
 		await checkpoint();
@@ -207,6 +211,10 @@ test.for(
 				'longhand-direct',
 				'longhand-readback',
 				'longhand-seeded-readback',
+				'device-svg-image',
+				'device-direct',
+				'device-readback',
+				'device-seeded-readback',
 			] as const) {
 				let raster: OffscreenCanvas | null = null;
 				let output: OffscreenCanvas | null = null;
@@ -229,7 +237,32 @@ test.for(
 						);
 					}
 
-					const transfer = mode.replace(/^longhand-/, '');
+					if (mode === 'device-svg-image') {
+						// Preserve the measured longhand rules, moving scale from the
+						// SVG viewBox to the same CSS transform as the native wrapper.
+						const width = composition.width * scale;
+						const height = composition.height * scale;
+						svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+						const foreignObject = svg.querySelector('foreignObject')!;
+						foreignObject.setAttribute('width', String(width));
+						foreignObject.setAttribute('height', String(height));
+						const viewport = foreignObject.firstElementChild as HTMLDivElement;
+						viewport.style.width = `${width}px`;
+						viewport.style.height = `${height}px`;
+						target.style.width = `${composition.width}px`;
+						target.style.height = `${composition.height}px`;
+						target.style.transformOrigin = '0 0';
+						target.style.transform = `scale(${scale})`;
+						image.removeAttribute('src');
+						image = await turnSvgIntoDrawable(svg);
+						expect(image.src.startsWith(prefix)).toBe(true);
+						await server.commands.writeFile(
+							`${folder}/carrier-device.svg`,
+							decodeURIComponent(image.src.slice(prefix.length)),
+						);
+					}
+
+					const transfer = mode.replace(/^(longhand|device)-/, '');
 					let blob: Blob;
 					if (mode === 'bounded-repeat') {
 						blob = await captureNativeReference(
