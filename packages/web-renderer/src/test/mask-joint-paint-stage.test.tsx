@@ -113,6 +113,24 @@ test.for(
 		const jointSvg = new XMLSerializer().serializeToString(
 			parsed.documentElement,
 		);
+		const toDeviceCarrier = (markup: string) => {
+			const document = new DOMParser().parseFromString(markup, 'image/svg+xml');
+			const svg = document.documentElement;
+			const viewBox = svg.getAttribute('viewBox')!.split(/\s+/).map(Number);
+			const width = Number(svg.getAttribute('width'));
+			const height = Number(svg.getAttribute('height'));
+			const foreignObject = svg.querySelector('foreignObject')!;
+			const viewport = foreignObject.firstElementChild as HTMLElement;
+			svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+			foreignObject.setAttribute('width', String(width));
+			foreignObject.setAttribute('height', String(height));
+			viewport.style.transformOrigin = '0 0';
+			viewport.style.transform = `scale(${width / viewBox[2]}, ${height / viewBox[3]})`;
+			return new XMLSerializer().serializeToString(svg);
+		};
+
+		const bitmapDeviceSvg = toDeviceCarrier(captured.svg);
+		const jointDeviceSvg = toDeviceCarrier(jointSvg);
 		const replay = async (svg: string) => {
 			const image = new Image();
 			const raster = new OffscreenCanvas(1, 1);
@@ -144,12 +162,16 @@ test.for(
 
 		const bitmap = await replay(captured.svg);
 		const joint = await replay(jointSvg);
+		const bitmapDevice = await replay(bitmapDeviceSvg);
+		const jointDevice = await replay(jointDeviceSvg);
 		const folder = `test/__results__/mask-joint-paint/${server.browser}/${mode}-${overflow}-${scale}-${frame}`;
 		for (const [name, blob] of [
 			['reference', reference],
 			['actual', actual],
 			['bitmap-replay', bitmap],
 			['joint', joint],
+			['bitmap-device', bitmapDevice],
+			['joint-device', jointDevice],
 		] as const) {
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer())) {
@@ -165,6 +187,14 @@ test.for(
 
 		await server.commands.writeFile(`${folder}/original.svg`, captured.svg);
 		await server.commands.writeFile(`${folder}/joint.svg`, jointSvg);
+		await server.commands.writeFile(
+			`${folder}/bitmap-device.svg`,
+			bitmapDeviceSvg,
+		);
+		await server.commands.writeFile(
+			`${folder}/joint-device.svg`,
+			jointDeviceSvg,
+		);
 		const results = {
 			mode,
 			overflow,
@@ -176,6 +206,8 @@ test.for(
 			actual: await countNativePixels(reference, actual),
 			bitmap: await countNativePixels(reference, bitmap),
 			joint: await countNativePixels(reference, joint),
+			bitmapDevice: await countNativePixels(reference, bitmapDevice),
+			jointDevice: await countNativePixels(reference, jointDevice),
 		};
 		await server.commands.writeFile(
 			`${folder}/comparison.json`,
@@ -183,6 +215,8 @@ test.for(
 		);
 		expect.soft(results.actual.mismatchedPixels).toBe(0);
 		expect.soft(results.bitmap.mismatchedPixels).toBe(0);
-		expect(results.joint.mismatchedPixels).toBe(0);
+		expect.soft(results.joint.mismatchedPixels).toBe(0);
+		expect.soft(results.bitmapDevice.mismatchedPixels).toBe(0);
+		expect(results.jointDevice.mismatchedPixels).toBe(0);
 	},
 );
