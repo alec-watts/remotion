@@ -1,0 +1,121 @@
+name: Verify bounded SVG colors and negative control
+on:
+  push:
+    branches: [codex/qualify-svg-bounded-public]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Fetch the exact published producer
+        run: git fetch --no-tags --depth=1 origin 8e46e3cc32987b563204a09c012bdfa94522519e
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/vertical-text-trace-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Verify exact public tests on old and bounded producers
+        run: |
+          producer=packages/web-renderer/src/drawing/draw-dom-element.ts
+          mkdir -p qualification
+          git rev-parse 8e46e3cc32987b563204a09c012bdfa94522519e HEAD > qualification/revisions.txt
+          git diff --exit-code b8fc58086f18b0b58a3a22a6554af5130b82db6d HEAD -- packages/web-renderer/src packages/docs/docs/client-side-rendering/limitations.mdx
+          printf '%s\n' b8fc58086f18b0b58a3a22a6554af5130b82db6d > qualification/proposed-source.txt
+          python3 - <<'HASH'
+          import hashlib, subprocess
+          from pathlib import Path
+          files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'packages/example/public/bangers.woff2', 'bun.lock']).decode().strip('\0').split('\0')
+          producer = 'packages/web-renderer/src/drawing/draw-dom-element.ts'
+          with Path('qualification/inputs.sha256').open('w') as output:
+              for file in files:
+                  if file != producer:
+                      output.write(hashlib.sha256(Path(file).read_bytes()).hexdigest() + '  ' + file + '\n')
+          HASH
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          for arm in baseline candidate; do
+            mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
+            revision=HEAD
+            if [ "$arm" = baseline ]; then revision=8e46e3cc32987b563204a09c012bdfa94522519e; fi
+            git restore --source="$revision" -- "$producer"
+            shasum -a 256 "$producer" > "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c qualification/inputs.sha256
+            bunx turbo run make --filter=@remotion/web-renderer
+            rm -rf packages/web-renderer/.vitest/attachments
+            status=0
+            (cd packages/web-renderer && bunx vitest src/test/svg-readback-bounds.test.tsx src/test/svg-readback-colors.test.ts src/test/svg-readback-mask.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
+            printf '%s\n' "$status" > "qualification/$arm/status.txt"
+            shasum -a 256 --quiet -c qualification/inputs.sha256
+            shasum -a 256 --quiet -c "qualification/$arm/producer.sha256"
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/vertical-text-chrome.sha256"
+          done
+          git diff --exit-code -- "$producer"
+          python3 - <<'CHECK'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          root = Path('qualification')
+          reports = [json.loads((root / arm / 'web-renderer/report.json').read_text()) for arm in ['baseline', 'candidate']]
+          def identities(report):
+              return Counter((file['name'].split('/src/test/')[-1], case['fullName']) for file in report['testResults'] for case in file['assertionResults'])
+          assert identities(reports[0]) == identities(reports[1])
+          assert sum(identities(reports[0]).values()) == 12
+          assert [(r['numPassedTests'], r['numFailedTests'], r['numPendingTests']) for r in reports] == [(7, 1, 4), (8, 0, 4)]
+          failures = [case for file in reports[0]['testResults'] for case in file['assertionResults'] if case['status'] == 'failed']
+          assert len(failures) == 1 and failures[0]['fullName'] == 'preserves native SVG text with bounded readback surfaces'
+          assert (root / 'baseline/status.txt').read_text().strip() != '0'
+          assert (root / 'candidate/status.txt').read_text().strip() == '0'
+          print('Candidate passes all selected public checks; only the intended old-producer bounds test fails.')
+          CHECK
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-bounded-public-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Vertical Text Trace Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Vertical Text Trace Chrome.app"
+          fi
