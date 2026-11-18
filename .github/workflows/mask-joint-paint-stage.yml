@@ -1,7 +1,7 @@
-name: Compare mask phase readback and default contexts
+name: Compare native SVG image and mask transfer stages
 on:
   push:
-    branches: [codex/qualify-mask-phase-contexts]
+    branches: [codex/qualify-mask-native-image-stage]
 permissions:
   contents: read
 jobs:

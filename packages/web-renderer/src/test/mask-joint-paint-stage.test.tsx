@@ -323,7 +323,76 @@ test.for([
 			),
 			jointPhaseDefault: await countNativePixels(reference, jointPhaseDefault),
 			jointPhaseDirect: await countNativePixels(reference, jointPhaseDirect),
+			nativeImage: null as {
+				mismatchedPixels: number;
+				maxChannelDelta: number;
+			} | null,
+			nativeRepeat: null as {
+				mismatchedPixels: number;
+				maxChannelDelta: number;
+			} | null,
+			nativeImageError: null as string | null,
+			nativeRepeatError: null as string | null,
 		};
+		// Retain all original evidence even if an additional native capture fails.
+		await server.commands.writeFile(
+			`${folder}/comparison.json`,
+			JSON.stringify(results),
+		);
+		for (const stage of ['nativeImage', 'nativeRepeat'] as const) {
+			try {
+				const source = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(jointPhaseSvg.svg)}`;
+				const blob = await captureNativeReference(
+					{
+						...composition,
+						id: `${composition.id}-${stage}`,
+						width: composition.width * scale,
+						height: composition.height * scale,
+						component:
+							stage === 'nativeImage'
+								? () => (
+										<img
+											alt=""
+											src={source}
+											style={{
+												position: 'absolute',
+												left: jointPhaseSvg.left,
+												top: jointPhaseSvg.top,
+												width: jointPhaseSvg.width,
+												height: jointPhaseSvg.height,
+											}}
+										/>
+									)
+								: () => (
+										<div
+											style={{
+												transform: `scale(${scale})`,
+												transformOrigin: '0 0',
+											}}
+										>
+											<Component />
+										</div>
+									),
+					},
+					frame,
+					{omitBackground: mode !== 'hard'},
+				);
+				let binary = '';
+				for (const byte of new Uint8Array(await blob.arrayBuffer()))
+					binary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					`${folder}/${stage === 'nativeImage' ? 'native-image' : 'native-repeat'}.png`,
+					btoa(binary),
+					'base64',
+				);
+				results[stage] = await countNativePixels(reference, blob);
+			} catch (error) {
+				results[
+					stage === 'nativeImage' ? 'nativeImageError' : 'nativeRepeatError'
+				] = String(error);
+			}
+		}
+
 		await server.commands.writeFile(
 			`${folder}/comparison.json`,
 			JSON.stringify(results),
@@ -337,6 +406,10 @@ test.for([
 		expect.soft(results.jointPhase.mismatchedPixels).toBe(0);
 		expect.soft(results.bitmapPhaseDefault.mismatchedPixels).toBe(0);
 		expect.soft(results.jointPhaseDefault.mismatchedPixels).toBe(0);
-		expect(results.jointPhaseDirect.mismatchedPixels).toBe(0);
+		expect.soft(results.jointPhaseDirect.mismatchedPixels).toBe(0);
+		expect.soft(results.nativeImageError).toBeNull();
+		expect.soft(results.nativeRepeatError).toBeNull();
+		expect.soft(results.nativeImage?.mismatchedPixels).toBe(0);
+		expect(results.nativeRepeat?.mismatchedPixels).toBe(0);
 	},
 );
