@@ -39,7 +39,7 @@ jobs:
           git rev-parse HEAD > qualification/revision.txt
           git diff --exit-code bd54f7cf129192ef2584db2af779640db9af9e2d HEAD -- packages bun.lock package.json turbo.json
           python3 - <<'PIN'
-          import hashlib, subprocess
+          import hashlib, json, os, subprocess
           from pathlib import Path
           config = Path('packages/web-renderer/vitest.config.ts')
           source = config.read_text()
@@ -47,10 +47,16 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + ' executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,'))
           files = subprocess.check_output(['git', 'ls-files', '-z', 'packages', 'bun.lock', 'package.json', 'turbo.json']).decode().split('\0')
+          symlinks = {}
           with Path('qualification/inputs.sha256').open('w') as output:
               for file in files:
-                  if file:
+                  if not file:
+                      continue
+                  if Path(file).is_symlink():
+                      symlinks[file] = os.readlink(file)
+                  else:
                       output.write(hashlib.sha256(Path(file).read_bytes()).hexdigest() + '  ' + file + '\n')
+          Path('qualification/symlinks.json').write_text(json.dumps(symlinks, sort_keys=True, indent=2))
           PIN
           git diff --binary > qualification/working.diff
           "$binary" --version > qualification/chrome.txt
@@ -104,6 +110,12 @@ jobs:
               if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "$destination/snapshot-attachments"; fi
               if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "$destination/native-pixel-failures"; fi
               shasum -a 256 --quiet -c qualification/inputs.sha256
+              python3 - <<'LINKS'
+          import json, os
+          from pathlib import Path
+          for file, target in json.loads(Path('qualification/symlinks.json').read_text()).items():
+              assert Path(file).is_symlink() and os.readlink(file) == target, file
+          LINKS
               shasum -a 256 --quiet -c "$RUNNER_TEMP/browser-ci-chrome.sha256"
               if [ "$status" != 0 ]; then failed=1; fi
             done
