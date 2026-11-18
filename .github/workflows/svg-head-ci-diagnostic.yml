@@ -1,0 +1,47 @@
+name: Diagnose published SVG head CI
+on:
+  push:
+    branches: [codex/diagnose-svg-head-ci]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 8
+          persist-credentials: false
+      - run: git fetch --no-tags --depth=1 origin e6b9083c4984609e48db0453f3274e2123f30430
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.os == 'windows-latest' && '16' || '26' }}
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - name: Install hosted browsers
+        if: runner.os == 'macOS'
+        run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Build and bundle original integration inputs
+        if: runner.os == 'Windows'
+        run: |
+          bunx turbo run make --concurrency=2 --no-update-notifier
+          bunx turbo run bundle --filter=@remotion/example --no-update-notifier
+      - name: Compare exact main and published sources with diagnostic observations
+        shell: bash
+        run: python .github/scripts/diagnose-svg-head-ci.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svg-head-ci-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
