@@ -13,6 +13,7 @@ import {
 	pixelatedBackgroundSampler,
 	pixelatedBackgroundSamplerControl,
 } from './fixtures/background-image-pixelated-sampler-lifetime';
+import {backgroundImageRoundPosition} from './fixtures/background-image-round-position';
 import {
 	spaceTextMaskTransparent,
 	spaceTextMaskWhite,
@@ -363,6 +364,7 @@ export const Root: React.FC = () => {
 			<Composition {...pixelatedBackgroundSampler} />
 			<Composition {...pixelatedBackgroundSamplerControl} />
 			<Composition {...backgroundImageRound} />
+			<Composition {...backgroundImageRoundPosition} />
 			<Composition {...objectPosition} />
 			<Composition {...objectPositionMath} />
 			<Composition {...replacedElementPixelated} />
