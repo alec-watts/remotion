@@ -70,6 +70,7 @@ export const projectiveFilterInput = (
 	const Component: React.FC = () => {
 		const source = (
 			<div
+				data-projective-filter-source=""
 				data-mask-stage={mixedMarkup ? 'content' : undefined}
 				style={{
 					position: 'absolute',

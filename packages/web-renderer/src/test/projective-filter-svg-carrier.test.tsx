@@ -30,6 +30,11 @@ test.for(
 			'direct',
 			'readback',
 			'seeded-readback',
+			'identity-svg-dom',
+			'identity-svg-image',
+			'identity-direct',
+			'identity-readback',
+			'html-repeat',
 		] as const;
 		const probes: Record<
 			string,
@@ -64,18 +69,62 @@ test.for(
 		const source: {pending: Promise<HTMLImageElement> | null} = {pending: null};
 		let disposed = false;
 		const owned = new Set<HTMLImageElement>();
-		const carrier = projectiveFilterSvgCarrier(kind, preserving, (element) => {
-			if (!element) return;
-			source.pending = turnSvgIntoDrawable(element);
-			source.pending.then(
-				(ownedImage) => {
-					if (disposed) ownedImage.removeAttribute('src');
-					else owned.add(ownedImage);
+		const identitySource: {pending: Promise<HTMLImageElement> | null} = {
+			pending: null,
+		};
+		const ownImage = (pending: Promise<HTMLImageElement>) => {
+			pending.then(
+				(entry) => {
+					if (disposed) entry.removeAttribute('src');
+					else owned.add(entry);
 				},
 				() => {},
 			);
+		};
+
+		let sourceLayout: unknown = null;
+		const carrier = projectiveFilterSvgCarrier(kind, preserving, (element) => {
+			if (!element) return;
+			const target = element.querySelector<HTMLElement>(
+				'[data-projective-filter-source]',
+			);
+			if (!target) throw new Error('Projective fixture source is missing');
+			const style = getComputedStyle(target);
+			const parentStyle = getComputedStyle(target.parentElement!);
+			const svgStyle = getComputedStyle(element);
+			const bounds = target.getBoundingClientRect();
+			const svgBounds = element.getBoundingClientRect();
+			sourceLayout = {
+				transform: style.transform,
+				transformOrigin: style.transformOrigin,
+				filter: style.filter,
+				fontFamily: style.fontFamily,
+				fontSize: style.fontSize,
+				color: style.color,
+				parentPerspective: parentStyle.perspective,
+				parentPerspectiveOrigin: parentStyle.perspectiveOrigin,
+				parentTransformStyle: parentStyle.transformStyle,
+				svgFontFamily: svgStyle.fontFamily,
+				left: bounds.left - svgBounds.left,
+				top: bounds.top - svgBounds.top,
+				width: bounds.width,
+				height: bounds.height,
+			};
+			source.pending = turnSvgIntoDrawable(element);
+			ownImage(source.pending);
 		});
+		const identityCarrier = projectiveFilterSvgCarrier(
+			kind,
+			preserving,
+			(element) => {
+				if (!element) return;
+				identitySource.pending = turnSvgIntoDrawable(element);
+				ownImage(identitySource.pending);
+			},
+			true,
+		);
 		let image: HTMLImageElement | null = null;
+		let identityImage: HTMLImageElement | null = null;
 		try {
 			for (const mode of modes) {
 				let raster: OffscreenCanvas | null = null;
@@ -101,12 +150,36 @@ test.for(
 								experimental3DRendering: mode.endsWith('-experimental'),
 							})
 						).blob({format: 'png'});
+					} else if (mode === 'html-repeat') {
+						blob = await captureNativeReference(composition, 0, {
+							omitBackground: false,
+						});
 					} else if (mode === 'svg-dom') {
 						blob = await captureNativeReference(carrier, 0, {
 							omitBackground: false,
 						});
+						await server.commands.writeFile(
+							`${folder}/source-layout.json`,
+							JSON.stringify(sourceLayout),
+						);
+					} else if (mode === 'identity-svg-dom') {
+						blob = await captureNativeReference(identityCarrier, 0, {
+							omitBackground: false,
+						});
 					} else {
-						if (!image) {
+						const identity = mode.startsWith('identity-');
+						const transfer = identity ? mode.slice('identity-'.length) : mode;
+						if (identity && !identityImage) {
+							if (!identitySource.pending)
+								throw new Error('Identity source did not commit');
+							identityImage = await identitySource.pending;
+							const prefix = 'data:image/svg+xml;charset=utf-8,';
+							expect(identityImage.src.startsWith(prefix)).toBe(true);
+							await server.commands.writeFile(
+								`${folder}/source-identity.svg`,
+								decodeURIComponent(identityImage.src.slice(prefix.length)),
+							);
+						} else if (!identity && !image) {
 							if (!source.pending) throw new Error('SVG source did not commit');
 							image = await source.pending;
 							const prefix = 'data:image/svg+xml;charset=utf-8,';
@@ -117,12 +190,14 @@ test.for(
 							);
 						}
 
-						if (mode === 'svg-image') {
-							const url = image.src;
+						const selectedImage = identity ? identityImage : image;
+						if (!selectedImage) throw new Error('SVG image is unavailable');
+						if (transfer === 'svg-image') {
+							const url = selectedImage.src;
 							blob = await captureNativeReference(
 								{
 									...composition,
-									id: `${composition.id}-image`,
+									id: `${composition.id}-image${identity ? '-identity' : ''}`,
 									component: () => (
 										<img
 											src={url}
@@ -143,15 +218,15 @@ test.for(
 								composition.height,
 							);
 							const context = raster.getContext('2d', {
-								willReadFrequently: mode !== 'direct',
+								willReadFrequently: transfer !== 'direct',
 							})!;
-							if (mode === 'seeded-readback') {
+							if (transfer === 'seeded-readback') {
 								context.fillStyle = 'white';
 								context.fillRect(0, 0, raster.width, raster.height);
 							}
 
-							context.drawImage(image, 0, 0);
-							if (mode === 'direct')
+							context.drawImage(selectedImage, 0, 0);
+							if (transfer === 'direct')
 								blob = await raster.convertToBlob({type: 'image/png'});
 							else {
 								output = new OffscreenCanvas(raster.width, raster.height);
