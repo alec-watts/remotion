@@ -18,6 +18,8 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+      - name: Fetch the pinned public renderer producer
+        run: git fetch --no-tags --depth=1 origin 551090053016ebf8aed03903f685339a15bc37ea
       - uses: actions/setup-node@v6
         with:
           node-version: 26
