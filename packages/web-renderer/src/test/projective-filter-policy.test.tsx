@@ -26,7 +26,7 @@ const render = async (
 
 test.for(
 	filterInputCases
-		.filter(({kind}) => kind === 'scaled' || kind === 'reflected')
+		.filter(({kind}) => !kind.startsWith('projective'))
 		.flatMap(({kind}) =>
 			[false, true].map((preserving) => ({kind, preserving})),
 		),
@@ -82,6 +82,34 @@ test.for(
 		}
 
 		const comparison = await compareNativePixels(expected, actual);
+		const folder = `test/__results__/filter-policy/${server.browser}/${kind}-${preserving}`;
+		for (const [role, blob] of [
+			['original', original],
+			['expected', expected],
+			['actual', actual],
+			['diff', comparison.diff],
+		] as const) {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				`${folder}/${role}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(
+			`${folder}/comparison.json`,
+			JSON.stringify({
+				kind,
+				preserving,
+				mismatchedPixels: comparison.mismatchedPixels,
+				maxChannelDelta: comparison.maxChannelDelta,
+				sample,
+				userAgent: navigator.userAgent,
+			}),
+		);
 		expect(comparison.mismatchedPixels).toBe(0);
 		if (sample && server.browser !== 'webkit')
 			expect(sample).toEqual([0, 0, 255, 255]);

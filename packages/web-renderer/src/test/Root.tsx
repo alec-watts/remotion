@@ -115,6 +115,7 @@ import {
 	issue12604Precomposed,
 	issue12604PrecomposedFractional,
 } from './fixtures/issue-12604-scaled-precompose-text';
+import {largePreserve3DContext} from './fixtures/large-preserve-3d-context';
 import {lineHeight} from './fixtures/line-height';
 import {linearGradient} from './fixtures/linear-gradient';
 import {manyLayers} from './fixtures/many-layers';
@@ -471,6 +472,7 @@ export const Root: React.FC = () => {
 			<Composition {...gridSamplerParent} />
 			<Composition {...threeDTransformOpacity} />
 			<Folder name="Experimental3D">
+				<Composition {...largePreserve3DContext} />
 				<Composition {...paintedPlaneBounds(true)} />
 				<Composition {...paintedPlaneBounds(false)} />
 				{[

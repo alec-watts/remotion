@@ -13,6 +13,7 @@ import {
 import {getElementsNeedingIsolation} from './drawing/isolation';
 import {getBiggestBoundingClientRect} from './get-biggest-bounding-client-rect';
 import type {InternalState} from './internal-state';
+import {createPageResponsivenessController} from './page-responsiveness';
 import {createTreeWalkerCleanupAfterChildren} from './tree-walker-cleanup-after-children';
 import {walkOverNode} from './walk-over-node';
 import {createPaintOrderTraversal} from './walk-tree';
@@ -141,14 +142,20 @@ type Preserve3DPlane = {
 	projection: NonNullable<ReturnType<typeof projectedPlane>>;
 	forceSubtreePrecompositing: boolean;
 };
-const orderPreserve3DPlanes = (planes: Preserve3DPlane[]) => {
+const orderPreserve3DPlanes = async (
+	planes: Preserve3DPlane[],
+	checkpoint: () => Promise<void>,
+) => {
+	await checkpoint();
 	// Computed CSS matrices are rounded: nominally coplanar tiles can differ
 	// by a few ten-thousandths of a projected CSS pixel. Keep these DOM ties
 	// instead of treating rounding noise as a context-wide intersection.
 	const edges: number[][] = planes.map(() => []);
 	const incoming = planes.map(() => 0);
+	let comparisons = 0;
 	for (let i = 0; i < planes.length; i++) {
 		for (let j = i + 1; j < planes.length; j++) {
+			if (++comparisons % 128 === 0) await checkpoint();
 			const overlap = intersectPlanePolygons(
 				planes[i].projection.points,
 				planes[j].projection.points,
@@ -177,6 +184,7 @@ const orderPreserve3DPlanes = (planes: Preserve3DPlane[]) => {
 	const ordered: Preserve3DPlane[] = [];
 	const painted = new Set();
 	while (ordered.length < planes.length) {
+		await checkpoint();
 		const next = incoming.findIndex(
 			(count, i) => count === 0 && !painted.has(i),
 		);
@@ -189,13 +197,15 @@ const orderPreserve3DPlanes = (planes: Preserve3DPlane[]) => {
 	return ordered;
 };
 
-const planPreserve3DPlanes = ({
+const planPreserve3DPlanes = async ({
 	element,
 	rootElement,
 	parentRect,
 	transformStyleCache,
 	isolatedElements,
 	experimental3DRendering,
+	waitForPageResponsiveness,
+	signal,
 }: {
 	element: HTMLElement | SVGElement;
 	rootElement: HTMLElement | SVGElement;
@@ -203,7 +213,22 @@ const planPreserve3DPlanes = ({
 	transformStyleCache: TransformStyleCache;
 	isolatedElements: WeakSet<Element>;
 	experimental3DRendering: boolean;
+	waitForPageResponsiveness: (() => Promise<void>) | null;
+	signal: AbortSignal | null;
 }) => {
+	const wait =
+		waitForPageResponsiveness ??
+		createPageResponsivenessController({
+			intervalInMilliseconds: 33,
+			now: () => performance.now(),
+			wait: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+		}).waitIfNeeded;
+	const checkpoint = async () => {
+		if (signal?.aborted) throw new Error('3D plane planning was cancelled');
+		await wait();
+		if (signal?.aborted) throw new Error('3D plane planning was cancelled');
+	};
+
 	const planes: Preserve3DPlane[] = [];
 	let supported = true;
 	const visit = (node: Node): Node[] | null | undefined => {
@@ -289,12 +314,6 @@ const planPreserve3DPlanes = ({
 					return;
 				}
 
-				// Bound quadratic overlap planning for large unrelated compositions.
-				if (planes.length >= 256) {
-					supported = false;
-					return;
-				}
-
 				planes.push({
 					node,
 					projection,
@@ -319,13 +338,15 @@ const planPreserve3DPlanes = ({
 		return null;
 	};
 
-	const walk = (node: Node) => {
+	const walk = async (node: Node): Promise<void> => {
 		const children = visit(node);
-		if (children) for (const child of children) walk(child);
+		await checkpoint();
+		if (children) for (const child of children) await walk(child);
 	};
 
-	walk(element);
-	return supported ? orderPreserve3DPlanes(planes) : null;
+	await checkpoint();
+	await walk(element);
+	return supported ? orderPreserve3DPlanes(planes, checkpoint) : null;
 };
 
 export const compose = async ({
@@ -392,13 +413,15 @@ export const compose = async ({
 			(treeWalker.currentNode instanceof HTMLElement ||
 				treeWalker.currentNode instanceof SVGElement) &&
 			preserves3DChildren(getComputedStyle(treeWalker.currentNode))
-				? planPreserve3DPlanes({
+				? await planPreserve3DPlanes({
 						element: treeWalker.currentNode,
 						rootElement: element,
 						parentRect,
 						transformStyleCache,
 						isolatedElements,
 						experimental3DRendering: internalState.experimental3DRendering,
+						waitForPageResponsiveness,
+						signal: internalState.rasterImageLoaderState.signal,
 					})
 				: null;
 		let val;
