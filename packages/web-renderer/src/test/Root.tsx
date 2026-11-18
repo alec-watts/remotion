@@ -250,6 +250,11 @@ import {
 	svgInactiveTitledFont,
 } from './fixtures/svg-inactive-titled-font';
 import {
+	svgMaskedPaintProfile,
+	svgMaskedPaintProfiles,
+	svgMaskedPaintModes,
+} from './fixtures/svg-masked-paint-profile';
+import {
 	svgPreferredFontCarrier,
 	svgPreferredFontModes,
 } from './fixtures/svg-preferred-font-carrier';
@@ -307,6 +312,7 @@ import {transitionClockWipe} from './fixtures/transition-clock-wipe';
 import {transitionIris} from './fixtures/transition-iris';
 import {transitionWipe} from './fixtures/transition-wipe';
 import {unwrapped} from './fixtures/unwrapped';
+import {webkitLayeredBackdrop} from './fixtures/webkit-layered-backdrop';
 import {whiteSpaceCollapsing} from './fixtures/whitespace-collapsing';
 import {whiteSpaceCollapsing2} from './fixtures/whitespace-collapsing-2';
 
@@ -647,6 +653,16 @@ export const Root: React.FC = () => {
 				const composition = svgReadbackMask(mode);
 				return <Composition key={composition.id} {...composition} />;
 			})}
+			{[false, true].map((translucent) => {
+				const composition = webkitLayeredBackdrop(translucent);
+				return <Composition key={composition.id} {...composition} />;
+			})}
+			{svgMaskedPaintProfiles.flatMap((profile) =>
+				svgMaskedPaintModes.map((mask) => {
+					const composition = svgMaskedPaintProfile({profile, mask});
+					return <Composition key={composition.id} {...composition} />;
+				}),
+			)}
 			<Composition {...queuedFrameCapturePreview} />
 		</>
 	);
