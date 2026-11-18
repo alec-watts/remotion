@@ -153,6 +153,7 @@ import {
 	mixBlendModeAllModes,
 	mixBlendModeGroups,
 } from './fixtures/mix-blend-mode';
+import {mixedBackgroundSampling} from './fixtures/mixed-background-sampling';
 import {multiLevelTransformOrigins} from './fixtures/multi-level-transform-origins';
 import {nativeReferenceControl} from './fixtures/native-reference-control';
 import {nestedTranslateScale} from './fixtures/nested-translate-scale';
@@ -639,6 +640,10 @@ export const Root: React.FC = () => {
 					/>
 				)),
 			)}
+			{[false, true].map((pixelated) => {
+				const fixture = mixedBackgroundSampling(pixelated);
+				return <Composition key={fixture.id} {...fixture} />;
+			})}
 			<Composition {...queuedFrameCapturePreview} />
 		</>
 	);
