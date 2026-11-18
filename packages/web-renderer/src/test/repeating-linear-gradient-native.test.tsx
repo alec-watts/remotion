@@ -112,37 +112,50 @@ test.for(cases)(
 
 		// Probe the browser's own CSS gradient rasterizer at the same physical size.
 		// This diagnostic does not replace the original renderer comparison.
-		const sourceProbe = {
-			error: 'not-completed' as string | null,
-			comparison: null as Awaited<ReturnType<typeof countNativePixels>> | null,
-		};
-		try {
-			if (serializedSource === null)
-				throw new Error('Native source was not serialized');
-			const width = fixture.width * scale;
-			const height = fixture.height * scale;
-			const image = new Image();
-			image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="${width}" height="${height}">${serializedSource}</foreignObject></svg>`)}`;
-			await image.decode();
-			const canvas = new OffscreenCanvas(width, height);
+		for (const density of [1, 2]) {
+			const sourceProbe = {
+				density,
+				devicePixelRatio: window.devicePixelRatio,
+				viewportScale: window.visualViewport?.scale ?? null,
+				userAgent: navigator.userAgent,
+				error: 'not-completed' as string | null,
+				comparison: null as Awaited<
+					ReturnType<typeof countNativePixels>
+				> | null,
+			};
+			const name = density === 1 ? 'native-source' : 'native-source-density-2';
 			try {
-				canvas.getContext('2d')!.drawImage(image, 0, 0);
-				const blob = await canvas.convertToBlob({type: 'image/png'});
-				await save('native-source', blob);
-				sourceProbe.comparison = await countNativePixels(reference, blob);
-				sourceProbe.error = null;
-			} finally {
-				canvas.width = 0;
-				canvas.height = 0;
+				if (serializedSource === null)
+					throw new Error('Native source was not serialized');
+				const width = fixture.width * scale;
+				const height = fixture.height * scale;
+				const image = new Image();
+				const viewport =
+					density === 1 ? '' : ` viewBox="0 0 ${width} ${height}"`;
+				image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width * density}" height="${height * density}"${viewport}><foreignObject width="${width}" height="${height}">${serializedSource}</foreignObject></svg>`)}`;
+				await image.decode();
+				const canvas = new OffscreenCanvas(width, height);
+				try {
+					const context = canvas.getContext('2d')!;
+					if (density === 1) context.drawImage(image, 0, 0);
+					else context.drawImage(image, 0, 0, width, height);
+					const blob = await canvas.convertToBlob({type: 'image/png'});
+					await save(name, blob);
+					sourceProbe.comparison = await countNativePixels(reference, blob);
+					sourceProbe.error = null;
+				} finally {
+					canvas.width = 0;
+					canvas.height = 0;
+				}
+			} catch (error) {
+				sourceProbe.error = String(error);
 			}
-		} catch (error) {
-			sourceProbe.error = String(error);
-		}
 
-		await server.commands.writeFile(
-			`${folder}/native-source.json`,
-			JSON.stringify(sourceProbe),
-		);
+			await server.commands.writeFile(
+				`${folder}/${name}.json`,
+				JSON.stringify(sourceProbe),
+			);
+		}
 
 		record.comparison = await countNativePixels(reference, actual);
 		await checkpoint();

@@ -1,7 +1,7 @@
-name: Qualify repeating gradient native sources
+name: Qualify fractional repeating gradient periods
 on:
   push:
-    branches: [codex/qualify-repeating-gradient-native-source]
+    branches: [codex/qualify-repeating-gradient-fractional-periods]
 permissions:
   contents: read
 jobs:

@@ -355,10 +355,7 @@ export const parseLinearGradient = (
 	};
 };
 
-const repeatColorStops = (
-	stops: ColorStop[],
-	periodInDevicePixels: number,
-): ColorStop[] => {
+const repeatColorStops = (stops: ColorStop[]): ColorStop[] => {
 	const first = stops[0].position;
 	const last = stops[stops.length - 1].position;
 	const period = last - first;
@@ -371,34 +368,12 @@ const repeatColorStops = (
 		];
 	}
 
-	if (periodInDevicePixels < 1) {
-		const colors = stops.map((stop) => cssColorToRgba(stop.color)!);
-		const positions = stops.map((stop) => stop.position);
-		const total = positions[positions.length - 1] - positions[0];
-		let r = 0;
-		let g = 0;
-		let b = 0;
-		let a = 0;
-		for (let i = 0; i < colors.length - 1; i++) {
-			const weight = (positions[i + 1] - positions[i]) / (2 * total);
-			for (const sample of [colors[i], colors[i + 1]]) {
-				r += sample.r * sample.a * weight;
-				g += sample.g * sample.a * weight;
-				b += sample.b * sample.a * weight;
-				a += sample.a * weight;
-			}
-		}
-
-		const color =
-			a === 0 ? 'transparent' : `rgba(${r / a}, ${g / a}, ${b / a}, ${a})`;
-		return [
-			{position: 0, color},
-			{position: 1, color},
-		];
-	}
-
 	const start = Math.floor(-first / period) - 1;
 	const end = Math.ceil((1 - last) / period) + 1;
+	if ((end - start + 1) * stops.length > 65_536) {
+		throw new Error('Repeating gradient exceeds the Canvas color-stop budget');
+	}
+
 	const repeated: ColorStop[] = [];
 	for (let cycle = start; cycle <= end; cycle++) {
 		for (let i = 0; i < stops.length; i++) {
@@ -459,19 +434,8 @@ export const createCanvasGradient = ({
 		gradientInfo.colorStops,
 		(length * 2) / cssPixelsPerUnit,
 	);
-	const matrix = ctx.getTransform();
-	const period =
-		resolvedStops[resolvedStops.length - 1].position -
-		resolvedStops[0].position;
-	const projectedLength =
-		Math.hypot(
-			matrix.a * cos + matrix.c * sin,
-			matrix.b * cos + matrix.d * sin,
-		) *
-		length *
-		2;
 	const stops = gradientInfo.repeating
-		? repeatColorStops(resolvedStops, period * projectedLength)
+		? repeatColorStops(resolvedStops)
 		: resolvedStops;
 	const {start, end, toCanvasOffset} = getCanvasGradientRange(stops);
 
