@@ -1,0 +1,62 @@
+name: Trace Linux native frame readback and capabilities
+on:
+  push:
+    branches: [codex/trace-linux-video-frame-readback]
+permissions:
+  contents: read
+jobs:
+  trace:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Record source and runtime
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/revision.txt
+          node --version > evidence/node.txt
+          bun --version > evidence/bun.txt
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          records=[]
+          for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
+            if not raw: continue
+            p=os.fsdecode(raw)
+            if os.path.islink(p): records.append({'path':p,'symlink':os.readlink(p)})
+            else: records.append({'path':p,'sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest()})
+          Path('evidence/inputs.json').write_text(json.dumps(records))
+          PY
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps firefox webkit
+      - run: bunx turbo run make --filter=@remotion/web-renderer
+      - name: Record readback without suppressing API errors
+        run: |
+          set -o pipefail
+          failed=0
+          for browser in firefox webkit; do
+            status=0
+            (cd packages/web-renderer && bunx vitest src/test/video-frame-readback-capability.test.ts --run --project "$browser" --reporter=default --reporter=json --outputFile="$GITHUB_WORKSPACE/evidence/$browser.json") 2>&1 | tee "evidence/$browser.log" || status=$?
+            printf '%s\n' "$status" > "evidence/$browser.status"
+            if [ "$status" != 0 ]; then failed=1; fi
+          done
+          if [ -d packages/web-renderer/test/__results__/frame-readback ]; then
+            mv packages/web-renderer/test/__results__/frame-readback evidence/captures
+          fi
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-frame-readback
+          path: evidence
+          if-no-files-found: error
+          retention-days: 7
