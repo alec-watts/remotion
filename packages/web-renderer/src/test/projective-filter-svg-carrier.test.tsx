@@ -1,0 +1,201 @@
+import '../symbol-dispose';
+import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
+import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
+import {renderStillOnWeb} from '../render-still-on-web';
+import {filterInputCases} from './fixtures/projective-filter-input';
+import {
+	projectiveFilterAnchored,
+	projectiveFilterSvgCarrier,
+} from './fixtures/projective-filter-svg-carrier';
+import {captureNativeReference, countNativePixels} from './native-reference';
+
+test.for(
+	filterInputCases.flatMap(({kind}) =>
+		[false, true].map((preserving) => ({kind, preserving})),
+	),
+)(
+	'compares existing SVG filter inputs $kind preserving=$preserving',
+	{timeout: 20_000},
+	async ({kind, preserving}) => {
+		const composition = projectiveFilterAnchored(kind, preserving);
+		const folder = `test/__results__/projective-svg/${server.browser}/${kind}-${preserving}`;
+		const modes = [
+			'html-default',
+			'html-experimental',
+			'svg-dom',
+			'svg-image',
+			'svg-default',
+			'svg-experimental',
+			'direct',
+			'readback',
+			'seeded-readback',
+		] as const;
+		const probes: Record<
+			string,
+			{error: string | null; mismatchedPixels: number | null}
+		> = Object.fromEntries(
+			modes.map((mode) => [
+				mode,
+				{error: 'not-completed', mismatchedPixels: null},
+			]),
+		);
+		const checkpoint = () =>
+			server.commands.writeFile(
+				`${folder}/comparison.json`,
+				JSON.stringify({kind, preserving, frame: 0, probes}),
+			);
+		const save = async (name: string, blob: Blob) => {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				`${folder}/${name}.png`,
+				btoa(binary),
+				'base64',
+			);
+		};
+
+		await checkpoint();
+		const reference = await captureNativeReference(composition, 0, {
+			omitBackground: false,
+		});
+		await save('reference', reference);
+		const source: {pending: Promise<HTMLImageElement> | null} = {pending: null};
+		let disposed = false;
+		const owned = new Set<HTMLImageElement>();
+		const carrier = projectiveFilterSvgCarrier(kind, preserving, (element) => {
+			if (!element) return;
+			source.pending = turnSvgIntoDrawable(element);
+			source.pending.then(
+				(ownedImage) => {
+					if (disposed) ownedImage.removeAttribute('src');
+					else owned.add(ownedImage);
+				},
+				() => {},
+			);
+		});
+		let image: HTMLImageElement | null = null;
+		try {
+			for (const mode of modes) {
+				let raster: OffscreenCanvas | null = null;
+				let output: OffscreenCanvas | null = null;
+				try {
+					let blob: Blob;
+					if (
+						mode === 'html-default' ||
+						mode === 'html-experimental' ||
+						mode === 'svg-default' ||
+						mode === 'svg-experimental'
+					) {
+						blob = await (
+							await renderStillOnWeb({
+								composition: mode.startsWith('html-')
+									? composition
+									: projectiveFilterSvgCarrier(kind, preserving),
+								frame: 0,
+								inputProps: {},
+								licenseKey: 'free-license',
+								allowHtmlInCanvas: false,
+								transparent: false,
+								experimental3DRendering: mode.endsWith('-experimental'),
+							})
+						).blob({format: 'png'});
+					} else if (mode === 'svg-dom') {
+						blob = await captureNativeReference(carrier, 0, {
+							omitBackground: false,
+						});
+					} else {
+						if (!image) {
+							if (!source.pending) throw new Error('SVG source did not commit');
+							image = await source.pending;
+							const prefix = 'data:image/svg+xml;charset=utf-8,';
+							expect(image.src.startsWith(prefix)).toBe(true);
+							await server.commands.writeFile(
+								`${folder}/source.svg`,
+								decodeURIComponent(image.src.slice(prefix.length)),
+							);
+						}
+
+						if (mode === 'svg-image') {
+							const url = image.src;
+							blob = await captureNativeReference(
+								{
+									...composition,
+									id: `${composition.id}-image`,
+									component: () => (
+										<img
+											src={url}
+											style={{
+												display: 'block',
+												width: composition.width,
+												height: composition.height,
+											}}
+										/>
+									),
+								},
+								0,
+								{omitBackground: false},
+							);
+						} else {
+							raster = new OffscreenCanvas(
+								composition.width,
+								composition.height,
+							);
+							const context = raster.getContext('2d', {
+								willReadFrequently: mode !== 'direct',
+							})!;
+							if (mode === 'seeded-readback') {
+								context.fillStyle = 'white';
+								context.fillRect(0, 0, raster.width, raster.height);
+							}
+
+							context.drawImage(image, 0, 0);
+							if (mode === 'direct')
+								blob = await raster.convertToBlob({type: 'image/png'});
+							else {
+								output = new OffscreenCanvas(raster.width, raster.height);
+								output
+									.getContext('2d')!
+									.putImageData(
+										context.getImageData(0, 0, raster.width, raster.height),
+										0,
+										0,
+									);
+								blob = await output.convertToBlob({type: 'image/png'});
+							}
+						}
+					}
+
+					await save(mode, blob);
+					probes[mode] = {
+						error: null,
+						...(await countNativePixels(reference, blob)),
+					};
+				} catch (error) {
+					probes[mode] = {error: String(error), mismatchedPixels: null};
+				} finally {
+					if (raster) {
+						raster.width = 0;
+						raster.height = 0;
+					}
+
+					if (output) {
+						output.width = 0;
+						output.height = 0;
+					}
+
+					await checkpoint();
+				}
+			}
+		} finally {
+			disposed = true;
+			for (const entry of owned) entry.removeAttribute('src');
+		}
+
+		for (const probe of Object.values(probes)) {
+			expect.soft(probe.error).toBe(null);
+			expect.soft(probe.mismatchedPixels).toBe(0);
+		}
+	},
+);

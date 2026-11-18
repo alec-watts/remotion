@@ -184,6 +184,8 @@ import {
 	gridSamplerParent,
 	reviewSceneSize,
 } from './fixtures/preserve-3d-depth';
+import {filterInputCases} from './fixtures/projective-filter-input';
+import {projectiveFilterSvgCarrier} from './fixtures/projective-filter-svg-carrier';
 import {queuedFrameCapturePreview} from './fixtures/queued-frame-capture';
 import {replacedElementPixelated} from './fixtures/replaced-element-pixelated';
 import {
@@ -317,6 +319,14 @@ import {whiteSpaceCollapsing2} from './fixtures/whitespace-collapsing-2';
 export const Root: React.FC = () => {
 	return (
 		<>
+			<Folder name="Projective-SVG-controls">
+				{filterInputCases.flatMap(({kind}) =>
+					[false, true].map((preserving) => {
+						const fixture = projectiveFilterSvgCarrier(kind, preserving);
+						return <Composition key={fixture.id} {...fixture} />;
+					}),
+				)}
+			</Folder>
 			<Composition {...svgDataMimeLowercase} />
 			<Composition {...svgDataMimeUppercase} />
 			<Composition {...svgDataMimeCoverLowercase} />
