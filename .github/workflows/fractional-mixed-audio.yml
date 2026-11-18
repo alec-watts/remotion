@@ -74,6 +74,7 @@ jobs:
           PY
       - name: Compare original audio and frame tests with unchanged deadlines
         run: |
+          set -o pipefail
           baseline=9e91f5d42054bd7db962c0ef7ce5aa24ad2d2515
           producers=(packages/web-renderer/src/render-media-on-web.tsx packages/web-renderer/src/update-time.tsx)
           failed=0
