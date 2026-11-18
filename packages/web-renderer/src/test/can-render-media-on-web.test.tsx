@@ -1,5 +1,6 @@
 import {ALL_FORMATS, AudioBufferSink, BlobSource, Input} from 'mediabunny';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {canRenderMediaOnWeb} from '../can-render-media-on-web';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import {pitchShiftAudio} from './fixtures/pitch-shift-audio';
@@ -254,6 +255,37 @@ test('audio-only readiness agrees with an actual PCM export', async () => {
 
 		totalSamples += buffer.length;
 	}
+
+	const videoCapability = await canRenderMediaOnWeb({
+		container: 'mp4',
+		videoCodec: 'h264',
+		muted: true,
+		width: pitchShiftAudio.width,
+		height: pitchShiftAudio.height,
+		outputTarget: 'arraybuffer',
+	});
+	const directory = `test/__results__/audio-readiness/${server.browser}`;
+	const bytes = new Uint8Array(await (await result.getBlob()).arrayBuffer());
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	await server.commands.writeFile(
+		`${directory}/export.wav`,
+		btoa(binary),
+		'base64',
+	);
+	await server.commands.writeFile(
+		`${directory}/report.json`,
+		JSON.stringify({
+			browser: server.browser,
+			platform: server.platform,
+			nodeVersion: server.version,
+			userAgent: navigator.userAgent,
+			capability,
+			videoCapability,
+			totalSamples,
+			wrongSamples,
+		}),
+	);
 
 	expect(totalSamples).toBe(1600);
 	expect(wrongSamples).toBe(0);
