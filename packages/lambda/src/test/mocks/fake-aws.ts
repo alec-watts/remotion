@@ -12,7 +12,7 @@
  * Relies on ../preload.ts resolving @remotion/lambda-client to its sources.
  */
 import {afterAll, afterEach, beforeAll, spyOn, type Mock} from 'bun:test';
-import {createReadStream, writeFileSync} from 'node:fs';
+import {appendFileSync, createReadStream, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {speculateFunctionName} from '@remotion/lambda-client';
 import {openBrowser, RenderInternals} from '@remotion/renderer';
@@ -80,6 +80,32 @@ const realGenerateRenderId = lifecycle.generateRandomHashWithLifeCycleRule;
 
 const webhookCalls: InvokeWebhookParams[] = [];
 const pendingBrowserCloses: Promise<void>[] = [];
+const browserStates = new Map<number, string>();
+const browserIds = new WeakMap<object, number>();
+let nextBrowserId = 0;
+const traceBrowser = (event: string, id: number | null = null) => {
+	const journal = process.env.REMOTION_LAMBDA_BROWSER_TRACE;
+	if (!journal) return;
+	appendFileSync(
+		journal,
+		`${JSON.stringify({
+			event,
+			id,
+			time: Date.now(),
+			states: [...browserStates],
+			pendingCloses: pendingBrowserCloses.length,
+			sigint: process.listeners('SIGINT').map((listener) => ({
+				name: listener.name,
+				source: listener.toString().slice(0, 800),
+			})),
+		})}\n`,
+	);
+};
+
+if (process.env.REMOTION_LAMBDA_BROWSER_TRACE) {
+	process.on('SIGINT', () => traceBrowser('SIGINT'));
+	process.on('exit', (code) => traceBrowser(`exit-${code}`));
+}
 
 export const getWebhookCalls = () => webhookCalls;
 export const resetWebhookCalls = () => {
@@ -238,14 +264,42 @@ export const fakeAwsDefaults: FakeAwsDefaults = {
 	// Bun's WebSocket has no Node socket to ref()/unref(), so the warm-function
 	// browser cache cannot be exercised here. Open a browser per invocation.
 	getBrowserInstance: async ({logLevel}) => {
-		const instance = await openBrowser('chrome', {logLevel});
-		return {instance, configurationString: 'chrome'};
+		const id = ++nextBrowserId;
+		browserStates.set(id, 'launching');
+		traceBrowser('launch-start', id);
+		try {
+			const instance = await openBrowser('chrome', {logLevel});
+			browserIds.set(instance, id);
+			browserStates.set(id, 'open');
+			traceBrowser('launch-complete', id);
+			return {instance, configurationString: 'chrome'};
+		} catch (error) {
+			browserStates.set(id, 'launch-failed');
+			traceBrowser('launch-failed', id);
+			throw error;
+		}
 	},
 	forgetBrowserEventLoop: ({launchedBrowser}) => {
-		pendingBrowserCloses.push(launchedBrowser.instance.close({silent: false}));
+		const id = browserIds.get(launchedBrowser.instance) ?? null;
+		if (id !== null) browserStates.set(id, 'closing');
+		traceBrowser('forget-close-start', id);
+		const closing = launchedBrowser.instance.close({silent: false});
+		closing.then(
+			() => {
+				if (id !== null) browserStates.set(id, 'closed');
+				traceBrowser('forget-close-complete', id);
+			},
+			() => traceBrowser('forget-close-rejected', id),
+		);
+		pendingBrowserCloses.push(closing);
 	},
 	closeBrowserInstance: async ({launchedBrowser}) => {
+		const id = browserIds.get(launchedBrowser.instance) ?? null;
+		if (id !== null) browserStates.set(id, 'closing');
+		traceBrowser('direct-close-start', id);
 		await launchedBrowser.instance.close({silent: true});
+		if (id !== null) browserStates.set(id, 'closed');
+		traceBrowser('direct-close-complete', id);
 	},
 	// Identity of the simulated Lambda function.
 	getCurrentRegionInFunction: () => 'eu-central-1',
@@ -355,10 +409,13 @@ export const fakeAws = (): FakeAwsSpies => {
 export const useFakeAws = () => {
 	beforeAll(installFakeAws);
 	afterEach(async () => {
+		traceBrowser('afterEach-start');
 		try {
 			await waitForPromisesToFinish(pendingBrowserCloses.splice(0));
+			traceBrowser('afterEach-drained');
 		} finally {
 			resetFakeAws();
+			traceBrowser('afterEach-reset');
 		}
 	});
 	afterAll(uninstallFakeAws);

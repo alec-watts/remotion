@@ -1,0 +1,61 @@
+name: Trace Lambda test browser lifetimes
+on:
+  push:
+    branches: [codex/trace-lambda-browser-lifetime]
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 25
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - name: Record exact inputs
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/revision.txt
+          node --version > evidence/node.txt
+          bun --version > evidence/bun.txt
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          records=[]
+          for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
+            if not raw: continue
+            p=os.fsdecode(raw)
+            if os.path.islink(p): records.append({'path':p,'symlink':os.readlink(p)})
+            else:
+              with open(p,'rb') as f: digest=hashlib.sha256(f.read()).hexdigest()
+              records.append({'path':p,'sha256':digest})
+          with open('evidence/inputs.json','w') as f: json.dump(records,f)
+          PY
+      - name: Install frozen dependencies
+        run: bun ci
+      - name: Build packages
+        run: bun run build
+      - name: Ensure hosted browser
+        working-directory: packages/lambda
+        run: bunx remotion browser ensure
+      - name: Trace original integration suite
+        timeout-minutes: 10
+        env:
+          REMOTION_LAMBDA_BROWSER_TRACE: ${{ github.workspace }}/evidence/browser-lifetimes.jsonl
+        run: |
+          set -o pipefail
+          cd packages/lambda
+          bun test src/test/integration --run 2>&1 | tee ../../evidence/integration.log
+      - name: Archive trace and source inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-browser-lifetimes
+          path: evidence
+          if-no-files-found: error
+          retention-days: 7
