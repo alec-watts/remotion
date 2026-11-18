@@ -1,7 +1,7 @@
-name: Qualify repeating linear gradients
+name: Qualify repeating gradient native sources
 on:
   push:
-    branches: [codex/qualify-repeating-linear-gradient]
+    branches: [codex/qualify-repeating-gradient-native-source]
 permissions:
   contents: read
 jobs:

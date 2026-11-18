@@ -362,12 +362,18 @@ const repeatColorStops = (
 	const first = stops[0].position;
 	const last = stops[stops.length - 1].position;
 	const period = last - first;
-	if (period === 0 || periodInDevicePixels < 1) {
+	// Browsers paint coincident repeating stops with the last authored color.
+	if (period === 0) {
+		const {color} = stops[stops.length - 1];
+		return [
+			{position: 0, color},
+			{position: 1, color},
+		];
+	}
+
+	if (periodInDevicePixels < 1) {
 		const colors = stops.map((stop) => cssColorToRgba(stop.color)!);
-		const positions =
-			period === 0
-				? stops.map((_, i) => i)
-				: stops.map((stop) => stop.position);
+		const positions = stops.map((stop) => stop.position);
 		const total = positions[positions.length - 1] - positions[0];
 		let r = 0;
 		let g = 0;

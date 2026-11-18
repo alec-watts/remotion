@@ -48,6 +48,7 @@ test.for(cases)(
 		await checkpoint();
 		const Source = fixture.component;
 		let reference: Blob;
+		let serializedSource: string | null = null;
 		try {
 			reference = await captureNativeReference(
 				{
@@ -57,6 +58,12 @@ test.for(cases)(
 					height: fixture.height * scale,
 					component: () => (
 						<div
+							ref={(element) => {
+								if (element)
+									serializedSource = new XMLSerializer().serializeToString(
+										element,
+									);
+							}}
 							style={{
 								position: 'absolute',
 								width: fixture.width,
@@ -102,6 +109,40 @@ test.for(cases)(
 			await checkpoint();
 			throw error;
 		}
+
+		// Probe the browser's own CSS gradient rasterizer at the same physical size.
+		// This diagnostic does not replace the original renderer comparison.
+		const sourceProbe = {
+			error: 'not-completed' as string | null,
+			comparison: null as Awaited<ReturnType<typeof countNativePixels>> | null,
+		};
+		try {
+			if (serializedSource === null)
+				throw new Error('Native source was not serialized');
+			const width = fixture.width * scale;
+			const height = fixture.height * scale;
+			const image = new Image();
+			image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="${width}" height="${height}">${serializedSource}</foreignObject></svg>`)}`;
+			await image.decode();
+			const canvas = new OffscreenCanvas(width, height);
+			try {
+				canvas.getContext('2d')!.drawImage(image, 0, 0);
+				const blob = await canvas.convertToBlob({type: 'image/png'});
+				await save('native-source', blob);
+				sourceProbe.comparison = await countNativePixels(reference, blob);
+				sourceProbe.error = null;
+			} finally {
+				canvas.width = 0;
+				canvas.height = 0;
+			}
+		} catch (error) {
+			sourceProbe.error = String(error);
+		}
+
+		await server.commands.writeFile(
+			`${folder}/native-source.json`,
+			JSON.stringify(sourceProbe),
+		);
 
 		record.comparison = await countNativePixels(reference, actual);
 		await checkpoint();
