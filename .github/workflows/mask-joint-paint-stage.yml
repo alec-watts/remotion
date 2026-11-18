@@ -1,7 +1,7 @@
-name: Compare native SVG image and mask transfer stages
+name: Compare implicit and bounded native mask reference extents
 on:
   push:
-    branches: [codex/qualify-mask-native-image-stage]
+    branches: [codex/qualify-mask-reference-extent]
 permissions:
   contents: read
 jobs:
@@ -69,7 +69,7 @@ jobs:
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
           bunx turbo run make --filter=@remotion/web-renderer
           status=0
-          (cd packages/web-renderer && bunx vitest src/test/mask-copy-qualification.test.tsx src/test/mask-joint-paint-stage.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/mask-image-url.test.tsx src/test/backface-visibility-mask.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+          (cd packages/web-renderer && bunx vitest src/test/mask-native-reference-extent.test.tsx src/test/mask-gradient-layers.test.tsx src/test/mask-image-url-sizing.test.tsx src/test/mask-image-url.test.tsx src/test/backface-visibility-mask.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
           mv packages/web-renderer/test/__results__ qualification/web-renderer
           if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments qualification/snapshot-attachments; fi
           printf '%s\n' "$status" > qualification/status.txt
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mask-joint-phase-${{ matrix.os }}
+          name: mask-reference-extent-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
