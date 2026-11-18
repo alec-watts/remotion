@@ -1,7 +1,7 @@
-name: Compare explicit masked SVG color coverage
+name: Compare SVG source readback before destination compositing
 on:
   push:
-    branches: [codex/qualify-svg-masked-color-coverage]
+    branches: [codex/qualify-svg-source-alpha]
 permissions:
   contents: read
 jobs:
@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 6
           persist-credentials: false
       - name: Fetch the exact prior PR producer
-        run: git fetch --no-tags --depth=1 origin 37ace5adafc3a815728332620148f81d6e716938
+        run: git fetch --no-tags --depth=1 origin 8e46e3cc32987b563204a09c012bdfa94522519e
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -74,15 +74,14 @@ jobs:
           )
           mkdir -p qualification
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
-          git rev-parse 37ace5adafc3a815728332620148f81d6e716938 HEAD > qualification/revisions.txt
+          git rev-parse 8e46e3cc32987b563204a09c012bdfa94522519e HEAD > qualification/revisions.txt
           shasum -a 256 packages/web-renderer/src/test/native-reference.tsx packages/web-renderer/vitest.config.ts packages/web-renderer/package.json bun.lock packages/web-renderer/src/test/fixtures/text/background-clip-text.tsx packages/web-renderer/src/test/fixtures/issue-7050-repro.tsx packages/web-renderer/src/test/fixtures/text/text-shadow.tsx packages/web-renderer/src/test/fixtures/text/webkit-text-stroke.tsx packages/web-renderer/src/test/fixtures/mask-image-url.tsx packages/web-renderer/src/test/fixtures/mask-image-url-sizing.tsx packages/web-renderer/src/test/fixtures/background-image-pixelated-sampler-lifetime.tsx packages/web-renderer/src/test/fixtures/background-image-url-pixelated.tsx packages/web-renderer/src/test/Root.tsx packages/web-renderer/src/test/fixtures/webkit-layered-backdrop.tsx packages/web-renderer/src/test/fixtures/svg-external-font-selection.tsx packages/web-renderer/src/test/fixtures/svg-font-family-lifetime.tsx packages/web-renderer/src/test/utils.ts packages/web-renderer/src/test/fixtures/svg-readback-mask.tsx packages/web-renderer/src/test/fixtures/svg-masked-paint-profile.tsx packages/web-renderer/src/take-screenshot.ts packages/web-renderer/src/drawing/calculate-transforms.ts packages/web-renderer/src/drawing/process-node.ts packages/web-renderer/src/internal-state.ts packages/web-renderer/src/walk-over-node.ts > qualification/inputs.sha256
           printf "%s\n" "${fixtures[@]}" | while read -r file; do shasum -a 256 "packages/web-renderer/$file"; done >> qualification/inputs.sha256
-          git diff --exit-code 8e46e3cc32987b563204a09c012bdfa94522519e HEAD -- "${producer[@]}"
           exit_status=0
           for arm in baseline candidate; do
             mkdir -p "qualification/$arm" packages/web-renderer/test/__results__
             revision=HEAD
-            if [ "$arm" = baseline ]; then revision=37ace5adafc3a815728332620148f81d6e716938; fi
+            if [ "$arm" = baseline ]; then revision=8e46e3cc32987b563204a09c012bdfa94522519e; fi
             git restore --source="$revision" -- "${producer[@]}"
             shasum -a 256 "${producer[@]}" > "qualification/$arm/producer.sha256"
             shasum -a 256 --quiet -c qualification/inputs.sha256
@@ -102,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-masked-color-coverage-${{ matrix.os }}
+          name: svg-source-alpha-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

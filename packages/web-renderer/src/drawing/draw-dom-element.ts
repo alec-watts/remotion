@@ -57,14 +57,7 @@ const drawSvgThroughReadbackCanvas = ({
 			willReadFrequently: true,
 		});
 		if (!readbackContext) return false;
-		readbackContext.drawImage(context.canvas, 0, 0);
 		readbackContext.setTransform(context.getTransform());
-		readbackContext.globalAlpha = context.globalAlpha;
-		readbackContext.filter = context.filter;
-		readbackContext.shadowColor = context.shadowColor;
-		readbackContext.shadowBlur = context.shadowBlur;
-		readbackContext.shadowOffsetX = context.shadowOffsetX;
-		readbackContext.shadowOffsetY = context.shadowOffsetY;
 		readbackContext.drawImage(
 			drawable,
 			fitted.left,
@@ -75,10 +68,6 @@ const drawSvgThroughReadbackCanvas = ({
 		context.save();
 		try {
 			context.resetTransform();
-			context.globalCompositeOperation = 'copy';
-			context.globalAlpha = 1;
-			context.filter = 'none';
-			context.shadowColor = 'transparent';
 			context.drawImage(scratch, 0, 0);
 		} finally {
 			context.restore();
