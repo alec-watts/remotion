@@ -53,6 +53,10 @@ try:
         (destination / 'inputs.json').write_text(json.dumps(hashes, indent=2))
         (destination / 'working-diff.patch').write_bytes(subprocess.check_output(['git', 'diff', '--binary']))
         if platform.system() == 'Windows':
+            build = run(['bunx', 'turbo', 'run', 'make', '--concurrency=2', '--no-update-notifier'], '.', destination / 'build.log')
+            assert build == 0, 'Arm-specific source build failed'
+            bundle = run(['bunx', 'turbo', 'run', 'bundle', '--filter=@remotion/example', '--no-update-notifier'], '.', destination / 'bundle.log')
+            assert bundle == 0, 'Arm-specific example bundle failed'
             # The integration code, bundle inputs, and assertions are byte-identical
             # across the two revisions. The PR changes only web-renderer and docs.
             subprocess.check_call(['git', 'diff', '--exit-code', BASE, HEAD, '--', 'packages/it-tests', 'packages/renderer', 'packages/example', 'packages/gsap', 'packages/core'])
@@ -60,7 +64,7 @@ try:
             observer = threading.Thread(target=observe_windows, args=(stop, destination / 'windows-resources.jsonl'))
             observer.start()
             try:
-                code = run(['bun', 'run', 'test'], 'packages/it-tests', destination.resolve() / 'integration.log')
+                code = run(['bunx', 'turbo', 'run', 'test', '--force', '--concurrency=1', '--no-update-notifier'], '.', destination / 'full-test-context.log')
             finally:
                 stop.set()
                 observer.join()

@@ -1,7 +1,7 @@
-name: Diagnose published SVG head CI
+name: Diagnose full Windows CI context
 on:
   push:
-    branches: [codex/diagnose-svg-head-ci]
+    branches: [codex/diagnose-svg-windows-full-context]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [windows-latest]
     steps:
       - uses: actions/checkout@v6
         with:
