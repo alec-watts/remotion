@@ -5,7 +5,8 @@ import {
 	createCanvasGradient,
 	parseLinearGradient,
 } from './parse-linear-gradient';
-import {getRasterImage} from './raster-image-loader';
+import {getRasterImage, getRasterImageDataUrl} from './raster-image-loader';
+import {turnSvgIntoDrawable} from './turn-svg-into-drawable';
 
 export const isColorTransparent = (color: string) => {
 	return (
@@ -52,6 +53,7 @@ export const getBackgroundFill = async ({
 	backgroundPosition,
 	backgroundSize,
 	backgroundRepeat,
+	imageRendering,
 	internalState,
 	positioningArea,
 	contextToDraw,
@@ -63,6 +65,7 @@ export const getBackgroundFill = async ({
 	backgroundPosition: string;
 	backgroundSize: string;
 	backgroundRepeat: string;
+	imageRendering: string | null;
 	internalState: InternalState;
 	positioningArea: DOMRect;
 	contextToDraw: OffscreenCanvasRenderingContext2D;
@@ -72,7 +75,7 @@ export const getBackgroundFill = async ({
 }): Promise<
 	| CanvasGradient
 	| CanvasPattern
-	| {image: ImageBitmap; rects: Iterable<DOMRect>}
+	| {image: CanvasImageSource; rects: Iterable<DOMRect>}
 	| null
 > => {
 	if (backgroundImage && backgroundImage !== 'none') {
@@ -92,6 +95,100 @@ export const getBackgroundFill = async ({
 			});
 			if (rect.width === 0 || rect.height === 0) return null;
 			const [repeatX, repeatY = repeatX] = backgroundRepeat.split(/\s+/);
+			const matrix = contextToDraw.getTransform();
+			if (
+				[repeatX, repeatY].includes('round') &&
+				[repeatX, repeatY].every((value) =>
+					['round', 'repeat', 'no-repeat'].includes(value),
+				) &&
+				!/^0(?:px|%)? 0(?:px|%)?$/.test(backgroundPosition) &&
+				matrix.a > 0 &&
+				matrix.a === matrix.d &&
+				matrix.b === 0 &&
+				matrix.c === 0 &&
+				[
+					matrix.e,
+					matrix.f,
+					offsetLeft,
+					offsetTop,
+					boundingRect.left,
+					boundingRect.top,
+					boundingRect.width,
+					boundingRect.height,
+					positioningArea.left,
+					positioningArea.top,
+					positioningArea.width,
+					positioningArea.height,
+					boundingRect.width * matrix.a,
+					boundingRect.height * matrix.a,
+				].every(Number.isInteger)
+			) {
+				// Native CSS retains engine-specific round phases and edge sampling.
+				// The aligned surface copies at the exact export resolution.
+				const source = await getRasterImageDataUrl({
+					src: url,
+					state: internalState.rasterImageLoaderState,
+					sourceProperty: 'background-image',
+				});
+				const width = boundingRect.width * matrix.a;
+				const height = boundingRect.height * matrix.a;
+				const svgNamespace = 'http://www.w3.org/2000/svg';
+				const htmlNamespace = 'http://www.w3.org/1999/xhtml';
+				const svg = document.createElementNS(svgNamespace, 'svg');
+				svg.setAttribute('width', String(width));
+				svg.setAttribute('height', String(height));
+				svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+				svg.setAttribute('overflow', 'hidden');
+				const foreignObject = document.createElementNS(
+					svgNamespace,
+					'foreignObject',
+				);
+				foreignObject.setAttribute('width', String(width));
+				foreignObject.setAttribute('height', String(height));
+				const viewport = document.createElementNS(
+					htmlNamespace,
+					'div',
+				) as HTMLDivElement;
+				Object.assign(viewport.style, {
+					position: 'relative',
+					width: `${boundingRect.width}px`,
+					height: `${boundingRect.height}px`,
+					transform: `scale(${matrix.a})`,
+					transformOrigin: '0 0',
+				});
+				const left = Math.min(positioningArea.left, boundingRect.left);
+				const top = Math.min(positioningArea.top, boundingRect.top);
+				const right = Math.max(positioningArea.right, boundingRect.right);
+				const bottom = Math.max(positioningArea.bottom, boundingRect.bottom);
+				const target = document.createElementNS(
+					htmlNamespace,
+					'div',
+				) as HTMLDivElement;
+				Object.assign(target.style, {
+					position: 'absolute',
+					left: `${left - boundingRect.left}px`,
+					top: `${top - boundingRect.top}px`,
+					width: `${positioningArea.width}px`,
+					height: `${positioningArea.height}px`,
+					boxSizing: 'content-box',
+					paddingTop: `${positioningArea.top - top}px`,
+					paddingRight: `${right - positioningArea.right}px`,
+					paddingBottom: `${bottom - positioningArea.bottom}px`,
+					paddingLeft: `${positioningArea.left - left}px`,
+					backgroundOrigin: 'content-box',
+					backgroundClip: 'border-box',
+					backgroundImage: `url(${JSON.stringify(source)})`,
+					backgroundPosition,
+					backgroundSize,
+					backgroundRepeat,
+					imageRendering: imageRendering ?? 'auto',
+				});
+				viewport.appendChild(target);
+				foreignObject.appendChild(viewport);
+				svg.appendChild(foreignObject);
+				return {image: await turnSvgIntoDrawable(svg), rects: [boundingRect]};
+			}
+
 			if (repeatX === 'space' || repeatY === 'space') {
 				if (
 					![repeatX, repeatY].every((value) =>

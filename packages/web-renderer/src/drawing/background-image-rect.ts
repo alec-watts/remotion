@@ -288,23 +288,18 @@ export const getBackgroundImageRect = ({
 	}
 
 	const position = parsePosition(backgroundPosition);
-	// Blink and WebKit resolve positioning against the tile before round sizing;
-	// Gecko resolves it against the resized tile. Keep each native paint phase.
-	const positionBeforeRound =
-		(repeatX === 'round' || repeatY === 'round') &&
-		!navigator.userAgent.includes('Firefox/');
 
 	return new DOMRect(
 		positioningArea.left +
 			resolvePosition({
 				containerSize: positioningArea.width,
-				imageSize: positionBeforeRound ? originalWidth : width,
+				imageSize: width,
 				value: position.x,
 			}),
 		positioningArea.top +
 			resolvePosition({
 				containerSize: positioningArea.height,
-				imageSize: positionBeforeRound ? originalHeight : height,
+				imageSize: height,
 				value: position.y,
 			}),
 		width,

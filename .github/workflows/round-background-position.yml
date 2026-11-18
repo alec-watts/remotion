@@ -1,7 +1,7 @@
-name: Qualify rounded background positioning
+name: Qualify native rounded background surfaces
 on:
   push:
-    branches: [codex/qualify-round-background-position]
+    branches: [codex/qualify-native-round-background]
 permissions:
   contents: read
 jobs:
@@ -58,7 +58,7 @@ jobs:
       - name: Compare background positioning with identical inputs
         run: |
           baseline=8919b283f3610ccb693535d798316224d424d327
-          producers='packages/web-renderer/src/drawing/background-image-rect.ts'
+          producers='packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/draw-background.ts'
           mkdir -p qualification
           printf '%s\n' "$baseline" "$(git rev-parse HEAD)" > qualification/revisions.txt
           git diff --binary "$baseline" HEAD -- $producers > qualification/producer.patch
@@ -66,7 +66,7 @@ jobs:
           python3 - <<'HASH'
           import hashlib, subprocess
           from pathlib import Path
-          producers = {'packages/web-renderer/src/drawing/' + name for name in ['background-image-rect.ts']}
+          producers = {'packages/web-renderer/src/drawing/' + name for name in ['get-background-fill.ts', 'draw-background.ts']}
           changed = set(subprocess.check_output(['git', 'diff', '--name-only', '8919b283f3610ccb693535d798316224d424d327', 'HEAD', '--', 'packages/web-renderer/src/drawing']).decode().splitlines())
           assert changed == producers, changed
           files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'bun.lock']).decode().split('\0')
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: round-background-position-${{ matrix.os }}
+          name: native-round-background-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

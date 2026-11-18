@@ -197,6 +197,7 @@ export const drawBackground = async ({
 		const groupFill = await getBackgroundFill({
 			backgroundImage,
 			backgroundRepeat: computedStyle.backgroundRepeat,
+			imageRendering: computedStyle.imageRendering,
 			internalState,
 			positioningArea,
 			backgroundPosition: computedStyle.backgroundPosition,
@@ -238,6 +239,7 @@ export const drawBackground = async ({
 	const backgroundFill = await getBackgroundFill({
 		backgroundImage,
 		backgroundRepeat: computedStyle.backgroundRepeat,
+		imageRendering: computedStyle.imageRendering,
 		internalState,
 		positioningArea,
 		backgroundPosition: computedStyle.backgroundPosition,
