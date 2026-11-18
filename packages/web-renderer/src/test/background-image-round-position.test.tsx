@@ -1,6 +1,6 @@
 import '../symbol-dispose';
 import {expect, test} from 'vitest';
-import {page} from 'vitest/browser';
+import {page, server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {backgroundImageRoundPosition} from './fixtures/background-image-round-position';
 import {captureNativeReference, compareNativePixels} from './native-reference';
@@ -45,6 +45,31 @@ test.for([0, 1].flatMap((frame) => [1, 2].map((scale) => ({frame, scale}))))(
 			})
 		).blob({format: 'png'});
 		const result = await compareNativePixels(reference, actual);
+		const folder = `test/__results__/round-position/${server.browser}/${frame}-${scale}`;
+		for (const [name, blob] of [
+			['reference', reference],
+			['actual', actual],
+		] as const) {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				`${folder}/${name}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(
+			`${folder}/comparison.json`,
+			JSON.stringify({
+				frame,
+				scale,
+				browser: server.browser,
+				userAgent: navigator.userAgent,
+				...result,
+			}),
+		);
 		expect(result.mismatchedPixels, result.evidence ?? undefined).toBe(0);
 	},
 );
