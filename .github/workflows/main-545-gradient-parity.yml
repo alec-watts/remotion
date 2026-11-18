@@ -60,7 +60,7 @@ jobs:
       - name: Compare main gradient sources with identical strict fixtures
         run: |
           baseline=e6b9083c4984609e48db0453f3274e2123f30430
-          producers='packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/parse-linear-gradient.ts packages/web-renderer/src/drawing/handle-mask.ts'
+          producers='packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/parse-linear-gradient.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/test/parse-linear-gradient.test.tsx'
           git diff --exit-code 503f6fa6b1f4f7386b2702f2fdf17a0e5762eb5e HEAD -- packages/web-renderer/src/drawing
           mkdir -p qualification
           printf '%s\n' "$baseline" "$(git rev-parse HEAD)" > qualification/revisions.txt
@@ -69,9 +69,10 @@ jobs:
           python3 - <<'HASH'
           import hashlib, subprocess
           from pathlib import Path
-          producers = {'packages/web-renderer/src/drawing/' + name for name in ['get-background-fill.ts', 'parse-linear-gradient.ts', 'handle-mask.ts']}
+          production = {'packages/web-renderer/src/drawing/' + name for name in ['get-background-fill.ts', 'parse-linear-gradient.ts', 'handle-mask.ts']}
+          producers = production | {'packages/web-renderer/src/test/parse-linear-gradient.test.tsx'}
           changed = set(subprocess.check_output(['git', 'diff', '--name-only', 'e6b9083c4984609e48db0453f3274e2123f30430', 'HEAD', '--', 'packages/web-renderer/src/drawing']).decode().splitlines())
-          assert changed == producers, changed
+          assert changed == production, changed
           files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'bun.lock']).decode().split('\0')
           with Path('qualification/inputs.sha256').open('w') as output:
               for file in files:
