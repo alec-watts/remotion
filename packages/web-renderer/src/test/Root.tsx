@@ -118,6 +118,7 @@ import {
 import {lineHeight} from './fixtures/line-height';
 import {linearGradient} from './fixtures/linear-gradient';
 import {manyLayers} from './fixtures/many-layers';
+import {maskCopyOverflow} from './fixtures/mask-copy-overflow';
 import {
 	maskGradientLayers,
 	maskGradientLayersTransparent,
@@ -661,6 +662,19 @@ export const Root: React.FC = () => {
 					/>
 				)),
 			)}
+			<Folder name="Mask-copy-qualification">
+				{(['hard', 'soft', 'fractional', 'translucent'] as const).flatMap(
+					(mode) =>
+						(['hidden', 'visible'] as const).map((overflow) => {
+							const fixture = maskCopyOverflow({
+								mode,
+								overflow,
+								position: null,
+							});
+							return <Composition key={fixture.id} {...fixture} />;
+						}),
+				)}
+			</Folder>
 			<Composition {...queuedFrameCapturePreview} />
 		</>
 	);

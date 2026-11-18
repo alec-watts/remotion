@@ -1,0 +1,188 @@
+import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
+import {renderStillOnWeb} from '../render-still-on-web';
+import {maskCopyOverflow} from './fixtures/mask-copy-overflow';
+import {captureNativeReference, countNativePixels} from './native-reference';
+
+const paintProperties = [
+	'background-color',
+	'background-image',
+	'background-position',
+	'background-size',
+	'background-repeat',
+	'background-origin',
+	'background-clip',
+	'border-radius',
+	'overflow',
+] as const;
+
+test.for(
+	(['hard', 'soft', 'fractional', 'translucent'] as const).flatMap((mode) =>
+		(['hidden', 'visible'] as const).flatMap((overflow) =>
+			[1, 1.25, 2, 2.5].flatMap((scale) =>
+				[0, 1].map((frame) => ({mode, overflow, scale, frame})),
+			),
+		),
+	),
+)(
+	'compares joint paint $mode $overflow scale=$scale frame=$frame',
+	async ({mode, overflow, scale, frame}) => {
+		const fixture = maskCopyOverflow({mode, overflow, position: null});
+		const Source = fixture.component;
+		const composition = {
+			...fixture,
+			component: () => (
+				<div data-joint-mask-root="" style={{position: 'absolute', inset: 0}}>
+					<Source />
+				</div>
+			),
+		};
+		const Component = composition.component;
+		const reference = await captureNativeReference(
+			{
+				...composition,
+				width: composition.width * scale,
+				height: composition.height * scale,
+				component: () => (
+					<div style={{transform: `scale(${scale})`, transformOrigin: '0 0'}}>
+						<Component />
+					</div>
+				),
+			},
+			frame,
+			{omitBackground: mode !== 'hard'},
+		);
+		const captures: {svg: string; styles: [string, string][]}[] = [];
+		const serialize = XMLSerializer.prototype.serializeToString;
+		const observer = vi
+			.spyOn(XMLSerializer.prototype, 'serializeToString')
+			.mockImplementation(function (this: XMLSerializer, node: Node) {
+				const svg = serialize.call(this, node);
+				if (
+					node instanceof SVGSVGElement &&
+					node.querySelector('foreignObject')
+				) {
+					const source = document.querySelector('[data-joint-mask-root] > div');
+					if (!source) throw new Error('Missing connected masked source');
+					const style = getComputedStyle(source);
+					captures.push({
+						svg,
+						styles: paintProperties.map((property) => [
+							property,
+							style.getPropertyValue(property),
+						]),
+					});
+				}
+
+				return svg;
+			});
+		let actual: Blob;
+		try {
+			actual = await (
+				await renderStillOnWeb({
+					licenseKey: 'free-license',
+					composition,
+					frame,
+					scale,
+					inputProps: {},
+					allowHtmlInCanvas: false,
+				})
+			).blob({format: 'png'});
+		} finally {
+			observer.mockRestore();
+		}
+
+		expect(captures).toHaveLength(1);
+		const captured = captures[0];
+		const parsed = new DOMParser().parseFromString(
+			captured.svg,
+			'image/svg+xml',
+		);
+		const target = parsed.querySelector<HTMLElement>(
+			'foreignObject > div > div',
+		);
+		if (!target) throw new Error('Missing serialized mask target');
+		const captureLeft =
+			(mode === 'fractional' ? 0.25 : 0) - parseFloat(target.style.left);
+		const captureTop = -parseFloat(target.style.top);
+		target.replaceChildren();
+		for (const [property, value] of captured.styles) {
+			target.style.setProperty(property, value);
+		}
+
+		const jointSvg = new XMLSerializer().serializeToString(
+			parsed.documentElement,
+		);
+		const replay = async (svg: string) => {
+			const image = new Image();
+			const raster = new OffscreenCanvas(1, 1);
+			const output = new OffscreenCanvas(
+				composition.width * scale,
+				composition.height * scale,
+			);
+			try {
+				image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+				await image.decode();
+				raster.width = image.naturalWidth;
+				raster.height = image.naturalHeight;
+				const rasterContext = raster.getContext('2d', {
+					willReadFrequently: true,
+				})!;
+				rasterContext.drawImage(image, 0, 0);
+				output
+					.getContext('2d')!
+					.drawImage(raster, captureLeft * scale, captureTop * scale);
+				return await output.convertToBlob();
+			} finally {
+				image.removeAttribute('src');
+				raster.width = 0;
+				raster.height = 0;
+				output.width = 0;
+				output.height = 0;
+			}
+		};
+
+		const bitmap = await replay(captured.svg);
+		const joint = await replay(jointSvg);
+		const folder = `test/__results__/mask-joint-paint/${server.browser}/${mode}-${overflow}-${scale}-${frame}`;
+		for (const [name, blob] of [
+			['reference', reference],
+			['actual', actual],
+			['bitmap-replay', bitmap],
+			['joint', joint],
+		] as const) {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer())) {
+				binary += String.fromCharCode(byte);
+			}
+
+			await server.commands.writeFile(
+				`${folder}/${name}.png`,
+				btoa(binary),
+				'base64',
+			);
+		}
+
+		await server.commands.writeFile(`${folder}/original.svg`, captured.svg);
+		await server.commands.writeFile(`${folder}/joint.svg`, jointSvg);
+		const results = {
+			mode,
+			overflow,
+			scale,
+			frame,
+			captureLeft,
+			captureTop,
+			styles: captured.styles,
+			actual: await countNativePixels(reference, actual),
+			bitmap: await countNativePixels(reference, bitmap),
+			joint: await countNativePixels(reference, joint),
+		};
+		await server.commands.writeFile(
+			`${folder}/comparison.json`,
+			JSON.stringify(results),
+		);
+		expect.soft(results.actual.mismatchedPixels).toBe(0);
+		expect.soft(results.bitmap.mismatchedPixels).toBe(0);
+		expect(results.joint.mismatchedPixels).toBe(0);
+	},
+);
