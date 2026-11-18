@@ -1,7 +1,7 @@
-name: Qualify scoped corner selector preservation
+name: Qualify corner serialization and native blur on Chrome 157
 on:
   push:
-    branches: [codex/qualify-svg-corner-scoped-selectors]
+    branches: [codex/qualify-corner-ci-chrome157]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-24.04]
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,17 +30,15 @@ jobs:
       - run: cd packages/web-renderer && bunx playwright install --with-deps
       - name: Freeze browser inputs
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then
-            bundle="$RUNNER_TEMP/Shaped Corner Chrome.app"
-            ditto "/Applications/Google Chrome.app" "$bundle"
-            chflags -R uchg "$bundle"
-            binary="$bundle/Contents/MacOS/Google Chrome"
-          else
-            bundle="$RUNNER_TEMP/shaped-corner-chrome"
-            mkdir -p "$bundle"
-            cp -RL /opt/google/chrome/. "$bundle/"
-            binary="$bundle/chrome"
-          fi
+          bundle="$RUNNER_TEMP/corner-chrome157"
+          archive="$RUNNER_TEMP/corner-chrome157.zip"
+          curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/mac-arm64/chrome-mac-arm64.zip --output "$archive"
+          mkdir -p "$bundle"
+          ditto -x -k "$archive" "$bundle"
+          binary="$bundle/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+          version="$("$binary" --version)"
+          case "$version" in *157.0.8103.79*) ;; *) exit 1 ;; esac
+          chflags -R uchg "$bundle"
           echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
           find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/shaped-corner-chrome.sha256"
           python3 - <<'PIN'
@@ -51,6 +49,27 @@ jobs:
           assert source.count(marker) == 1
           config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
           PIN
+      - name: Record selected runtime and native capture availability
+        run: |
+          mkdir -p qualification
+          cd packages/web-renderer
+          bun --eval '
+          import {chromium} from "playwright";
+          const browser = await chromium.launch({executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME, headless: true});
+          try {
+            const session = await browser.newBrowserCDPSession();
+            const {gpu} = await session.send("SystemInfo.getInfo");
+            const page = await browser.newPage();
+            const native = await page.evaluate(() => {
+              const canvas = document.createElement("canvas");
+              return {drawElementImage: typeof canvas.getContext("2d")?.drawElementImage === "function", requestPaint: typeof canvas.requestPaint === "function"};
+            });
+            await Bun.write("../../qualification/browser.json", JSON.stringify({version: browser.version(), native, gpu}, null, 2));
+            if (!native.drawElementImage || !native.requestPaint) throw new Error("The selected Chrome build does not expose the native path; do not count skipped blur tests as qualification");
+          } finally {
+            await browser.close();
+          }
+          '
       - name: Compare old and proposed serialization with identical inputs
         run: |
           producer=packages/web-renderer/src/drawing/turn-svg-into-drawable.ts
@@ -88,7 +107,7 @@ jobs:
             git diff --binary -- "$producer" > "qualification/$arm/working.diff"
             bunx turbo run make --filter=@remotion/web-renderer
             status=0
-            (cd packages/web-renderer && bunx vitest src/test/svg-corner-serialization.test.ts src/test/svg-disabled-styles.test.tsx src/test/svg-foreign-object-font.test.ts --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            (cd packages/web-renderer && bunx vitest src/test/svg-corner-serialization.test.ts src/test/html-in-canvas.test.tsx --testNamePattern 'preserves authored corner|retains authored style|captures custom blur' --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
             mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
             if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
             printf '%s\n' "$status" > "qualification/$arm/status.txt"
@@ -100,7 +119,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-corner-scoped-selectors-${{ matrix.os }}
+          name: svg-corner-ci-chrome157-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
@@ -108,6 +127,6 @@ jobs:
       - name: Release frozen macOS browser
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/Shaped Corner Chrome.app" ]; then
-            chflags -R nouchg "$RUNNER_TEMP/Shaped Corner Chrome.app"
+          if [ -d "$RUNNER_TEMP/corner-chrome157" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/corner-chrome157"
           fi
