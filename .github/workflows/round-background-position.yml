@@ -1,7 +1,7 @@
-name: Qualify native rounded background surfaces
+name: Qualify rounded background readback surfaces
 on:
   push:
-    branches: [codex/qualify-native-round-background]
+    branches: [codex/qualify-native-round-readback]
 permissions:
   contents: read
 jobs:
@@ -19,7 +19,9 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - name: Fetch the pinned public renderer producer
-        run: git fetch --no-tags --depth=1 origin 8919b283f3610ccb693535d798316224d424d327
+        run: |
+          git fetch --no-tags --depth=1 origin 8919b283f3610ccb693535d798316224d424d327
+          git fetch --no-tags --depth=1 origin eb436d0c6e90fee9b1737a47e2e0c3bfa5d6fe1e
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -57,7 +59,8 @@ jobs:
           PIN
       - name: Compare background positioning with identical inputs
         run: |
-          baseline=8919b283f3610ccb693535d798316224d424d327
+          baseline=eb436d0c6e90fee9b1737a47e2e0c3bfa5d6fe1e
+          control=8919b283f3610ccb693535d798316224d424d327
           producers='packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/draw-background.ts'
           mkdir -p qualification
           printf '%s\n' "$baseline" "$(git rev-parse HEAD)" > qualification/revisions.txt
@@ -77,8 +80,9 @@ jobs:
           HASH
           "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
           failed=0
-          for arm in baseline candidate; do
+          for arm in control baseline candidate; do
             revision="$baseline"
+            if [ "$arm" = control ]; then revision="$control"; fi
             if [ "$arm" = candidate ]; then revision=HEAD; fi
             mkdir -p "qualification/$arm"
             for producer in $producers; do
@@ -101,7 +105,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-round-background-${{ matrix.os }}
+          name: native-round-readback-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

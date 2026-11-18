@@ -186,7 +186,24 @@ export const getBackgroundFill = async ({
 				viewport.appendChild(target);
 				foreignObject.appendChild(viewport);
 				svg.appendChild(foreignObject);
-				return {image: await turnSvgIntoDrawable(svg), rects: [boundingRect]};
+				const drawable = await turnSvgIntoDrawable(svg);
+				const surface = new OffscreenCanvas(width, height);
+				try {
+					const readback = surface.getContext('2d', {willReadFrequently: true});
+					if (!readback) throw new Error('Could not rasterize the background');
+					readback.drawImage(drawable, 0, 0);
+					const raster = await createImageBitmap(surface);
+					if (internalState.rasterImageLoaderState.signal?.aborted) {
+						raster.close();
+						throw new Error('Raster background rendering was cancelled');
+					}
+
+					internalState.rasterImageLoaderState.images.add(raster);
+					return {image: raster, rects: [boundingRect]};
+				} finally {
+					surface.width = 0;
+					surface.height = 0;
+				}
 			}
 
 			if (repeatX === 'space' || repeatY === 'space') {
