@@ -39,7 +39,7 @@ test('preserves authored corner styles, selectors and drawable cache without mut
 			const parsed = new DOMParser().parseFromString(markup, 'image/svg+xml');
 			expect(parsed.querySelector('parsererror')).toBe(null);
 			const encoded = parsed.querySelector<HTMLElement>('[data-corner-probe]')!;
-			if (box.style.getPropertyValue('corner')) {
+			if (/(?:^|;)\s*corner\s*:/.test(box.style.cssText)) {
 				expect(encoded.getAttribute('style')).toContain(
 					'border-top-left-radius:',
 				);

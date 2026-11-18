@@ -69,7 +69,7 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		(element) => {
 			const {style} = element;
 			if (
-				!style.getPropertyValue('corner') ||
+				!/(?:^|;)\s*corner\s*:/.test(style.cssText) ||
 				cornerLonghands.some((property) => !style.getPropertyValue(property))
 			)
 				return null;
