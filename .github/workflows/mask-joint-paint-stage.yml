@@ -1,7 +1,7 @@
-name: Compare mask joint paint at the authored device phase
+name: Compare mask phase readback and default contexts
 on:
   push:
-    branches: [codex/qualify-mask-joint-device-phase]
+    branches: [codex/qualify-mask-phase-contexts]
 permissions:
   contents: read
 jobs:

@@ -184,6 +184,7 @@ test.for([
 			svg: string,
 			left = captureLeft * scale,
 			top = captureTop * scale,
+			contextMode: 'readback' | 'default' | 'direct' = 'readback',
 		) => {
 			const image = new Image();
 			const raster = new OffscreenCanvas(1, 1);
@@ -196,11 +197,18 @@ test.for([
 				await image.decode();
 				raster.width = image.naturalWidth;
 				raster.height = image.naturalHeight;
-				const rasterContext = raster.getContext('2d', {
-					willReadFrequently: true,
-				})!;
-				rasterContext.drawImage(image, 0, 0);
-				output.getContext('2d')!.drawImage(raster, left, top);
+				const outputContext = output.getContext('2d')!;
+				if (contextMode === 'direct') {
+					outputContext.drawImage(image, left, top);
+				} else {
+					const rasterContext = raster.getContext(
+						'2d',
+						contextMode === 'readback' ? {willReadFrequently: true} : {},
+					)!;
+					rasterContext.drawImage(image, 0, 0);
+					outputContext.drawImage(raster, left, top);
+				}
+
 				return await output.convertToBlob();
 			} finally {
 				image.removeAttribute('src');
@@ -225,6 +233,24 @@ test.for([
 			jointPhaseSvg.left,
 			jointPhaseSvg.top,
 		);
+		const bitmapPhaseDefault = await replay(
+			bitmapPhaseSvg.svg,
+			bitmapPhaseSvg.left,
+			bitmapPhaseSvg.top,
+			'default',
+		);
+		const jointPhaseDefault = await replay(
+			jointPhaseSvg.svg,
+			jointPhaseSvg.left,
+			jointPhaseSvg.top,
+			'default',
+		);
+		const jointPhaseDirect = await replay(
+			jointPhaseSvg.svg,
+			jointPhaseSvg.left,
+			jointPhaseSvg.top,
+			'direct',
+		);
 		const folder = `test/__results__/mask-joint-paint/${server.browser}/${mode}-${overflow}-${scale}-${frame}${position ? `-offset-${position.left}-${position.top}` : ''}`;
 		for (const [name, blob] of [
 			['reference', reference],
@@ -235,6 +261,9 @@ test.for([
 			['joint-device', jointDevice],
 			['bitmap-phase', bitmapPhase],
 			['joint-phase', jointPhase],
+			['bitmap-phase-default', bitmapPhaseDefault],
+			['joint-phase-default', jointPhaseDefault],
+			['joint-phase-direct', jointPhaseDirect],
 		] as const) {
 			let binary = '';
 			for (const byte of new Uint8Array(await blob.arrayBuffer())) {
@@ -288,6 +317,12 @@ test.for([
 			jointDevice: await countNativePixels(reference, jointDevice),
 			bitmapPhase: await countNativePixels(reference, bitmapPhase),
 			jointPhase: await countNativePixels(reference, jointPhase),
+			bitmapPhaseDefault: await countNativePixels(
+				reference,
+				bitmapPhaseDefault,
+			),
+			jointPhaseDefault: await countNativePixels(reference, jointPhaseDefault),
+			jointPhaseDirect: await countNativePixels(reference, jointPhaseDirect),
 		};
 		await server.commands.writeFile(
 			`${folder}/comparison.json`,
@@ -299,6 +334,9 @@ test.for([
 		expect.soft(results.bitmapDevice.mismatchedPixels).toBe(0);
 		expect.soft(results.jointDevice.mismatchedPixels).toBe(0);
 		expect.soft(results.bitmapPhase.mismatchedPixels).toBe(0);
-		expect(results.jointPhase.mismatchedPixels).toBe(0);
+		expect.soft(results.jointPhase.mismatchedPixels).toBe(0);
+		expect.soft(results.bitmapPhaseDefault.mismatchedPixels).toBe(0);
+		expect.soft(results.jointPhaseDefault.mismatchedPixels).toBe(0);
+		expect(results.jointPhaseDirect.mismatchedPixels).toBe(0);
 	},
 );
