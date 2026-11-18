@@ -123,6 +123,10 @@ test.for(
 			'device-direct',
 			'device-readback',
 			'device-seeded-readback',
+			'authored-svg-image',
+			'authored-direct',
+			'authored-readback',
+			'authored-seeded-readback',
 		])
 			probes[name] = {error: 'not-completed', mismatchedPixels: null};
 		await checkpoint();
@@ -130,9 +134,23 @@ test.for(
 		let longhandRules = '';
 		let authoredDeclarations: unknown[] = [];
 		let clonedDeclarations: unknown[] = [];
+		let authoredProperties: {
+			property: string;
+			value: string;
+			priority: string;
+		}[][] = [];
 		const Captured = cornerShapeGrid(variant, (element) => {
 			if (!element) return;
 			cloned = element.cloneNode(true) as HTMLDivElement;
+			authoredProperties = Array.from(
+				element.querySelectorAll<HTMLElement>('[data-corner-shape]'),
+				(node) =>
+					Array.from(node.style, (property) => ({
+						property,
+						value: node.style.getPropertyValue(property),
+						priority: node.style.getPropertyPriority(property),
+					})),
+			);
 			clonedDeclarations = Array.from(
 				cloned.querySelectorAll<HTMLElement>('[data-corner-shape]'),
 				(node) => ({
@@ -268,6 +286,10 @@ test.for(
 				'device-direct',
 				'device-readback',
 				'device-seeded-readback',
+				'authored-svg-image',
+				'authored-direct',
+				'authored-readback',
+				'authored-seeded-readback',
 			] as const) {
 				let raster: OffscreenCanvas | null = null;
 				let output: OffscreenCanvas | null = null;
@@ -315,7 +337,35 @@ test.for(
 						);
 					}
 
-					const transfer = mode.replace(/^(longhand|device)-/, '');
+					if (mode === 'authored-svg-image') {
+						// Keep the broken clone above as a control. Rebuild the same
+						// authored CSSOM declarations to model a connected SVG input,
+						// without the diagnostic's computed important stylesheet.
+						expect(svg.querySelectorAll('style').length).toBe(1);
+						svg.querySelector('style')!.remove();
+						const nodes = svg.querySelectorAll<HTMLElement>(
+							'[data-corner-shape]',
+						);
+						expect(nodes.length).toBe(authoredProperties.length);
+						nodes.forEach((node, index) => {
+							node.style.cssText = '';
+							for (const declaration of authoredProperties[index])
+								node.style.setProperty(
+									declaration.property,
+									declaration.value,
+									declaration.priority,
+								);
+						});
+						image.removeAttribute('src');
+						image = await turnSvgIntoDrawable(svg);
+						expect(image.src.startsWith(prefix)).toBe(true);
+						await server.commands.writeFile(
+							`${folder}/carrier-authored.svg`,
+							decodeURIComponent(image.src.slice(prefix.length)),
+						);
+					}
+
+					const transfer = mode.replace(/^(longhand|device|authored)-/, '');
 					let blob: Blob;
 					if (mode === 'bounded-repeat') {
 						blob = await captureNativeReference(
