@@ -77,6 +77,10 @@ import {
 } from './fixtures/clip-path-shape-review';
 import {threeDFlattening} from './fixtures/clipped';
 import {complexNestedSvg} from './fixtures/complex-nested-svg';
+import {
+	cornerShapeGrid,
+	cornerShapeVariants,
+} from './fixtures/corner-shape-grid';
 import {deeplyNestedTransform} from './fixtures/deeply-nested-transform';
 import {displayNone} from './fixtures/display-none';
 import {filter} from './fixtures/filter';
@@ -519,6 +523,9 @@ export const Root: React.FC = () => {
 				<Composition {...filterImage} />
 			</Folder>
 			<Folder name="border">
+				{cornerShapeVariants.map((variant) => (
+					<Composition key={variant} {...cornerShapeGrid(variant)} />
+				))}
 				<Composition {...border} />
 				<Composition {...borderRadius} />
 				<Composition {...borderRadiusSimple} />

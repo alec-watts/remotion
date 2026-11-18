@@ -1,0 +1,92 @@
+name: Measure native shaped corners on unchanged main
+on:
+  push:
+    branches: [codex/qualify-shaped-corner-native-baseline]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Fetch the pinned public renderer producer
+        run: git fetch --no-tags --depth=1 origin e6b9083c4984609e48db0453f3274e2123f30430
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            bundle="$RUNNER_TEMP/Shaped Corner Chrome.app"
+            ditto "/Applications/Google Chrome.app" "$bundle"
+            chflags -R uchg "$bundle"
+            binary="$bundle/Contents/MacOS/Google Chrome"
+          else
+            bundle="$RUNNER_TEMP/shaped-corner-chrome"
+            mkdir -p "$bundle"
+            cp -RL /opt/google/chrome/. "$bundle/"
+            binary="$bundle/chrome"
+          fi
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/shaped-corner-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Capture unchanged renderer and native corner shapes
+        run: |
+          mkdir -p qualification
+          git rev-parse HEAD > qualification/revision.txt
+          git rev-parse HEAD:packages/web-renderer/src/drawing > qualification/drawing-tree.txt
+          git diff --exit-code e6b9083c4984609e48db0453f3274e2123f30430 HEAD -- packages/web-renderer/src/drawing
+          python3 - <<'HASH'
+          import hashlib, subprocess
+          from pathlib import Path
+          files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'bun.lock']).decode().split('\0')
+          with Path('qualification/inputs.sha256').open('w') as output:
+              for file in files:
+                  if file:
+                      output.write(hashlib.sha256(Path(file).read_bytes()).hexdigest() + '  ' + file + '\n')
+          HASH
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          bunx turbo run make --filter=@remotion/web-renderer
+          status=0
+          (cd packages/web-renderer && bunx vitest src/test/corner-shape-native.test.tsx src/test/border.test.tsx src/test/border-radius.test.tsx src/test/parse-border-radius.test.tsx src/test/outline.test.tsx --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+          mv packages/web-renderer/test/__results__ qualification/web-renderer
+          if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments qualification/snapshot-attachments; fi
+          printf '%s\n' "$status" > qualification/status.txt
+          shasum -a 256 --quiet -c qualification/inputs.sha256
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/shaped-corner-chrome.sha256"
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corner-shape-native-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen macOS browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Shaped Corner Chrome.app" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/Shaped Corner Chrome.app"
+          fi
