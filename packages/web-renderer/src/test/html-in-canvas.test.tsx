@@ -4,6 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -77,6 +78,56 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 	const playerRef = createRef<PlayerRef>();
 	const {component, width, height, fps, durationInFrames} = htmlInCanvasResize;
 
+	const start = performance.now();
+	const events: Record<string, unknown>[] = [];
+	const note = (name: string, data: Record<string, unknown> = {}) => {
+		events.push({name, time: performance.now() - start, ...data});
+	};
+
+	const capture = HTMLCanvasElement.prototype.captureElementImage;
+	const captureSpy = vi
+		.spyOn(HTMLCanvasElement.prototype, 'captureElementImage')
+		.mockImplementation(function (this: HTMLCanvasElement, ...args) {
+			note('capture-start', {
+				width: this.width,
+				height: this.height,
+				connected: this.isConnected,
+			});
+			try {
+				const result = capture.apply(this, args);
+				note('capture-success', {width: result.width, height: result.height});
+				return result;
+			} catch (error) {
+				note('capture-error', {error: String(error)});
+				throw error;
+			}
+		});
+	const {getContext} = HTMLCanvasElement.prototype;
+	const contextSpy = vi
+		.spyOn(HTMLCanvasElement.prototype, 'getContext')
+		.mockImplementation(function (this: HTMLCanvasElement, ...args) {
+			const result = getContext.apply(this, args);
+			note('context', {
+				kind: args[0],
+				width: this.width,
+				height: this.height,
+				connected: this.isConnected,
+				acquired: result !== null,
+			});
+			return result;
+		});
+	const paint = (event: Event) => {
+		if (event.target instanceof HTMLCanvasElement) {
+			note('paint-event', {
+				width: event.target.width,
+				height: event.target.height,
+				connected: event.target.isConnected,
+			});
+		}
+	};
+
+	document.addEventListener('paint', paint, true);
+	note('mount');
 	try {
 		flushSync(() => {
 			root.render(
@@ -113,15 +164,34 @@ test('preserves the displayed frame while HtmlInCanvas resizes in preview', asyn
 			}
 
 			await vi.waitFor(() => {
-				expect(
-					Array.from(context.getImageData(10, 10, 1, 1).data),
-					`completed paint at frame ${frame}`,
-				).toEqual([size.red, 200, 40, 255]);
+				const pixel = Array.from(context.getImageData(10, 10, 1, 1).data);
+				note('completed-frame-poll', {frame, pixel});
+				expect(pixel, `completed paint at frame ${frame}`).toEqual([
+					size.red,
+					200,
+					40,
+					255,
+				]);
 			});
 		}
 	} finally {
-		root.unmount();
-		container.remove();
+		note('cleanup');
+		try {
+			root.unmount();
+		} finally {
+			container.remove();
+			captureSpy.mockRestore();
+			contextSpy.mockRestore();
+			document.removeEventListener('paint', paint, true);
+			await server.commands.writeFile(
+				`test/__results__/${server.browser}-preview-resize-trace.json`,
+				JSON.stringify({
+					devicePixelRatio: window.devicePixelRatio,
+					userAgent: navigator.userAgent,
+					events,
+				}),
+			);
+		}
 	}
 });
 

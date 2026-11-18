@@ -1,0 +1,106 @@
+name: Trace initial preview resize paint on main
+on:
+  push:
+    branches: [codex/trace-preview-resize]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - run: bun run build
+      - name: Freeze browser inputs
+        run: |
+          bundle="$RUNNER_TEMP/projective-chrome157"
+          archive="$RUNNER_TEMP/projective-chrome157.zip"
+          mkdir -p "$bundle"
+          if [ "$RUNNER_OS" = macOS ]; then
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/mac-arm64/chrome-mac-arm64.zip --output "$archive"
+            ditto -x -k "$archive" "$bundle"
+            binary="$bundle/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+            chflags -R uchg "$bundle"
+          else
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/linux64/chrome-linux64.zip --output "$archive"
+            unzip -q "$archive" -d "$bundle"
+            binary="$bundle/chrome-linux64/chrome"
+          fi
+          version="$("$binary" --version)"
+          case "$version" in *157.0.8103.79*) ;; *) exit 1 ;; esac
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/projective-svg-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Trace the original full renderer suite
+        run: |
+          mkdir -p qualification
+          git rev-parse HEAD > qualification/source-commit.txt
+          git show 8d8b321d64592f7998c15792e4872c768d41ef3f:packages/web-renderer/src/test/html-in-canvas.test.tsx > qualification/original-test.tsx
+          git diff 8d8b321d64592f7998c15792e4872c768d41ef3f HEAD -- packages/web-renderer/src/test/html-in-canvas.test.tsx > qualification/trace.patch
+          python3 - <<'HASH'
+          import hashlib, os, subprocess
+          from pathlib import Path
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only', '8d8b321d64592f7998c15792e4872c768d41ef3f', 'HEAD']).decode().splitlines())
+          assert changed == {'.github/workflows/preview-resize-trace.yml', 'packages/web-renderer/src/test/html-in-canvas.test.tsx'}, changed
+          files = subprocess.check_output(['git', 'ls-files', '-z']).decode().strip('\0').split('\0')
+          with Path('qualification/inputs.sha256').open('w') as output:
+              for file in files:
+                  path = Path(file)
+                  data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
+                  output.write(hashlib.sha256(data).hexdigest() + '  ' + file + '\n')
+          HASH
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          status=0
+          (cd packages/web-renderer && bun test ./test && bun ./test/browser-info.ts && bunx vitest src/test --browser --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+          if [ -d packages/web-renderer/test/__results__ ]; then mv packages/web-renderer/test/__results__ qualification/web-renderer; fi
+          if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments qualification/snapshot-attachments; fi
+          if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures qualification/native-pixel-failures; fi
+          printf '%s\n' "$status" > qualification/status.txt
+          python3 - <<'CHECK'
+          import hashlib, os
+          from pathlib import Path
+          for row in Path('qualification/inputs.sha256').read_text().splitlines():
+              expected, file = row.split(None, 1)
+              path = Path(file)
+              data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
+              assert hashlib.sha256(data).hexdigest() == expected, file
+          CHECK
+          shasum -a 256 --quiet -c "$RUNNER_TEMP/projective-svg-chrome.sha256"
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-resize-trace-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen macOS browser
+        if: always()
+        run: |
+          if [ "$RUNNER_OS" = macOS ] && [ -d "$RUNNER_TEMP/projective-chrome157" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/projective-chrome157"
+          fi
