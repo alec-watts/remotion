@@ -2,6 +2,7 @@ import '../symbol-dispose';
 import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
+import {supportsNativeHtmlInCanvas} from '../html-in-canvas';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {filterInputCases} from './fixtures/projective-filter-input';
 import {
@@ -34,6 +35,8 @@ test.for(
 			'identity-svg-image',
 			'identity-direct',
 			'identity-readback',
+			'bitmap-direct',
+			'bitmap-readback',
 			'html-repeat',
 		] as const;
 		const probes: Record<
@@ -62,6 +65,18 @@ test.for(
 		};
 
 		await checkpoint();
+		await server.commands.writeFile(
+			`${folder}/native-capability.json`,
+			JSON.stringify({
+				drawElementImage: supportsNativeHtmlInCanvas(),
+				requestPaint:
+					typeof (
+						document.createElement('canvas') as HTMLCanvasElement & {
+							requestPaint?: () => void;
+						}
+					).requestPaint === 'function',
+			}),
+		);
 		const reference = await captureNativeReference(composition, 0, {
 			omitBackground: false,
 		});
@@ -127,6 +142,7 @@ test.for(
 		let identityImage: HTMLImageElement | null = null;
 		try {
 			for (const mode of modes) {
+				let bitmap: ImageBitmap | null = null;
 				let raster: OffscreenCanvas | null = null;
 				let output: OffscreenCanvas | null = null;
 				try {
@@ -168,7 +184,12 @@ test.for(
 						});
 					} else {
 						const identity = mode.startsWith('identity-');
-						const transfer = identity ? mode.slice('identity-'.length) : mode;
+						const bitmapTransfer = mode.startsWith('bitmap-');
+						const transfer = identity
+							? mode.slice('identity-'.length)
+							: bitmapTransfer
+								? mode.slice('bitmap-'.length)
+								: mode;
 						if (identity && !identityImage) {
 							if (!identitySource.pending)
 								throw new Error('Identity source did not commit');
@@ -225,7 +246,9 @@ test.for(
 								context.fillRect(0, 0, raster.width, raster.height);
 							}
 
-							context.drawImage(selectedImage, 0, 0);
+							if (bitmapTransfer)
+								bitmap = await createImageBitmap(selectedImage);
+							context.drawImage(bitmap ?? selectedImage, 0, 0);
 							if (transfer === 'direct')
 								blob = await raster.convertToBlob({type: 'image/png'});
 							else {
@@ -250,6 +273,7 @@ test.for(
 				} catch (error) {
 					probes[mode] = {error: String(error), mismatchedPixels: null};
 				} finally {
+					bitmap?.close();
 					if (raster) {
 						raster.width = 0;
 						raster.height = 0;
