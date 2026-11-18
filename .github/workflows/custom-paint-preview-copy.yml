@@ -1,0 +1,115 @@
+name: Qualify custom paint preview presentation
+on:
+  push:
+    branches: [codex/qualify-custom-paint-preview-copy]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Fetch the pinned public renderer producer
+        run: |
+          git fetch --no-tags --depth=1 origin 503f6fa6b1f4f7386b2702f2fdf17a0e5762eb5e
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze browser inputs
+        run: |
+          bundle="$RUNNER_TEMP/projective-chrome157"
+          archive="$RUNNER_TEMP/projective-chrome157.zip"
+          mkdir -p "$bundle"
+          if [ "$RUNNER_OS" = macOS ]; then
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/mac-arm64/chrome-mac-arm64.zip --output "$archive"
+            ditto -x -k "$archive" "$bundle"
+            binary="$bundle/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+            chflags -R uchg "$bundle"
+          else
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/linux64/chrome-linux64.zip --output "$archive"
+            unzip -q "$archive" -d "$bundle"
+            binary="$bundle/chrome-linux64/chrome"
+          fi
+          version="$("$binary" --version)"
+          case "$version" in *157.0.8103.79*) ;; *) exit 1 ;; esac
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/projective-svg-chrome.sha256"
+          python3 - <<'PIN'
+          from pathlib import Path
+          config = Path("packages/web-renderer/vitest.config.ts")
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + " executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,"))
+          PIN
+      - name: Compare preview presentation twice with identical strict tests
+        run: |
+          baseline=503f6fa6b1f4f7386b2702f2fdf17a0e5762eb5e
+          producers='packages/core/src/HtmlInCanvas.tsx'
+          mkdir -p qualification
+          printf '%s\n' "$baseline" "$(git rev-parse HEAD)" > qualification/revisions.txt
+          git diff --binary "$baseline" HEAD -- $producers > qualification/producer.patch
+          test -s qualification/producer.patch
+          python3 - <<'HASH'
+          import hashlib, subprocess
+          from pathlib import Path
+          producers = {'packages/core/src/HtmlInCanvas.tsx'}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only', '503f6fa6b1f4f7386b2702f2fdf17a0e5762eb5e', 'HEAD', '--', 'packages/core/src']).decode().splitlines())
+          assert changed == producers, changed
+          files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'bun.lock', 'packages/core/src', 'packages/core/package.json']).decode().split('\0')
+          with Path('qualification/inputs.sha256').open('w') as output:
+              for file in files:
+                  if file and file not in producers:
+                      output.write(hashlib.sha256(Path(file).read_bytes()).hexdigest() + '  ' + file + '\n')
+          HASH
+          "$VERTICAL_TEXT_TRACE_CHROME" --version > qualification/chrome.txt
+          failed=0
+          for arm in baseline candidate baseline-repeat candidate-repeat; do
+            revision="$baseline"
+            case "$arm" in candidate*) revision=HEAD ;; esac
+            mkdir -p "qualification/$arm"
+            for producer in $producers; do
+              git show "$revision:$producer" > "$producer"
+              shasum -a 256 "$producer" >> "qualification/$arm/producer.sha256"
+            done
+            git diff --binary -- $producers > "qualification/$arm/working.diff"
+            bunx turbo run make --filter=@remotion/web-renderer
+            status=0
+            (cd packages/web-renderer && bunx vitest src/test/html-in-canvas.test.tsx --run --project chromium --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
+            if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
+            if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "qualification/$arm/native-pixel-failures"; fi
+            printf '%s\n' "$status" > "qualification/$arm/status.txt"
+            shasum -a 256 --quiet -c qualification/inputs.sha256
+            shasum -a 256 --quiet -c "$RUNNER_TEMP/projective-svg-chrome.sha256"
+            if [ "$status" != 0 ]; then failed=1; fi
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: custom-paint-preview-copy-${{ matrix.os }}
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen macOS browser
+        if: always()
+        run: |
+          if [ "$RUNNER_OS" = macOS ] && [ -d "$RUNNER_TEMP/projective-chrome157" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/projective-chrome157"
+          fi

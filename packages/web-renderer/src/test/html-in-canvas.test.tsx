@@ -4,6 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
+import {server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -377,6 +378,13 @@ for (const allowHtmlInCanvas of [false, true]) {
 				document.body.appendChild(container);
 				const root = createRoot(container);
 				let painted: Uint8ClampedArray | null = null;
+				const snapshots: {
+					current: {
+						painted: Uint8ClampedArray;
+						displayed: Uint8ClampedArray;
+						canvasCount: number;
+					} | null;
+				} = {current: null};
 				const onPainted = (canvas: OffscreenCanvas) => {
 					painted = readPixels(canvas, width, height);
 				};
@@ -402,12 +410,13 @@ for (const allowHtmlInCanvas of [false, true]) {
 						).toBeGreaterThan(1000);
 						const canvas = container.querySelector('canvas');
 						expect(canvas).not.toBeNull();
-						expect(
-							countDifferentPixels(
-								readPixels(canvas!, width, height),
-								painted!,
-							),
-						).toBe(0);
+						const displayed = readPixels(canvas!, width, height);
+						snapshots.current = {
+							painted: painted!,
+							displayed,
+							canvasCount: container.querySelectorAll('canvas').length,
+						};
+						expect(countDifferentPixels(displayed, painted!)).toBe(0);
 					});
 					preview = readPixels(
 						container.querySelector('canvas')!,
@@ -417,6 +426,33 @@ for (const allowHtmlInCanvas of [false, true]) {
 				} finally {
 					root.unmount();
 					container.remove();
+					if (snapshots.current) {
+						const folder = `test/__results__/custom-paint-preview/${server.browser}/${allowHtmlInCanvas}-${offset}`;
+						for (const role of ['painted', 'displayed'] as const) {
+							let binary = '';
+							for (const byte of snapshots.current[role])
+								binary += String.fromCharCode(byte);
+							await server.commands.writeFile(
+								`${folder}/${role}.rgba`,
+								btoa(binary),
+								'base64',
+							);
+						}
+
+						await server.commands.writeFile(
+							`${folder}/metadata.json`,
+							JSON.stringify({
+								width,
+								height,
+								canvasCount: snapshots.current.canvasCount,
+								mismatchedPixels: countDifferentPixels(
+									snapshots.current.painted,
+									snapshots.current.displayed,
+								),
+								userAgent: navigator.userAgent,
+							}),
+						);
+					}
 				}
 
 				const options = {
