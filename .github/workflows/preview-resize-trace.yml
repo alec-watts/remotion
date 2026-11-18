@@ -1,7 +1,7 @@
-name: Trace initial preview resize paint on main
+name: Trace initial preview resize paint on Linux main
 on:
   push:
-    branches: [codex/trace-preview-resize]
+    branches: [codex/trace-preview-resize-linux]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
         with:
