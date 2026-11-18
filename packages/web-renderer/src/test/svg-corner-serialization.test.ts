@@ -19,11 +19,24 @@ test('preserves authored corner styles, selectors and drawable cache without mut
 	const images = new Set<HTMLImageElement>();
 	document.body.appendChild(svg);
 	try {
-		for (const radius of [
-			'12px 8px 16px 10px / 8px 12px 10px 16px',
-			'8px 12px 10px 16px / 12px 8px 16px 10px',
-		]) {
-			box.style.setProperty('border-radius', radius, 'important');
+		for (const {radius, priority} of ['', 'important'].flatMap(
+			(selectedPriority) => [
+				{
+					radius: '12px 8px 16px 10px / 8px 12px 10px 16px',
+					priority: selectedPriority,
+				},
+				{
+					radius: '8px 12px 10px 16px / 12px 8px 16px 10px',
+					priority: selectedPriority,
+				},
+			],
+		)) {
+			box.style.setProperty(
+				'corner-shape',
+				'bevel notch scoop round',
+				priority,
+			);
+			box.style.setProperty('border-radius', radius, priority);
 			const authored = box.getAttribute('style')!;
 			style.textContent = `[data-corner-probe][style=${JSON.stringify(authored)}] {background-color: blue !important}`;
 			svg.prepend(style);

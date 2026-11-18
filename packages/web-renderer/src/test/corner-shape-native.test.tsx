@@ -128,9 +128,58 @@ test.for(
 		await checkpoint();
 		let cloned: HTMLDivElement | null = null;
 		let longhandRules = '';
+		let authoredDeclarations: unknown[] = [];
+		let clonedDeclarations: unknown[] = [];
 		const Captured = cornerShapeGrid(variant, (element) => {
 			if (!element) return;
 			cloned = element.cloneNode(true) as HTMLDivElement;
+			clonedDeclarations = Array.from(
+				cloned.querySelectorAll<HTMLElement>('[data-corner-shape]'),
+				(node) => ({
+					shape: node.getAttribute('data-corner-shape'),
+					authored: node.getAttribute('style'),
+					cssText: node.style.cssText,
+					properties: Array.from(node.style, (property) => ({
+						property,
+						value: node.style.getPropertyValue(property),
+						priority: node.style.getPropertyPriority(property),
+					})),
+					longhands: ['top-left', 'top-right', 'bottom-right', 'bottom-left']
+						.flatMap((corner) => [
+							`border-${corner}-radius`,
+							`corner-${corner}-shape`,
+						])
+						.map((property) => ({
+							property,
+							value: node.style.getPropertyValue(property),
+							priority: node.style.getPropertyPriority(property),
+						})),
+				}),
+			);
+			authoredDeclarations = Array.from(
+				element.querySelectorAll<HTMLElement>('[data-corner-shape]'),
+				(node) => ({
+					shape: node.getAttribute('data-corner-shape'),
+					authored: node.getAttribute('style'),
+					cssText: node.style.cssText,
+					corner: node.style.getPropertyValue('corner'),
+					properties: Array.from(node.style, (property) => ({
+						property,
+						value: node.style.getPropertyValue(property),
+						priority: node.style.getPropertyPriority(property),
+					})),
+					longhands: ['top-left', 'top-right', 'bottom-right', 'bottom-left']
+						.flatMap((corner) => [
+							`border-${corner}-radius`,
+							`corner-${corner}-shape`,
+						])
+						.map((property) => ({
+							property,
+							value: node.style.getPropertyValue(property),
+							priority: node.style.getPropertyPriority(property),
+						})),
+				}),
+			);
 			longhandRules = Array.from(
 				element.querySelectorAll('[data-corner-shape]'),
 				(node) => {
@@ -177,6 +226,10 @@ test.for(
 			{omitBackground: false},
 		);
 		await save('bounded', bounded);
+		await server.commands.writeFile(
+			`${folder}/authored-declarations.json`,
+			JSON.stringify({authoredDeclarations, clonedDeclarations}),
+		);
 		probes.bounded = {
 			error: null,
 			...(await countNativePixels(reference, bounded)),
