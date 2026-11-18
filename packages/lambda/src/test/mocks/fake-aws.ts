@@ -53,6 +53,7 @@ import {
 	getMockCallFunctionStreaming,
 	getMockCallFunctionSync,
 	getMockInvokeWithResponseStream,
+	pendingLambdaInvocations,
 } from './aws-clients';
 import {mockBundleSite} from './mock-bundle-site';
 import {mockCreateFunction} from './mock-create-function';
@@ -411,7 +412,14 @@ export const useFakeAws = () => {
 	afterEach(async () => {
 		traceBrowser('afterEach-start');
 		try {
-			await waitForPromisesToFinish(pendingBrowserCloses.splice(0));
+			// A completed client stream can precede the handler's final cleanup.
+			while (pendingLambdaInvocations.length > 0) {
+				await waitForPromisesToFinish(pendingLambdaInvocations.splice(0));
+			}
+
+			while (pendingBrowserCloses.length > 0) {
+				await waitForPromisesToFinish(pendingBrowserCloses.splice(0));
+			}
 			traceBrowser('afterEach-drained');
 		} finally {
 			resetFakeAws();
