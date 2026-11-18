@@ -18,6 +18,8 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+      - name: Fetch the pinned original test source
+        run: git fetch --no-tags --depth=1 origin 8d8b321d64592f7998c15792e4872c768d41ef3f
       - uses: actions/setup-node@v6
         with:
           node-version: 26
