@@ -40,6 +40,12 @@ jobs:
         run: bun ci
       - name: Build packages
         run: bun run build
+      - name: Prepare original Lambda integration bundle
+        run: bun run testlambda
+      - name: Run original Lambda and Cloud Run integration prerequisites
+        timeout-minutes: 10
+        working-directory: packages/it-tests
+        run: bun test src/lambda src/cloudrun --run
       - name: Ensure hosted browser
         working-directory: packages/lambda
         run: bunx remotion browser ensure
@@ -51,6 +57,15 @@ jobs:
           set -o pipefail
           cd packages/lambda
           bun test src/test/integration --run 2>&1 | tee ../../evidence/integration.log
+      - name: Replay observed real-render then cancellation order
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        env:
+          REMOTION_LAMBDA_BROWSER_TRACE: ${{ github.workspace }}/evidence/ordered-browser-lifetimes.jsonl
+        run: |
+          set -o pipefail
+          cd packages/lambda
+          bun test src/test/integration/progress-stream.test.ts src/test/integration/cli-render-cancellation.test.ts --run 2>&1 | tee ../../evidence/ordered-integration.log
       - name: Archive trace and source inputs
         if: always()
         uses: actions/upload-artifact@v4
