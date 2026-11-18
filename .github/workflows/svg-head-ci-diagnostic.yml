@@ -1,7 +1,7 @@
-name: Diagnose full Windows CI context
+name: Diagnose full Windows CI with upstream checkout metadata
 on:
   push:
-    branches: [codex/diagnose-svg-windows-full-context]
+    branches: [codex/diagnose-svg-windows-upstream-context]
 permissions:
   contents: read
 jobs:
@@ -36,7 +36,13 @@ jobs:
           bunx turbo run bundle --filter=@remotion/example --no-update-notifier
       - name: Compare exact main and published sources with diagnostic observations
         shell: bash
-        run: python .github/scripts/diagnose-svg-head-ci.py
+        run: |
+          # The unchanged CLI suite requires the upstream origin URL. No write
+          # credentials are persisted, and source checkout/fetch is complete.
+          git remote get-url origin
+          git remote set-url origin https://github.com/remotion-dev/remotion.git
+          git remote get-url origin
+          python .github/scripts/diagnose-svg-head-ci.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

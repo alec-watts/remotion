@@ -14,6 +14,7 @@ ROOT.mkdir(exist_ok=True)
 paths = subprocess.check_output(['git', 'diff', '--name-only', '-z', BASE, HEAD])
 (ROOT / 'changed-paths').write_bytes(paths)
 (ROOT / 'revisions.txt').write_text(BASE + '\n' + HEAD + '\n')
+(ROOT / 'origin-url.txt').write_bytes(subprocess.check_output(['git', 'remote', 'get-url', 'origin']))
 helper = Path('packages/web-renderer/src/test/native-reference.tsx')
 original_helper = helper.read_bytes()
 results = []
@@ -65,6 +66,10 @@ try:
             observer.start()
             try:
                 code = run(['bunx', 'turbo', 'run', 'test', '--force', '--concurrency=1', '--no-update-notifier'], '.', destination / 'full-test-context.log')
+                integration = run(['bun', 'run', 'test'], 'packages/it-tests', destination.resolve() / 'integration-after-context.log')
+                (destination / 'integration-after-context-status.txt').write_text(str(integration) + '\n')
+                if integration != 0:
+                    code = integration
             finally:
                 stop.set()
                 observer.join()
