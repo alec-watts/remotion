@@ -1,7 +1,7 @@
-name: Measure native shaped corners on unchanged main
+name: Measure native shaped corners through existing SVG carrier
 on:
   push:
-    branches: [codex/qualify-shaped-corner-native-baseline]
+    branches: [codex/qualify-corner-native-svg-carrier]
 permissions:
   contents: read
 jobs:

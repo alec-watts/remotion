@@ -21,11 +21,12 @@ export const cornerShapeVariants = [
 
 export const cornerShapeGrid = (
 	variant: (typeof cornerShapeVariants)[number],
+	onCapture: ((element: HTMLDivElement | null) => void) | null = null,
 ) => {
 	const Component = () => {
 		const frame = useCurrentFrame();
 		return (
-			<AbsoluteFill style={{backgroundColor: 'white'}}>
+			<AbsoluteFill ref={onCapture} style={{backgroundColor: 'white'}}>
 				{cornerShapeValues.map((cornerShape, index) => (
 					<div
 						key={cornerShape}

@@ -1,5 +1,7 @@
 import {expect, test} from 'vitest';
 import {server} from 'vitest/browser';
+import {createNativeMaskSvg} from '../drawing/native-mask-svg';
+import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {
 	cornerShapeGrid,
@@ -82,6 +84,203 @@ test.for(
 			`${folder}/comparison.json`,
 			JSON.stringify({variant, scale, frame, support, ...result}),
 		);
-		expect(result.mismatchedPixels).toBe(0);
+		// Keep the original capture and renderer result as the first observations.
+		// Probe native CSS in the existing SVG carrier without changing production.
+		const probes: Record<
+			string,
+			{error: string | null; mismatchedPixels: number | null}
+		> = {};
+		const checkpoint = async () => {
+			await server.commands.writeFile(
+				`${folder}/carrier.json`,
+				JSON.stringify({variant, scale, frame, support, probes}),
+			);
+		};
+
+		const save = async (name: string, blob: Blob) => {
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				`${folder}/${name}.png`,
+				btoa(binary),
+				'base64',
+			);
+		};
+
+		for (const name of [
+			'bounded',
+			'bounded-repeat',
+			'svg-image',
+			'direct',
+			'readback',
+			'seeded-readback',
+		])
+			probes[name] = {error: 'not-completed', mismatchedPixels: null};
+		await checkpoint();
+		let cloned: HTMLDivElement | null = null;
+		const Captured = cornerShapeGrid(variant, (element) => {
+			if (element) cloned = element.cloneNode(true) as HTMLDivElement;
+		}).component;
+		const bounded = await captureNativeReference(
+			{
+				...composition,
+				width: composition.width * scale,
+				height: composition.height * scale,
+				component: () => (
+					<div
+						style={{
+							position: 'relative',
+							width: composition.width,
+							height: composition.height,
+							transform: `scale(${scale})`,
+							transformOrigin: '0 0',
+						}}
+					>
+						<Captured />
+					</div>
+				),
+			},
+			frame,
+			{omitBackground: false},
+		);
+		await save('bounded', bounded);
+		probes.bounded = {
+			error: null,
+			...(await countNativePixels(reference, bounded)),
+		};
+		await checkpoint();
+		if (!cloned)
+			throw new Error('Corner fixture did not commit its native DOM');
+		const {svg, target} = createNativeMaskSvg({
+			ownerDocument: document,
+			maskRect: new DOMRect(0, 0, composition.width, composition.height),
+			precomposeRect: new DOMRect(0, 0, composition.width, composition.height),
+			referenceRect: new DOMRect(0, 0, composition.width, composition.height),
+			width: composition.width * scale,
+			height: composition.height * scale,
+		});
+		target.replaceChildren(cloned);
+		const image = await turnSvgIntoDrawable(svg);
+		try {
+			const prefix = 'data:image/svg+xml;charset=utf-8,';
+			expect(image.src.startsWith(prefix)).toBe(true);
+			await server.commands.writeFile(
+				`${folder}/carrier.svg`,
+				decodeURIComponent(image.src.slice(prefix.length)),
+			);
+			for (const mode of [
+				'bounded-repeat',
+				'svg-image',
+				'direct',
+				'readback',
+				'seeded-readback',
+			] as const) {
+				let raster: OffscreenCanvas | null = null;
+				let output: OffscreenCanvas | null = null;
+				try {
+					let blob: Blob;
+					if (mode === 'bounded-repeat') {
+						blob = await captureNativeReference(
+							{
+								...composition,
+								width: composition.width * scale,
+								height: composition.height * scale,
+								component: () => (
+									<div
+										style={{
+											position: 'relative',
+											width: composition.width,
+											height: composition.height,
+											transform: `scale(${scale})`,
+											transformOrigin: '0 0',
+										}}
+									>
+										<Component />
+									</div>
+								),
+							},
+							frame,
+							{omitBackground: false},
+						);
+					} else if (mode === 'svg-image') {
+						blob = await captureNativeReference(
+							{
+								...composition,
+								width: composition.width * scale,
+								height: composition.height * scale,
+								component: () => (
+									<img
+										src={image.src}
+										style={{
+											display: 'block',
+											width: composition.width * scale,
+											height: composition.height * scale,
+										}}
+									/>
+								),
+							},
+							frame,
+							{omitBackground: false},
+						);
+					} else {
+						raster = new OffscreenCanvas(
+							composition.width * scale,
+							composition.height * scale,
+						);
+						const context = raster.getContext('2d', {
+							willReadFrequently: mode !== 'direct',
+						})!;
+						if (mode === 'seeded-readback') {
+							context.fillStyle = 'white';
+							context.fillRect(0, 0, raster.width, raster.height);
+						}
+
+						context.drawImage(image, 0, 0);
+						if (mode === 'direct') {
+							blob = await raster.convertToBlob({type: 'image/png'});
+						} else {
+							output = new OffscreenCanvas(raster.width, raster.height);
+							output
+								.getContext('2d')!
+								.putImageData(
+									context.getImageData(0, 0, raster.width, raster.height),
+									0,
+									0,
+								);
+							blob = await output.convertToBlob({type: 'image/png'});
+						}
+					}
+
+					await save(mode, blob);
+					probes[mode] = {
+						error: null,
+						...(await countNativePixels(bounded, blob)),
+					};
+				} catch (error) {
+					probes[mode] = {error: String(error), mismatchedPixels: null};
+				} finally {
+					if (raster) {
+						raster.width = 0;
+						raster.height = 0;
+					}
+
+					if (output) {
+						output.width = 0;
+						output.height = 0;
+					}
+
+					await checkpoint();
+				}
+			}
+		} finally {
+			image.removeAttribute('src');
+		}
+
+		expect.soft(result.mismatchedPixels).toBe(0);
+		for (const probe of Object.values(probes)) {
+			expect.soft(probe.error).toBe(null);
+			expect.soft(probe.mismatchedPixels).toBe(0);
+		}
 	},
 );
