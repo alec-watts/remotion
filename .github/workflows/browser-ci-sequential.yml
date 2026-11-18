@@ -1,0 +1,121 @@
+name: Qualify sequential browser CI execution
+on:
+  push:
+    branches: [codex/qualify-browser-ci-sequential]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze Chrome and source inputs
+        run: |
+          bundle="$RUNNER_TEMP/browser-ci-chrome157"
+          archive="$RUNNER_TEMP/browser-ci-chrome157.zip"
+          curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/mac-arm64/chrome-mac-arm64.zip --output "$archive"
+          mkdir -p "$bundle" qualification
+          ditto -x -k "$archive" "$bundle"
+          binary="$bundle/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+          version="$("$binary" --version)"
+          case "$version" in *157.0.8103.79*) ;; *) exit 1 ;; esac
+          chflags -R uchg "$bundle"
+          echo "VERTICAL_TEXT_TRACE_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$bundle" -type f -exec shasum -a 256 {} + > "$RUNNER_TEMP/browser-ci-chrome.sha256"
+          git rev-parse HEAD > qualification/revision.txt
+          git diff --exit-code bd54f7cf129192ef2584db2af779640db9af9e2d HEAD -- packages bun.lock package.json turbo.json
+          python3 - <<'PIN'
+          import hashlib, subprocess
+          from pathlib import Path
+          config = Path('packages/web-renderer/vitest.config.ts')
+          source = config.read_text()
+          marker = "channel: 'chrome',"
+          assert source.count(marker) == 1
+          config.write_text(source.replace(marker, marker + ' executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME,'))
+          files = subprocess.check_output(['git', 'ls-files', '-z', 'packages', 'bun.lock', 'package.json', 'turbo.json']).decode().split('\0')
+          with Path('qualification/inputs.sha256').open('w') as output:
+              for file in files:
+                  if file:
+                      output.write(hashlib.sha256(Path(file).read_bytes()).hexdigest() + '  ' + file + '\n')
+          PIN
+          git diff --binary > qualification/working.diff
+          "$binary" --version > qualification/chrome.txt
+      - run: bun run build
+      - name: Run unchanged Bun unit tests
+        run: cd packages/web-renderer && bun test ./test
+      - name: Record selected runtime and native capture availability
+        run: |
+          mkdir -p qualification
+          cd packages/web-renderer
+          bun --eval '
+          import {chromium} from "playwright";
+          const browser = await chromium.launch({executablePath: process.env.VERTICAL_TEXT_TRACE_CHROME, headless: true});
+          try {
+            const session = await browser.newBrowserCDPSession();
+            const {gpu} = await session.send("SystemInfo.getInfo");
+            const page = await browser.newPage();
+            const native = await page.evaluate(() => {
+              const canvas = document.createElement("canvas");
+              return {drawElementImage: typeof canvas.getContext("2d")?.drawElementImage === "function", requestPaint: typeof canvas.requestPaint === "function"};
+            });
+            await Bun.write("../../qualification/browser.json", JSON.stringify({version: browser.version(), native, gpu}, null, 2));
+            if (!native.drawElementImage || !native.requestPaint) throw new Error("The selected Chrome build does not expose the native path; do not count skipped blur tests as qualification");
+          } finally {
+            await browser.close();
+          }
+          '
+      - name: Compare full and sequential browser execution
+        run: |
+          failed=0
+          for arm in current sequential sequential-repeat; do
+            mkdir -p "qualification/$arm"
+            if [ "$arm" = current ]; then projects=all; else projects='chromium firefox webkit'; fi
+            for project in $projects; do
+              destination="qualification/$arm/$project"
+              mkdir -p "$destination"
+              printf '%s\n' -1 > "$destination/status.txt"
+              date -u +%FT%TZ > "$destination/started.txt"
+              vm_stat > "$destination/memory-before.txt"
+              ps -axo pid,ppid,rss,comm > "$destination/processes-before.txt"
+              args=()
+              if [ "$project" != all ]; then args=(--project "$project"); fi
+              status=0
+              (cd packages/web-renderer && bunx vitest src/test --browser --run "${args[@]}" --reporter=default --reporter=json --outputFile=./test/__results__/report.json) > "$destination/browser.log" 2>&1 || status=$?
+              printf '%s\n' "$status" > "$destination/status.txt"
+              date -u +%FT%TZ > "$destination/finished.txt"
+              vm_stat > "$destination/memory-after.txt"
+              ps -axo pid,ppid,rss,comm > "$destination/processes-after.txt"
+              tail -15 "$destination/browser.log"
+              if [ -d packages/web-renderer/test/__results__ ]; then mv packages/web-renderer/test/__results__ "$destination/web-renderer"; fi
+              if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "$destination/snapshot-attachments"; fi
+              if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "$destination/native-pixel-failures"; fi
+              shasum -a 256 --quiet -c qualification/inputs.sha256
+              shasum -a 256 --quiet -c "$RUNNER_TEMP/browser-ci-chrome.sha256"
+              if [ "$status" != 0 ]; then failed=1; fi
+            done
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-ci-sequential-macos-latest
+          include-hidden-files: true
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen browser
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/browser-ci-chrome157" ]; then chflags -R nouchg "$RUNNER_TEMP/browser-ci-chrome157"; fi
