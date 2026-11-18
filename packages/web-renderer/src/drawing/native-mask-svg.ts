@@ -2,6 +2,7 @@
 // Keep layout/reference padding separate so alpha edges are painted once.
 export const createNativeMaskSvg = ({
 	ownerDocument,
+	scale,
 	maskRect,
 	precomposeRect,
 	referenceRect,
@@ -9,6 +10,7 @@ export const createNativeMaskSvg = ({
 	height,
 }: {
 	ownerDocument: Document;
+	scale: number | null;
 	maskRect: DOMRect;
 	precomposeRect: DOMRect;
 	referenceRect: DOMRect;
@@ -21,7 +23,9 @@ export const createNativeMaskSvg = ({
 	svg.setAttribute('height', String(height));
 	svg.setAttribute(
 		'viewBox',
-		`0 0 ${precomposeRect.width} ${precomposeRect.height}`,
+		scale === null
+			? `0 0 ${precomposeRect.width} ${precomposeRect.height}`
+			: `0 0 ${width} ${height}`,
 	);
 	const foreignObject = ownerDocument.createElementNS(
 		namespace,
@@ -29,8 +33,14 @@ export const createNativeMaskSvg = ({
 	);
 	foreignObject.setAttribute('x', '0');
 	foreignObject.setAttribute('y', '0');
-	foreignObject.setAttribute('width', String(precomposeRect.width));
-	foreignObject.setAttribute('height', String(precomposeRect.height));
+	foreignObject.setAttribute(
+		'width',
+		String(scale === null ? precomposeRect.width : width),
+	);
+	foreignObject.setAttribute(
+		'height',
+		String(scale === null ? precomposeRect.height : height),
+	);
 	const htmlNamespace = 'http://www.w3.org/1999/xhtml';
 	const viewport = ownerDocument.createElementNS(
 		htmlNamespace,
@@ -41,6 +51,13 @@ export const createNativeMaskSvg = ({
 		width: `${precomposeRect.width}px`,
 		height: `${precomposeRect.height}px`,
 	});
+	// Keep mask layout in CSS pixels and apply the export scale in HTML.
+	// Scaling the SVG viewBox can leave WebKit mask resources unscaled.
+	if (scale !== null && scale !== 1) {
+		viewport.style.transform = `scale(${scale})`;
+		viewport.style.transformOrigin = '0 0';
+	}
+
 	const target = ownerDocument.createElementNS(
 		htmlNamespace,
 		'div',

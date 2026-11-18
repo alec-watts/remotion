@@ -261,8 +261,17 @@ export const parseMaskImage = (
 	computedStyle: CSSStyleDeclaration,
 ): MaskImageInfo | null => {
 	const images = splitAtTopLevel(value, ',');
-	if (images.length === 1) return parseSingleMaskImage(value, computedStyle, 0);
-	if (!CSS.supports('mask-composite', computedStyle.maskComposite)) {
+	const single =
+		images.length === 1 ? parseSingleMaskImage(value, computedStyle, 0) : null;
+	if (
+		single &&
+		(single.type !== 'url' || !/\b(?:space|round)\b/.test(single.maskRepeat))
+	)
+		return single;
+	if (
+		images.length > 1 &&
+		!CSS.supports('mask-composite', computedStyle.maskComposite)
+	) {
 		throw new Error(
 			`Unsupported mask-composite value: ${computedStyle.maskComposite}. Use add, subtract, intersect, or exclude.`,
 		);
@@ -281,7 +290,8 @@ export const parseMaskImage = (
 		},
 		layers: images.map((image, index) => {
 			if (image === 'none') return null;
-			const parsed = parseSingleMaskImage(image, computedStyle, index);
+			const parsed =
+				single ?? parseSingleMaskImage(image, computedStyle, index);
 			if (parsed.type !== 'url')
 				throw new Error(
 					'Multiple mask-image layers require raster URL or none sources',

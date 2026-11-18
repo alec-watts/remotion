@@ -2,7 +2,6 @@ import {getBiggestBoundingClientRect} from '../get-biggest-bounding-client-rect'
 import type {InternalState} from '../internal-state';
 import {getBackgroundImageRect} from './background-image-rect';
 import {createCssMask} from './css-mask';
-import {getBackgroundFill} from './get-background-fill';
 import type {MaskImageInfo} from './mask-image';
 import {createCanvasGradient} from './parse-linear-gradient';
 import {getRasterImage} from './raster-image-loader';
@@ -49,6 +48,7 @@ export const handleMask = async ({
 	if (maskImageInfo.type === 'layers') {
 		const groupImage = await createCssMask({
 			maskImageInfo,
+			scale,
 			maskRect,
 			precomposeRect,
 			width: tempContext.canvas.width,
@@ -97,59 +97,6 @@ export const handleMask = async ({
 			rectToFill.width,
 			rectToFill.height,
 		);
-		return;
-	}
-
-	if (/\b(?:space|round)\b/.test(maskImageInfo.maskRepeat)) {
-		const mask = new OffscreenCanvas(
-			tempContext.canvas.width,
-			tempContext.canvas.height,
-		);
-		try {
-			const maskContext = mask.getContext('2d', {willReadFrequently: true});
-			if (!maskContext) throw new Error('Could not create raster mask context');
-			maskContext.setTransform(scale, 0, 0, scale, 0, 0);
-			maskContext.imageSmoothingEnabled = tempContext.imageSmoothingEnabled;
-			maskContext.imageSmoothingQuality = tempContext.imageSmoothingQuality;
-			const left = maskRect.left - precomposeRect.left;
-			const top = maskRect.top - precomposeRect.top;
-			maskContext.beginPath();
-			maskContext.rect(left, top, maskRect.width, maskRect.height);
-			maskContext.clip();
-			const fill = await getBackgroundFill({
-				backgroundImage: `url(${JSON.stringify(maskImageInfo.src)})`,
-				backgroundPosition: maskImageInfo.maskPosition,
-				backgroundSize: maskImageInfo.maskSize,
-				backgroundRepeat: maskImageInfo.maskRepeat,
-				sourceProperty: 'mask-image',
-				internalState,
-				positioningArea: maskRect,
-				boundingRect: maskRect,
-				contextToDraw: maskContext,
-				offsetLeft: precomposeRect.left,
-				offsetTop: precomposeRect.top,
-			});
-			if (fill && 'image' in fill) {
-				for (const repeatedTile of fill.rects) {
-					maskContext.drawImage(
-						fill.image,
-						repeatedTile.left - precomposeRect.left,
-						repeatedTile.top - precomposeRect.top,
-						repeatedTile.width,
-						repeatedTile.height,
-					);
-				}
-			} else if (fill) {
-				maskContext.fillStyle = fill;
-				maskContext.fillRect(left, top, maskRect.width, maskRect.height);
-			}
-
-			applyMaskCanvas(tempContext, mask);
-		} finally {
-			mask.width = 0;
-			mask.height = 0;
-		}
-
 		return;
 	}
 

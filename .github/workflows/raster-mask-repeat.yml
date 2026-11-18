@@ -1,7 +1,7 @@
-name: Qualify raster mask space and round repetition
+name: Qualify native CSS mask scale and repetition
 on:
   push:
-    branches: [codex/qualify-raster-mask-repeat]
+    branches: [codex/qualify-native-mask-repeat]
 permissions:
   contents: read
 jobs:
@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - name: Fetch the pinned public renderer producer
-        run: git fetch --no-tags --depth=1 origin e6b9083c4984609e48db0453f3274e2123f30430
+        run: git fetch --no-tags --depth=1 origin 3103874f1cf2a38c827a8e071c26eb419f2aea11
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -57,8 +57,8 @@ jobs:
           PIN
       - name: Compare raster mask rendering with identical inputs
         run: |
-          baseline=e6b9083c4984609e48db0453f3274e2123f30430
-          producers='packages/web-renderer/src/drawing/draw-background.ts packages/web-renderer/src/drawing/get-background-fill.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/mask-image.ts'
+          baseline=3103874f1cf2a38c827a8e071c26eb419f2aea11
+          producers='packages/web-renderer/src/drawing/css-mask.ts packages/web-renderer/src/drawing/handle-mask.ts packages/web-renderer/src/drawing/mask-image.ts packages/web-renderer/src/drawing/native-mask-svg.ts packages/web-renderer/src/drawing/svg-clip-mask.ts'
           mkdir -p qualification
           printf '%s\n' "$baseline" "$(git rev-parse HEAD)" > qualification/revisions.txt
           git diff --binary "$baseline" HEAD -- $producers > qualification/producer.patch
@@ -66,8 +66,8 @@ jobs:
           python3 - <<'HASH'
           import hashlib, subprocess
           from pathlib import Path
-          producers = {'packages/web-renderer/src/drawing/' + name for name in ['draw-background.ts', 'get-background-fill.ts', 'handle-mask.ts', 'mask-image.ts']}
-          changed = set(subprocess.check_output(['git', 'diff', '--name-only', 'e6b9083c4984609e48db0453f3274e2123f30430', 'HEAD', '--', 'packages/web-renderer/src/drawing']).decode().splitlines())
+          producers = {'packages/web-renderer/src/drawing/' + name for name in ['css-mask.ts', 'handle-mask.ts', 'mask-image.ts', 'native-mask-svg.ts', 'svg-clip-mask.ts']}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only', '3103874f1cf2a38c827a8e071c26eb419f2aea11', 'HEAD', '--', 'packages/web-renderer/src/drawing']).decode().splitlines())
           assert changed == producers, changed
           files = subprocess.check_output(['git', 'ls-files', '-z', 'packages/web-renderer/src', 'packages/web-renderer/vitest.config.ts', 'packages/web-renderer/package.json', 'bun.lock']).decode().split('\0')
           with Path('qualification/inputs.sha256').open('w') as output:
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: raster-mask-repeat-${{ matrix.os }}
+          name: native-mask-repeat-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error
@@ -109,6 +109,6 @@ jobs:
       - name: Release frozen macOS browser
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/projective-chrome157" ]; then
+          if [ "$RUNNER_OS" = macOS ] && [ -d "$RUNNER_TEMP/projective-chrome157" ]; then
             chflags -R nouchg "$RUNNER_TEMP/projective-chrome157"
           fi

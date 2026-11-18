@@ -6,6 +6,7 @@ import {turnSvgIntoDrawable} from './turn-svg-into-drawable';
 
 export const createCssMask = async ({
 	maskImageInfo,
+	scale,
 	maskRect,
 	precomposeRect,
 	width,
@@ -13,6 +14,7 @@ export const createCssMask = async ({
 	internalState,
 }: {
 	maskImageInfo: Extract<MaskImageInfo, {type: 'layers'}>;
+	scale: number;
 	maskRect: DOMRect;
 	precomposeRect: DOMRect;
 	width: number;
@@ -32,6 +34,7 @@ export const createCssMask = async ({
 	);
 	const {svg, target} = createNativeMaskSvg({
 		ownerDocument: document,
+		scale,
 		maskRect,
 		precomposeRect,
 		referenceRect: maskRect,

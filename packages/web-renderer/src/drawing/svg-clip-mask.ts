@@ -22,6 +22,7 @@ export const createSvgClipMask = ({
 	const namespace = 'http://www.w3.org/2000/svg';
 	const {svg, target} = createNativeMaskSvg({
 		ownerDocument: resource.ownerDocument,
+		scale: null,
 		maskRect,
 		precomposeRect,
 		referenceRect,
