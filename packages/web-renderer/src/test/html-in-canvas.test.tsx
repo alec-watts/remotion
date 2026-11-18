@@ -377,6 +377,10 @@ for (const allowHtmlInCanvas of [false, true]) {
 				const container = document.createElement('div');
 				document.body.appendChild(container);
 				const root = createRoot(container);
+				const visibleCanvas = () =>
+					Array.from(container.querySelectorAll('canvas')).find(
+						(canvas) => getComputedStyle(canvas).visibility !== 'hidden',
+					) ?? null;
 				let painted: Uint8ClampedArray | null = null;
 				const snapshots: {
 					current: {
@@ -408,7 +412,7 @@ for (const allowHtmlInCanvas of [false, true]) {
 						expect(
 							painted!.filter((value, i) => i % 4 === 0 && value < 250).length,
 						).toBeGreaterThan(1000);
-						const canvas = container.querySelector('canvas');
+						const canvas = visibleCanvas();
 						expect(canvas).not.toBeNull();
 						const displayed = readPixels(canvas!, width, height);
 						snapshots.current = {
@@ -418,11 +422,7 @@ for (const allowHtmlInCanvas of [false, true]) {
 						};
 						expect(countDifferentPixels(displayed, painted!)).toBe(0);
 					});
-					preview = readPixels(
-						container.querySelector('canvas')!,
-						width,
-						height,
-					);
+					preview = readPixels(visibleCanvas()!, width, height);
 				} finally {
 					root.unmount();
 					container.remove();

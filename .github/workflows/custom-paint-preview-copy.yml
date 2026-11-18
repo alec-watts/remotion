@@ -1,14 +1,14 @@
-name: Qualify custom paint preview presentation
+name: Qualify custom preview in the full renderer context
 on:
   push:
-    branches: [codex/qualify-custom-paint-preview-copy]
+    branches: [codex/qualify-custom-paint-preview-context]
 permissions:
   contents: read
 jobs:
   compare:
     if: github.repository == 'alec-watts/remotion'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -89,7 +89,7 @@ jobs:
             git diff --binary -- $producers > "qualification/$arm/working.diff"
             bunx turbo run make --filter=@remotion/web-renderer
             status=0
-            (cd packages/web-renderer && bunx vitest src/test/html-in-canvas.test.tsx --run --project chromium --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
+            (cd packages/web-renderer && bunx vitest src/test --run --reporter=default --reporter=json --outputFile=./test/__results__/report.json) || status=$?
             mv packages/web-renderer/test/__results__ "qualification/$arm/web-renderer"
             if [ -d packages/web-renderer/.vitest/attachments ]; then mv packages/web-renderer/.vitest/attachments "qualification/$arm/snapshot-attachments"; fi
             if [ -d packages/web-renderer/src/test/__screenshots__/native-pixel-failures ]; then mv packages/web-renderer/src/test/__screenshots__/native-pixel-failures "qualification/$arm/native-pixel-failures"; fi
@@ -102,7 +102,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: custom-paint-preview-copy-${{ matrix.os }}
+          name: custom-paint-preview-context-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

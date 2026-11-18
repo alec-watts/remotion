@@ -1088,15 +1088,6 @@ const HtmlInCanvasContent = forwardRef<
 
 		return (
 			<HtmlInCanvasAncestorContext.Provider value={paintState}>
-				{paintTargetMode === 'copied' ? (
-					<canvas
-						key="output"
-						ref={setVisibleCanvasRef}
-						width={canvasWidth}
-						height={canvasHeight}
-						style={canvasStyle}
-					/>
-				) : null}
 				<canvas
 					key={paintTargetMode}
 					ref={paintTargetMode === 'copied' ? canvas2dRef : setVisibleCanvasRef}
@@ -1129,6 +1120,15 @@ const HtmlInCanvasContent = forwardRef<
 						{canvasSiblings}
 					</DefaultPremountContext.Provider>
 				</canvas>
+				{paintTargetMode === 'copied' ? (
+					<canvas
+						key="output"
+						ref={setVisibleCanvasRef}
+						width={canvasWidth}
+						height={canvasHeight}
+						style={canvasStyle}
+					/>
+				) : null}
 			</HtmlInCanvasAncestorContext.Provider>
 		);
 	},
