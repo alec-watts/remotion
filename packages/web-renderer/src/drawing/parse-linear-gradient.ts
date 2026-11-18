@@ -20,6 +20,7 @@ export interface UnresolvedColorStop {
 }
 
 export interface LinearGradientInfo {
+	repeating?: boolean;
 	angle: number; // Degrees, 0 = to top, 90 = to right, 180 = to bottom, 270 = to left
 	colorStops: UnresolvedColorStop[];
 }
@@ -348,7 +349,62 @@ export const parseLinearGradient = (
 	return {
 		angle,
 		colorStops,
+		...(/^\s*repeating-linear-gradient\(/i.test(backgroundImage)
+			? {repeating: true}
+			: {}),
 	};
+};
+
+const repeatColorStops = (
+	stops: ColorStop[],
+	periodInDevicePixels: number,
+): ColorStop[] => {
+	const first = stops[0].position;
+	const last = stops[stops.length - 1].position;
+	const period = last - first;
+	if (period === 0 || periodInDevicePixels < 1) {
+		const colors = stops.map((stop) => cssColorToRgba(stop.color)!);
+		const positions =
+			period === 0
+				? stops.map((_, i) => i)
+				: stops.map((stop) => stop.position);
+		const total = positions[positions.length - 1] - positions[0];
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		let a = 0;
+		for (let i = 0; i < colors.length - 1; i++) {
+			const weight = (positions[i + 1] - positions[i]) / (2 * total);
+			for (const sample of [colors[i], colors[i + 1]]) {
+				r += sample.r * sample.a * weight;
+				g += sample.g * sample.a * weight;
+				b += sample.b * sample.a * weight;
+				a += sample.a * weight;
+			}
+		}
+
+		const color =
+			a === 0 ? 'transparent' : `rgba(${r / a}, ${g / a}, ${b / a}, ${a})`;
+		return [
+			{position: 0, color},
+			{position: 1, color},
+		];
+	}
+
+	const start = Math.floor(-first / period) - 1;
+	const end = Math.ceil((1 - last) / period) + 1;
+	const repeated: ColorStop[] = [];
+	for (let cycle = start; cycle <= end; cycle++) {
+		for (let i = 0; i < stops.length; i++) {
+			const position =
+				i === stops.length - 1
+					? first + (cycle + 1) * period
+					: stops[i].position + cycle * period;
+			repeated.push({color: stops[i].color, position});
+		}
+	}
+
+	return repeated;
 };
 
 export const createCanvasGradient = ({
@@ -393,10 +449,24 @@ export const createCanvasGradient = ({
 		length = Math.sqrt(halfWidth ** 2 + halfHeight ** 2);
 	}
 
-	const stops = resolveColorStops(
+	const resolvedStops = resolveColorStops(
 		gradientInfo.colorStops,
 		(length * 2) / cssPixelsPerUnit,
 	);
+	const matrix = ctx.getTransform();
+	const period =
+		resolvedStops[resolvedStops.length - 1].position -
+		resolvedStops[0].position;
+	const projectedLength =
+		Math.hypot(
+			matrix.a * cos + matrix.c * sin,
+			matrix.b * cos + matrix.d * sin,
+		) *
+		length *
+		2;
+	const stops = gradientInfo.repeating
+		? repeatColorStops(resolvedStops, period * projectedLength)
+		: resolvedStops;
 	const {start, end, toCanvasOffset} = getCanvasGradientRange(stops);
 
 	const x0 = centerX - cos * length;

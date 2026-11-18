@@ -246,7 +246,9 @@ const parseSingleMaskImage = (
 		};
 	}
 
-	const gradientInfo = /^\s*linear-gradient\(/i.test(maskImageValue)
+	const gradientInfo = /^\s*(?:repeating-)?linear-gradient\(/i.test(
+		maskImageValue,
+	)
 		? parseLinearGradient(maskImageValue)
 		: null;
 	if (gradientInfo) {
