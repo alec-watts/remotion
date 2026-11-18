@@ -1,5 +1,5 @@
 import {expect, test, vi} from 'vitest';
-import {server} from 'vitest/browser';
+import {page, server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {svgFontFamilyLifetimeReady} from './fixtures/svg-font-family-lifetime';
 import {
@@ -110,9 +110,22 @@ test.for(svgReadbackBoundsModes)(
 				events,
 			}),
 		);
-		const reference = await captureNativeReference(composition, 0, {
-			omitBackground: mode === 'translucent',
-		});
+		const originalViewport = {
+			width: window.innerWidth,
+			height: window.innerHeight,
+		};
+		let reference: Blob;
+		try {
+			if (mode === 'large')
+				await page.viewport(composition.width + 32, composition.height + 32);
+			reference = await captureNativeReference(composition, 0, {
+				omitBackground: mode === 'translucent',
+			});
+		} finally {
+			if (mode === 'large')
+				await page.viewport(originalViewport.width, originalViewport.height);
+		}
+
 		await savePng('native', reference);
 		const comparison = await countNativePixels(reference, actual);
 		await server.commands.writeFile(
