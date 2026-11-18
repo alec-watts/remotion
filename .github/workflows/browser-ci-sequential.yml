@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Fetch the pinned current PR source
+        run: git fetch --no-tags --depth=1 origin bd54f7cf129192ef2584db2af779640db9af9e2d
       - uses: actions/setup-node@v6
         with:
           node-version: 26
