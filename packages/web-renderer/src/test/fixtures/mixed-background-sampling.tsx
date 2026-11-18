@@ -54,6 +54,7 @@ export const mixedBackgroundSampling = (pixelated: boolean) => {
 			</AbsoluteFill>
 		);
 	};
+
 	return {
 		component: Component,
 		id: `mixed-background-sampling-${pixelated}`,

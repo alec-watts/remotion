@@ -123,6 +123,33 @@ export const drawBackground = async ({
 			target.imageSmoothingEnabled = false;
 		}
 
+		if ('patternRects' in fill) {
+			target.save();
+			try {
+				target.beginPath();
+				target.rect(
+					boundingRect.left - originX,
+					boundingRect.top - originY,
+					boundingRect.width,
+					boundingRect.height,
+				);
+				target.clip();
+				for (const {pattern, rect: tile} of fill.patternRects) {
+					target.fillStyle = pattern;
+					target.fillRect(
+						tile.left - originX,
+						tile.top - originY,
+						tile.width,
+						tile.height,
+					);
+				}
+			} finally {
+				target.restore();
+			}
+
+			return;
+		}
+
 		if ('image' in fill) {
 			target.save();
 			target.beginPath();

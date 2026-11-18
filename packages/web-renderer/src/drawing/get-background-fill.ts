@@ -76,6 +76,7 @@ export const getBackgroundFill = async ({
 	| CanvasGradient
 	| CanvasPattern
 	| {image: ImageBitmap; rects: Iterable<DOMRect>}
+	| {patternRects: Iterable<{pattern: CanvasPattern; rect: DOMRect}>}
 	| null
 > => {
 	if (backgroundImage && backgroundImage !== 'none') {
@@ -122,6 +123,44 @@ export const getBackgroundFill = async ({
 					paintStart: boundingRect.top,
 					paintEnd: boundingRect.bottom,
 				});
+				const continuousX = repeatX === 'repeat' || repeatX === 'round';
+				const continuousY = repeatY === 'repeat' || repeatY === 'round';
+				if (continuousX || continuousY) {
+					return {
+						patternRects: (function* () {
+							for (const x of continuousX ? [rect.left] : xs) {
+								for (const y of continuousY ? [rect.top] : ys) {
+									const stripPattern = contextToDraw.createPattern(
+										image,
+										continuousX ? 'repeat-x' : 'repeat-y',
+									);
+									if (!stripPattern)
+										throw new Error(
+											'Could not create mixed background pattern',
+										);
+									stripPattern.setTransform(
+										new DOMMatrix()
+											.translate(x - offsetLeft, y - offsetTop)
+											.scale(
+												rect.width / image.width,
+												rect.height / image.height,
+											),
+									);
+									yield {
+										pattern: stripPattern,
+										rect: new DOMRect(
+											continuousX ? boundingRect.left : x,
+											continuousY ? boundingRect.top : y,
+											continuousX ? boundingRect.width : rect.width,
+											continuousY ? boundingRect.height : rect.height,
+										),
+									};
+								}
+							}
+						})(),
+					};
+				}
+
 				return {
 					image,
 					rects: (function* () {
