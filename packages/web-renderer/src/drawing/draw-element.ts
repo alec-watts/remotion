@@ -40,8 +40,12 @@ export const drawElement = async ({
 	scale: number;
 }) => {
 	const {backgroundImage, backgroundColor, backgroundClip} = computedStyle;
+	const cornerShape = computedStyle.getPropertyValue('corner-shape');
 	const borderRadius = parseBorderRadius({
-		borderRadius: computedStyle.borderRadius,
+		borderRadius:
+			cornerShape === 'square' || cornerShape === 'superellipse(infinity)'
+				? '0px'
+				: computedStyle.borderRadius,
 		width: rect.width,
 		height: rect.height,
 	});
