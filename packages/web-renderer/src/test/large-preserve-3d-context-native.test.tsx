@@ -1,6 +1,6 @@
 import '../symbol-dispose';
 import {expect, test} from 'vitest';
-import {server} from 'vitest/browser';
+import {page, server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {largePreserve3DContext as fixture} from './fixtures/large-preserve-3d-context';
 import {captureNativeReference, countNativePixels} from './native-reference';
@@ -12,6 +12,8 @@ test.for(cases)(
 	'matches native large preserving contexts frame=$frame scale=$scale',
 	{timeout: 20_000},
 	async ({frame, scale}) => {
+		await page.viewport(1280, 720);
+		let nativeProbe: unknown = null;
 		const folder = `test/__results__/large-context/${server.browser}/${frame}-${scale}`;
 		const record = {
 			frame,
@@ -20,6 +22,7 @@ test.for(cases)(
 			renderError: 'not-completed' as string | null,
 			disabledError: 'not-completed' as string | null,
 			comparison: null as Awaited<ReturnType<typeof countNativePixels>> | null,
+			durations: {} as Record<string, number>,
 			disabledComparison: null as Awaited<
 				ReturnType<typeof countNativePixels>
 			> | null,
@@ -42,6 +45,7 @@ test.for(cases)(
 
 		await checkpoint();
 		let reference: Blob;
+		const nativeStarted = performance.now();
 		try {
 			const Source = fixture.component;
 			reference = await captureNativeReference(
@@ -65,9 +69,45 @@ test.for(cases)(
 					),
 				},
 				frame,
-				{omitBackground: false},
+				{
+					omitBackground: false,
+					beforeScreenshot: (host) => {
+						nativeProbe = {
+							devicePixelRatio: window.devicePixelRatio,
+							userAgent: navigator.userAgent,
+							contexts: Array.from(
+								host.querySelectorAll<HTMLElement>(
+									'[data-context-plane-count]',
+								),
+								(element) => {
+									const rect = element.getBoundingClientRect();
+									const style = getComputedStyle(element);
+									return {
+										count: Number(element.dataset.contextPlaneCount),
+										transformStyle: style.transformStyle,
+										transform: style.transform,
+										rect: rect.toJSON(),
+										hitOrder: document
+											.elementsFromPoint(
+												rect.left + rect.width / 2,
+												rect.top + rect.height / 2,
+											)
+											.filter((node) => element.contains(node))
+											.map((node) => node.getAttribute('data-plane-id'))
+											.filter((id) => id !== null),
+									};
+								},
+							),
+						};
+					},
+				},
 			);
+			record.durations.native = performance.now() - nativeStarted;
 			await save('reference', reference);
+			await server.commands.writeFile(
+				`${folder}/native-contexts.json`,
+				JSON.stringify(nativeProbe),
+			);
 			record.nativeError = null;
 			await checkpoint();
 		} catch (error) {
@@ -98,7 +138,9 @@ test.for(cases)(
 
 		let actual: Blob;
 		try {
+			const started = performance.now();
 			actual = await render(true);
+			record.durations.enabled = performance.now() - started;
 			await save('actual', actual);
 			record.renderError = null;
 			await checkpoint();
@@ -109,7 +151,9 @@ test.for(cases)(
 		}
 
 		try {
+			const started = performance.now();
 			const disabled = await render(false);
+			record.durations.disabled = performance.now() - started;
 			await save('disabled', disabled);
 			record.disabledError = null;
 			record.disabledComparison = await countNativePixels(reference, disabled);

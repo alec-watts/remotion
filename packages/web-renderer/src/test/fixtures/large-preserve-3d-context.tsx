@@ -45,6 +45,7 @@ const Component = () => {
 					{planes.map(({id, depth, color}) => (
 						<div
 							key={id}
+							data-plane-id={id}
 							style={{
 								position: 'absolute',
 								left: 16,

@@ -22,7 +22,13 @@ type Fixture = {
 export const captureNativeReference = async (
 	fixture: Fixture,
 	frame = 0,
-	{omitBackground = true}: {omitBackground?: boolean} = {},
+	{
+		omitBackground = true,
+		beforeScreenshot = null,
+	}: {
+		omitBackground?: boolean;
+		beforeScreenshot?: ((host: HTMLDivElement) => void) | null;
+	} = {},
 ) => {
 	const host = document.createElement('div');
 	host.dataset.testid = `${fixture.id}-native-${frame}`;
@@ -127,6 +133,8 @@ export const captureNativeReference = async (
 
 			if (resources.error !== null) throw resources.error;
 		} while (isPending());
+
+		beforeScreenshot?.(host);
 
 		// `save: false` skips writing the PNG to disk. Vitest 5.0.3 then resolves
 		// to the base64 string even though its types still declare {path, base64}.

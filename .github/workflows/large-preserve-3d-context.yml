@@ -1,7 +1,7 @@
-name: Qualify larger preserving 3D contexts
+name: Trace native hit order in large 3D contexts
 on:
   push:
-    branches: [codex/qualify-large-3d-context]
+    branches: [codex/trace-large-context-hit-order]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-24.04]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
         with:
