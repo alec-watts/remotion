@@ -1,7 +1,7 @@
-name: Compare native SVG image and mask transfer stages
+name: Compare native mask transfer color precision
 on:
   push:
-    branches: [codex/qualify-mask-native-image-stage]
+    branches: [codex/qualify-mask-transfer-precision]
 permissions:
   contents: read
 jobs:

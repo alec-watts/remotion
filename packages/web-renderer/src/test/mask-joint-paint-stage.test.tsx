@@ -26,7 +26,7 @@ test.for([
 					scale,
 					frame,
 					position: null as {left: number; top: number} | null,
-					label: '',
+					label: 'default',
 				})),
 			),
 		),
@@ -38,11 +38,11 @@ test.for([
 			scale,
 			frame: 0,
 			position,
-			label: ` offset=${position.left},${position.top}`,
+			label: `${position.left},${position.top}`,
 		})),
 	),
 ])(
-	'compares joint paint $mode $overflow scale=$scale frame=$frame$label',
+	'compares joint paint $mode $overflow scale=$scale frame=$frame offset=$label',
 	async ({mode, overflow, scale, frame, position}) => {
 		const fixture = maskCopyOverflow({mode, overflow, position});
 		const Source = fixture.component;
@@ -331,8 +331,19 @@ test.for([
 				mismatchedPixels: number;
 				maxChannelDelta: number;
 			} | null,
-			nativeImageError: null as string | null,
-			nativeRepeatError: null as string | null,
+			nativeImageError: 'not-completed' as string | null,
+			nativeRepeatError: 'not-completed' as string | null,
+			precision: {} as Record<
+				string,
+				{
+					error: string | null;
+					attributes: Record<string, unknown> | null;
+					comparison: {
+						mismatchedPixels: number;
+						maxChannelDelta: number;
+					} | null;
+				}
+			>,
 		};
 		// Retain all original evidence even if an additional native capture fails.
 		await server.commands.writeFile(
@@ -386,11 +397,99 @@ test.for([
 					'base64',
 				);
 				results[stage] = await countNativePixels(reference, blob);
+				results[
+					stage === 'nativeImage' ? 'nativeImageError' : 'nativeRepeatError'
+				] = null;
 			} catch (error) {
 				results[
 					stage === 'nativeImage' ? 'nativeImageError' : 'nativeRepeatError'
 				] = String(error);
 			}
+
+			await server.commands.writeFile(
+				`${folder}/comparison.json`,
+				JSON.stringify(results),
+			);
+		}
+
+		for (const transferMode of ['readback', 'default', 'direct'] as const) {
+			const image = new Image();
+			const raster = new OffscreenCanvas(1, 1);
+			const output = new OffscreenCanvas(
+				composition.width * scale,
+				composition.height * scale,
+			);
+			const evidence = {
+				error: 'not-completed' as string | null,
+				attributes: null as Record<string, unknown> | null,
+				comparison: null as {
+					mismatchedPixels: number;
+					maxChannelDelta: number;
+				} | null,
+			};
+			results.precision[transferMode] = evidence;
+			try {
+				image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(jointPhaseSvg.svg)}`;
+				await image.decode();
+				raster.width = image.naturalWidth;
+				raster.height = image.naturalHeight;
+				const settings: CanvasRenderingContext2DSettings & {
+					colorType: 'float16';
+				} = {
+					colorType: 'float16',
+					...(transferMode === 'readback' ? {willReadFrequently: true} : {}),
+				};
+				const selectedContext =
+					transferMode === 'direct'
+						? output.getContext('2d', settings)
+						: raster.getContext('2d', settings);
+				if (!selectedContext) throw new Error('No precision drawing context');
+				const getAttributes = Reflect.get(
+					selectedContext,
+					'getContextAttributes',
+				) as (() => Record<string, unknown>) | undefined;
+				evidence.attributes =
+					typeof getAttributes === 'function'
+						? getAttributes.call(selectedContext)
+						: null;
+				if (transferMode === 'direct') {
+					selectedContext.drawImage(
+						image,
+						jointPhaseSvg.left,
+						jointPhaseSvg.top,
+					);
+				} else {
+					selectedContext.drawImage(image, 0, 0);
+					output
+						.getContext('2d')!
+						.drawImage(raster, jointPhaseSvg.left, jointPhaseSvg.top);
+				}
+
+				const blob = await output.convertToBlob();
+				let binary = '';
+				for (const byte of new Uint8Array(await blob.arrayBuffer()))
+					binary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					`${folder}/float16-${transferMode}.png`,
+					btoa(binary),
+					'base64',
+				);
+				evidence.comparison = await countNativePixels(reference, blob);
+				evidence.error = null;
+			} catch (error) {
+				evidence.error = String(error);
+			} finally {
+				image.removeAttribute('src');
+				raster.width = 0;
+				raster.height = 0;
+				output.width = 0;
+				output.height = 0;
+			}
+
+			await server.commands.writeFile(
+				`${folder}/comparison.json`,
+				JSON.stringify(results),
+			);
 		}
 
 		await server.commands.writeFile(
@@ -410,6 +509,12 @@ test.for([
 		expect.soft(results.nativeImageError).toBeNull();
 		expect.soft(results.nativeRepeatError).toBeNull();
 		expect.soft(results.nativeImage?.mismatchedPixels).toBe(0);
-		expect(results.nativeRepeat?.mismatchedPixels).toBe(0);
+		expect.soft(results.nativeRepeat?.mismatchedPixels).toBe(0);
+		for (const transferMode of ['readback', 'default', 'direct']) {
+			expect.soft(results.precision[transferMode].error).toBeNull();
+			expect
+				.soft(results.precision[transferMode].comparison?.mismatchedPixels)
+				.toBe(0);
+		}
 	},
 );
