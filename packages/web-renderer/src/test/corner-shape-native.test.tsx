@@ -115,12 +115,40 @@ test.for(
 			'direct',
 			'readback',
 			'seeded-readback',
+			'longhand-svg-image',
+			'longhand-direct',
+			'longhand-readback',
+			'longhand-seeded-readback',
 		])
 			probes[name] = {error: 'not-completed', mismatchedPixels: null};
 		await checkpoint();
 		let cloned: HTMLDivElement | null = null;
+		let longhandRules = '';
 		const Captured = cornerShapeGrid(variant, (element) => {
-			if (element) cloned = element.cloneNode(true) as HTMLDivElement;
+			if (!element) return;
+			cloned = element.cloneNode(true) as HTMLDivElement;
+			longhandRules = Array.from(
+				element.querySelectorAll('[data-corner-shape]'),
+				(node) => {
+					const style = getComputedStyle(node);
+					const declarations = [
+						'top-left',
+						'top-right',
+						'bottom-right',
+						'bottom-left',
+					]
+						.flatMap((corner) =>
+							[`border-${corner}-radius`, `corner-${corner}-shape`].map(
+								(property) => {
+									const value = style.getPropertyValue(property);
+									return value ? `${property}: ${value} !important;` : '';
+								},
+							),
+						)
+						.join('');
+					return `[data-corner-shape=${JSON.stringify(node.getAttribute('data-corner-shape'))}] {${declarations}}`;
+				},
+			).join('\n');
 		}).component;
 		const bounded = await captureNativeReference(
 			{
@@ -161,7 +189,7 @@ test.for(
 			height: composition.height * scale,
 		});
 		target.replaceChildren(cloned);
-		const image = await turnSvgIntoDrawable(svg);
+		let image = await turnSvgIntoDrawable(svg);
 		try {
 			const prefix = 'data:image/svg+xml;charset=utf-8,';
 			expect(image.src.startsWith(prefix)).toBe(true);
@@ -175,10 +203,33 @@ test.for(
 				'direct',
 				'readback',
 				'seeded-readback',
+				'longhand-svg-image',
+				'longhand-direct',
+				'longhand-readback',
+				'longhand-seeded-readback',
 			] as const) {
 				let raster: OffscreenCanvas | null = null;
 				let output: OffscreenCanvas | null = null;
 				try {
+					if (mode === 'longhand-svg-image') {
+						// A text rule preserves the explicit declarations through XML
+						// serialization instead of CSSOM recombining a shorthand.
+						const style = document.createElementNS(
+							'http://www.w3.org/2000/svg',
+							'style',
+						);
+						style.textContent = longhandRules;
+						svg.prepend(style);
+						image.removeAttribute('src');
+						image = await turnSvgIntoDrawable(svg);
+						expect(image.src.startsWith(prefix)).toBe(true);
+						await server.commands.writeFile(
+							`${folder}/carrier-longhand.svg`,
+							decodeURIComponent(image.src.slice(prefix.length)),
+						);
+					}
+
+					const transfer = mode.replace(/^longhand-/, '');
 					let blob: Blob;
 					if (mode === 'bounded-repeat') {
 						blob = await captureNativeReference(
@@ -203,7 +254,7 @@ test.for(
 							frame,
 							{omitBackground: false},
 						);
-					} else if (mode === 'svg-image') {
+					} else if (transfer === 'svg-image') {
 						blob = await captureNativeReference(
 							{
 								...composition,
@@ -229,15 +280,15 @@ test.for(
 							composition.height * scale,
 						);
 						const context = raster.getContext('2d', {
-							willReadFrequently: mode !== 'direct',
+							willReadFrequently: transfer !== 'direct',
 						})!;
-						if (mode === 'seeded-readback') {
+						if (transfer === 'seeded-readback') {
 							context.fillStyle = 'white';
 							context.fillRect(0, 0, raster.width, raster.height);
 						}
 
 						context.drawImage(image, 0, 0);
-						if (mode === 'direct') {
+						if (transfer === 'direct') {
 							blob = await raster.convertToBlob({type: 'image/png'});
 						} else {
 							output = new OffscreenCanvas(raster.width, raster.height);

@@ -1,7 +1,7 @@
-name: Measure native shaped corners through existing SVG carrier
+name: Compare explicit corner declarations in SVG image documents
 on:
   push:
-    branches: [codex/qualify-corner-native-svg-carrier]
+    branches: [codex/qualify-corner-explicit-longhands]
 permissions:
   contents: read
 jobs:
