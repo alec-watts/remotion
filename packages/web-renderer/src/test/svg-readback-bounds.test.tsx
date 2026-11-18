@@ -14,6 +14,47 @@ test.for(svgReadbackBoundsModes)(
 	async (mode) => {
 		await svgFontFamilyLifetimeReady;
 		const composition = svgReadbackBounds(mode);
+		const probe = new OffscreenCanvas(1, 1);
+		const probeContext = probe.getContext('2d')!;
+		const describe = (context: OffscreenCanvasRenderingContext2D) => ({
+			width: context.canvas.width,
+			height: context.canvas.height,
+			filterType: typeof context.filter,
+			filter: context.filter ?? null,
+			shadowColor: context.shadowColor,
+			matrix: context.getTransform().toJSON(),
+		});
+		const defaults = describe(probeContext);
+		const prototype = Object.getPrototypeOf(
+			probeContext,
+		) as OffscreenCanvasRenderingContext2D;
+		const events: Record<string, unknown>[] = [];
+		const {drawImage, fillRect} = prototype;
+		const drawObserver = vi
+			.spyOn(prototype, 'drawImage')
+			.mockImplementation(function (
+				this: OffscreenCanvasRenderingContext2D,
+				...args: Parameters<typeof drawImage>
+			) {
+				if (args[0] instanceof HTMLImageElement)
+					events.push({kind: 'svg', ...describe(this), args: args.slice(1)});
+				return drawImage.apply(this, args);
+			});
+		const fillObserver = vi
+			.spyOn(prototype, 'fillRect')
+			.mockImplementation(function (
+				this: OffscreenCanvasRenderingContext2D,
+				...args: Parameters<typeof fillRect>
+			) {
+				if (mode === 'large' && this.canvas.width >= composition.width)
+					events.push({
+						kind: 'fill',
+						...describe(this),
+						args,
+						fillStyle: String(this.fillStyle),
+					});
+				return fillRect.apply(this, args);
+			});
 		const allocations: {width: number; height: number}[] = [];
 		const {getContext} = OffscreenCanvas.prototype;
 		const observer = vi
@@ -39,6 +80,10 @@ test.for(svgReadbackBoundsModes)(
 			).blob({format: 'png'});
 		} finally {
 			observer.mockRestore();
+			drawObserver.mockRestore();
+			fillObserver.mockRestore();
+			probe.width = 0;
+			probe.height = 0;
 		}
 
 		const folder = `test/__results__/svg-readback-bounds/${server.browser}/${mode}`;
@@ -61,6 +106,8 @@ test.for(svgReadbackBoundsModes)(
 				width: composition.width,
 				height: composition.height,
 				allocations,
+				defaults,
+				events,
 			}),
 		);
 		const reference = await captureNativeReference(composition, 0, {

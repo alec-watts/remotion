@@ -1,7 +1,7 @@
-name: Compare bounded SVG readback coverage
+name: Compare bounded SVG readback with canvas capability traces
 on:
   push:
-    branches: [codex/qualify-svg-bounded-readback]
+    branches: [codex/qualify-svg-bounded-capabilities]
 permissions:
   contents: read
 jobs:
@@ -102,7 +102,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: svg-bounded-readback-${{ matrix.os }}
+          name: svg-bounded-capabilities-${{ matrix.os }}
           include-hidden-files: true
           path: qualification/
           if-no-files-found: error

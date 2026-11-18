@@ -49,7 +49,7 @@ const drawSvgThroughReadbackCanvas = ({
 	// Effects can paint outside the image's transformed rectangle. Keep their
 	// existing full-surface transfer until their paint bounds are known.
 	if (
-		context.filter === 'none' &&
+		(typeof context.filter !== 'string' || context.filter === 'none') &&
 		(context.shadowColor === 'rgba(0, 0, 0, 0)' ||
 			context.shadowColor === 'transparent')
 	) {
