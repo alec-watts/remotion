@@ -4,7 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
-import {page} from 'vitest/browser';
+import {page, server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -114,6 +114,44 @@ test.for(['flow', 'ref'] as const)(
 				).toBe(0);
 			});
 			const button = container.querySelector('button')!;
+			const visible = visibleCanvas();
+			const observedBounds = visible.getBoundingClientRect();
+			const source = button.closest('canvas')!;
+			const directory = `test/__results__/preview-layout-ref/${kind}`;
+			await server.commands.writeFile(
+				`${directory}/metadata.json`,
+				JSON.stringify({
+					kind,
+					userAgent: navigator.userAgent,
+					dpr: devicePixelRatio,
+					visibleBounds: observedBounds.toJSON(),
+					sourceBounds: source.getBoundingClientRect().toJSON(),
+					reportedHostBounds: reportedHost.current
+						?.getBoundingClientRect()
+						.toJSON(),
+					reportedHostContainsButton: reportedHost.current?.contains(button),
+					reportedHostContent: reportedHost.current?.getAttribute('content'),
+					sourceContent: source.getAttribute('content'),
+					visibleHitIsButton:
+						document.elementFromPoint(
+							observedBounds.left + 60,
+							observedBounds.top + 40,
+						) === button,
+				}),
+			);
+			for (const [name, pixels] of [
+				['reference', painted!],
+				['actual', readPixels(visible, 160, 96)],
+			] as const) {
+				let binary = '';
+				for (const byte of pixels) binary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					`${directory}/${name}.rgba`,
+					btoa(binary),
+					'base64',
+				);
+			}
+
 			if (kind === 'ref') {
 				expect(reportedHost.current).not.toBeNull();
 				expect(reportedHost.current!.contains(button)).toBe(true);
