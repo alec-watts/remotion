@@ -1,7 +1,7 @@
-name: Qualify fractional audio review fixes with original controls
+name: Qualify fractional audio review fixes on Linux
 on:
   push:
-    branches: [codex/qualify-fractional-audio-review-fixes]
+    branches: [codex/qualify-fractional-audio-review-linux]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
         with:
