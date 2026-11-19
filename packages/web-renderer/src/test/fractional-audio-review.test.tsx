@@ -6,6 +6,7 @@ import {
 	VideoSampleSink,
 } from 'mediabunny';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {supportsNativeHtmlInCanvas} from '../html-in-canvas';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import '../symbol-dispose';
@@ -46,6 +47,7 @@ test.for(['canvas', 'effects', 'animated', 'gif'] as const)(
 				let loads = 0;
 				let frames = 0;
 				let wrongPixels = 0;
+				const directory = `test/__results__/html-audio/${server.browser}/resource-${kind}/${unused}/${muted}`;
 				const result = await renderMediaOnWeb({
 					licenseKey: 'free-license',
 					composition: {...fractionalCanvasResource, calculateMetadata: null},
@@ -62,12 +64,28 @@ test.for(['canvas', 'effects', 'animated', 'gif'] as const)(
 					audioCodec: 'pcm-s16',
 					sampleRate: 48000,
 					muted,
-					onFrame: (frame) => {
+					onFrame: async (frame) => {
 						expect(frame.timestamp).toBe(Math.round((frames / 24) * 1_000_000));
-						for (const [index, byte] of readFrame(frame).entries()) {
+						const pixels = readFrame(frame);
+						for (const [index, byte] of pixels.entries()) {
 							if (byte !== [16, 40, 80, 255][index % 4]) wrongPixels++;
 						}
 
+						let binary = '';
+						for (const byte of pixels) binary += String.fromCharCode(byte);
+						await server.commands.writeFile(
+							directory + '/' + frames + '.rgba',
+							btoa(binary),
+							'base64',
+						);
+						await server.commands.writeFile(
+							directory + '/' + frames + '.json',
+							JSON.stringify({
+								timestamp: frame.timestamp,
+								width: frame.displayWidth,
+								height: frame.displayHeight,
+							}),
+						);
 						if (frames === 0) {
 							expect(revoke).not.toBeNull();
 							revoke?.();
@@ -76,7 +94,43 @@ test.for(['canvas', 'effects', 'animated', 'gif'] as const)(
 						frames++;
 						return frame;
 					},
+				}).catch(async (error: unknown) => {
+					await server.commands.writeFile(
+						directory + '/failure.json',
+						JSON.stringify({
+							kind,
+							unused,
+							muted,
+							loads,
+							frames,
+							wrongPixels,
+							error: String(error),
+							userAgent: navigator.userAgent,
+						}),
+					);
+					throw error;
 				});
+				const blob = await result.getBlob();
+				let mediaBinary = '';
+				for (const byte of new Uint8Array(await blob.arrayBuffer()))
+					mediaBinary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					directory + '/export.media',
+					btoa(mediaBinary),
+					'base64',
+				);
+				await server.commands.writeFile(
+					directory + '/metadata.json',
+					JSON.stringify({
+						kind,
+						unused,
+						muted,
+						loads,
+						frames,
+						wrongPixels,
+						userAgent: navigator.userAgent,
+					}),
+				);
 				expect(frames).toBe(4);
 				expect(wrongPixels).toBe(0);
 				if (kind === 'gif') expect(loads).toBe(unused ? 0 : 1);
@@ -117,7 +171,7 @@ test.for(['sequence', 'loop'] as const)(
 		for (const muted of [true, false]) {
 			const lifetime: string[] = [];
 			let frames = 0;
-			await renderMediaOnWeb({
+			const result = await renderMediaOnWeb({
 				licenseKey: 'free-license',
 				composition: {...fractionalFreezeLifetime, calculateMetadata: null},
 				inputProps: {kind, onLifetime: (event) => lifetime.push(event)},
@@ -126,16 +180,55 @@ test.for(['sequence', 'loop'] as const)(
 				audioCodec: 'pcm-s16',
 				sampleRate: 48000,
 				muted,
-				onFrame: (frame) => {
+				onFrame: async (frame) => {
 					expect(frame.timestamp).toBe(Math.round((frames / 24) * 1_000_000));
-					for (const [index, byte] of readFrame(frame).entries()) {
+					const pixels = readFrame(frame);
+					for (const [index, byte] of pixels.entries()) {
 						if (byte !== [16, 40, 80, 255][index % 4]) wrongPixels++;
 					}
 
+					const frameDirectory = `test/__results__/html-audio/${server.browser}/freeze-${kind}/${muted}`;
+					let frameBinary = '';
+					for (const byte of pixels) frameBinary += String.fromCharCode(byte);
+					await server.commands.writeFile(
+						frameDirectory + '/' + frames + '.rgba',
+						btoa(frameBinary),
+						'base64',
+					);
+					await server.commands.writeFile(
+						frameDirectory + '/' + frames + '.json',
+						JSON.stringify({
+							timestamp: frame.timestamp,
+							width: frame.displayWidth,
+							height: frame.displayHeight,
+						}),
+					);
 					frames++;
 					return frame;
 				},
 			});
+			const captureDirectory = `test/__results__/html-audio/${server.browser}/freeze-${kind}/${muted}`;
+			const blob = await result.getBlob();
+			let mediaBinary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				mediaBinary += String.fromCharCode(byte);
+			await server.commands.writeFile(
+				captureDirectory + '/export.media',
+				btoa(mediaBinary),
+				'base64',
+			);
+			await server.commands.writeFile(
+				captureDirectory + '/metadata.json',
+				JSON.stringify({
+					kind,
+					muted,
+					lifetime,
+					frames,
+					wrongPixels,
+					userAgent: navigator.userAgent,
+					dpr: devicePixelRatio,
+				}),
+			);
 			expect(frames).toBe(4);
 			expect(lifetime).toEqual(['mount', 'unmount']);
 		}
@@ -149,7 +242,7 @@ test('retains a loaded revoked blob image during unrelated fractional audio pass
 		let loads = 0;
 		let frames = 0;
 		let wrongPixels = 0;
-		await renderMediaOnWeb({
+		const result = await renderMediaOnWeb({
 			licenseKey: 'free-license',
 			composition: {...fractionalRevokedImage, calculateMetadata: null},
 			inputProps: {onImageLoad: () => loads++},
@@ -158,16 +251,68 @@ test('retains a loaded revoked blob image during unrelated fractional audio pass
 			audioCodec: 'pcm-s16',
 			sampleRate: 48000,
 			muted,
-			onFrame: (frame) => {
+			onFrame: async (frame) => {
 				expect(frame.timestamp).toBe(Math.round((frames / 24) * 1_000_000));
-				for (const [index, byte] of readFrame(frame).entries()) {
+				const pixels = readFrame(frame);
+				for (const [index, byte] of pixels.entries()) {
 					if (byte !== [16, 40, 80, 255][index % 4]) wrongPixels++;
 				}
 
+				const frameDirectory = `test/__results__/html-audio/${server.browser}/revoked-image/${muted}`;
+				let frameBinary = '';
+				for (const byte of pixels) frameBinary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					frameDirectory + '/' + frames + '.rgba',
+					btoa(frameBinary),
+					'base64',
+				);
+				await server.commands.writeFile(
+					frameDirectory + '/' + frames + '.json',
+					JSON.stringify({
+						timestamp: frame.timestamp,
+						width: frame.displayWidth,
+						height: frame.displayHeight,
+					}),
+				);
 				frames++;
 				return frame;
 			},
+		}).catch(async (error: unknown) => {
+			await server.commands.writeFile(
+				`test/__results__/html-audio/${server.browser}/revoked-image/${muted}/failure.json`,
+				JSON.stringify({
+					muted,
+					loads,
+					frames,
+					wrongPixels,
+					error: String(error),
+					userAgent: navigator.userAgent,
+					dpr: devicePixelRatio,
+				}),
+			);
+			throw error;
 		});
+		const captureDirectory = `test/__results__/html-audio/${server.browser}/revoked-image/${muted}`;
+		const blob = await result.getBlob();
+		let mediaBinary = '';
+		for (const byte of new Uint8Array(await blob.arrayBuffer()))
+			mediaBinary += String.fromCharCode(byte);
+		await server.commands.writeFile(
+			captureDirectory + '/export.media',
+			btoa(mediaBinary),
+			'base64',
+		);
+		await server.commands.writeFile(
+			captureDirectory + '/metadata.json',
+			JSON.stringify({
+				muted,
+				loads,
+				frames,
+				wrongPixels,
+				userAgent: navigator.userAgent,
+				dpr: devicePixelRatio,
+			}),
+		);
 		expect(frames).toBe(4);
 		expect(loads).toBe(1);
 		expect(wrongPixels).toBe(0);
@@ -189,7 +334,7 @@ test('does not paint a canvas that exists only during fractional audio passes', 
 		videoCodec: 'vp8',
 		audioCodec: 'pcm-s16',
 		sampleRate: 48000,
-		onFrame: (frame) => {
+		onFrame: async (frame) => {
 			expect(frame.timestamp).toBe(Math.round((frames / 24) * 1_000_000));
 			const pixels = readFrame(frame);
 			let wrong = 0;
@@ -197,11 +342,47 @@ test('does not paint a canvas that exists only during fractional audio passes', 
 				if (pixels[index] !== [16, 40, 80, 255][index % 4]) wrong++;
 			}
 
+			let frameBinary = '';
+			for (const byte of pixels) frameBinary += String.fromCharCode(byte);
+			const framePath = `test/__results__/html-audio/${server.browser}/unused-only/${frames}`;
+			await server.commands.writeFile(
+				framePath + '.rgba',
+				btoa(frameBinary),
+				'base64',
+			);
+			await server.commands.writeFile(
+				framePath + '.json',
+				JSON.stringify({
+					timestamp: frame.timestamp,
+					width: frame.displayWidth,
+					height: frame.displayHeight,
+				}),
+			);
 			expect(wrong).toBe(0);
 			frames++;
 			return frame;
 		},
 	});
+
+	const blob = await result.getBlob();
+	let mediaBinary = '';
+	for (const byte of new Uint8Array(await blob.arrayBuffer()))
+		mediaBinary += String.fromCharCode(byte);
+	const directory = `test/__results__/html-audio/${server.browser}/unused-only`;
+	await server.commands.writeFile(
+		directory + '/export.media',
+		btoa(mediaBinary),
+		'base64',
+	);
+	await server.commands.writeFile(
+		directory + '/metadata.json',
+		JSON.stringify({
+			paints,
+			frames,
+			userAgent: navigator.userAgent,
+			dpr: devicePixelRatio,
+		}),
+	);
 	expect(frames).toBe(4);
 	expect(paints).toBe(0);
 	using input = new Input({
@@ -266,7 +447,7 @@ test.for(['wav', 'mkv'] as const)(
 				sampleRate: 48000,
 				onFrame:
 					container === 'mkv'
-						? (frame) => {
+						? async (frame) => {
 								expect(frame.timestamp).toBe(
 									Math.round((frames / 24) * 1_000_000),
 								);
@@ -276,12 +457,51 @@ test.for(['wav', 'mkv'] as const)(
 									if (pixels[index] !== [16, 40, 80, 255][index % 4]) wrong++;
 								}
 
+								let frameBinary = '';
+								for (const byte of pixels)
+									frameBinary += String.fromCharCode(byte);
+								const framePath = `test/__results__/html-audio/${server.browser}/${container}/${boundary}/${frames}`;
+								await server.commands.writeFile(
+									framePath + '.rgba',
+									btoa(frameBinary),
+									'base64',
+								);
+								await server.commands.writeFile(
+									framePath + '.json',
+									JSON.stringify({
+										timestamp: frame.timestamp,
+										width: frame.displayWidth,
+										height: frame.displayHeight,
+									}),
+								);
 								expect(wrong).toBe(0);
 								frames++;
 								return frame;
 							}
 						: undefined,
 			});
+
+			const blob = await result.getBlob();
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			const directory = `test/__results__/html-audio/${server.browser}/${container}/${boundary}`;
+			await server.commands.writeFile(
+				directory + '/export.media',
+				btoa(binary),
+				'base64',
+			);
+			await server.commands.writeFile(
+				directory + '/metadata.json',
+				JSON.stringify({
+					boundary,
+					container,
+					lifetime,
+					frames,
+					userAgent: navigator.userAgent,
+					dpr: devicePixelRatio,
+				}),
+			);
 			expect(frames).toBe(container === 'mkv' ? 12 : 0);
 			using input = new Input({
 				formats: ALL_FORMATS,
