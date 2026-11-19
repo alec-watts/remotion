@@ -517,6 +517,21 @@ test.for([1, 1.25])(
 			{omitBackground: false},
 		);
 		const actual = await still.blob({format: 'png'});
+		if (scale === 1.25) {
+			for (const [name, blob] of [
+				['reference', reference],
+				['actual', actual],
+			] as const) {
+				let binary = '';
+				for (const byte of new Uint8Array(await blob.arrayBuffer()))
+					binary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					`test/__results__/svg-authored-order-url/${server.browser}/flex-fractional-${name}.b64`,
+					btoa(binary),
+				);
+			}
+		}
+
 		expect(
 			(await compareNativePixels(reference, actual)).mismatchedPixels,
 		).toBe(0);
