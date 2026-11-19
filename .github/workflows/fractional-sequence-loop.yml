@@ -1,7 +1,7 @@
-name: Qualify fractional Sequence loop terminal boundary
+name: Qualify fractional Sequence loop terminal boundary on Linux
 on:
   push:
-    branches: [codex/qualify-fractional-sequence-loop]
+    branches: [codex/qualify-fractional-sequence-loop-linux]
 permissions:
   contents: read
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
         with:
