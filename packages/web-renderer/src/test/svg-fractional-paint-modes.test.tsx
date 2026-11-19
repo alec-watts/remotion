@@ -1,11 +1,18 @@
 import {useLayoutEffect, useRef} from 'react';
 import {beforeAll, expect, test} from 'vitest';
 import {server} from 'vitest/browser';
+import {rewriteSvgStyleHeaders} from '../drawing/has-excluded-svg-style-at-rule';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {svgViewportMedia} from './fixtures/svg-viewport-media';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
+	...[
+		'self-scoped-padded-svg-nodes',
+		'root-control',
+		'root-scoped-padded-svg-nodes',
+		'root-self-scoped-padded-svg-nodes',
+	].map((id) => ({id, rasterScale: null, logicalSize: false, readback: false})),
 	...[
 		'scoped-padded-svg-nodes',
 		'scope-control',
@@ -72,6 +79,67 @@ const modes = [
 		readback: true,
 	},
 ] as const;
+const scopeStylesIncludingRoot = (text: string) => {
+	const sheet = new CSSStyleSheet();
+	sheet.replaceSync(text);
+	const namespaces = Array.from(sheet.cssRules)
+		.filter((rule) => rule.type === CSSRule.NAMESPACE_RULE)
+		.map((rule) => rule.cssText)
+		.join('');
+	const headerSheet = new CSSStyleSheet();
+	const rewritten = rewriteSvgStyleHeaders(text, (header) => {
+		headerSheet.replaceSync(namespaces + header + '{}');
+		const rule = Array.from(headerSheet.cssRules).at(-1);
+		if (!(rule instanceof CSSStyleRule)) return header;
+		const selectors: string[] = [];
+		let start = 0;
+		let depth = 0;
+		let quote: string | null = null;
+		let escaped = false;
+		const selector = rule.selectorText.replace(
+			/"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\\[\s\S]|:root(?![\w-])/gi,
+			(match) => (match.toLowerCase() === ':root' ? ':scope' : match),
+		);
+		for (let i = 0; i < selector.length; i++) {
+			const char = selector[i]!;
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+
+			if (char === '\\') {
+				escaped = true;
+				continue;
+			}
+
+			if (quote) {
+				if (char === quote) quote = null;
+				continue;
+			}
+
+			if (char === '"' || char === "'") {
+				quote = char;
+				continue;
+			}
+
+			if (char === '(' || char === '[') depth++;
+			if (char === ')' || char === ']') depth--;
+			if (char === ',' && depth === 0) {
+				selectors.push(selector.slice(start, i).trim());
+				start = i + 1;
+			}
+		}
+
+		selectors.push(selector.slice(start).trim());
+		return selectors
+			.flatMap((item) => [item, `:where(:scope):is(${item})`])
+			.join(',');
+	});
+	return (
+		namespaces + '@scope ([data-remotion-raster-root]) {' + rewritten + '}'
+	);
+};
+
 const MediaComponent = svgViewportMedia.component;
 const ScopeComponent = () => (
 	<div
@@ -90,6 +158,28 @@ const ScopeComponent = () => (
 		))}
 	</div>
 );
+const RootComponent = () => (
+	<div
+		style={{position: 'absolute', width: 400, height: 160, background: 'white'}}
+	>
+		<svg
+			className="root-painted"
+			data-info="a,b:root"
+			width={320}
+			height={100}
+			style={{position: 'absolute', left: 8, top: 88, width: 160, height: 50}}
+		>
+			<style>{`@namespace s url(http://www.w3.org/2000/svg); @media (min-width:1px) {
+ :root {stroke-linejoin:round;}
+ :is(s|svg.root-painted[data-info="a,b:root"], .absent), #absent {stroke:red;stroke-width:4px;}
+ s|svg.root-painted[data-info="a,b:root"] {stroke:blue;}
+ .root-marker {fill:lime;}
+ }`}</style>
+			<rect className="root-marker" x={8} y={8} width={144} height={34} />
+		</svg>
+	</div>
+);
+let rootReference: Blob;
 let scopeReference: Blob;
 const ReadbackComponent = () => {
 	const host = useRef<HTMLDivElement>(null);
@@ -163,22 +253,61 @@ beforeAll(async () => {
 		0,
 		{omitBackground: false},
 	);
+	rootReference = await captureNativeReference(
+		{
+			...svgViewportMedia,
+			id: 'svg-rasterization-root-fractional',
+			width: 500,
+			height: 200,
+			component: () => (
+				<div
+					style={{
+						position: 'absolute',
+						width: 400,
+						height: 160,
+						transform: 'scale(1.25)',
+						transformOrigin: '0 0',
+					}}
+				>
+					<RootComponent />
+				</div>
+			),
+		},
+		0,
+		{omitBackground: false},
+	);
 });
 
 for (const mode of modes) {
 	test('SVG fractional painting ' + mode.id, async () => {
 		const isScopeScene = mode.id.startsWith('scope-');
-		const nativeReference = isScopeScene ? scopeReference : reference;
-		const composition = isScopeScene
+		const isRootScene = mode.id.startsWith('root-');
+		const includeRoot =
+			mode.id === 'self-scoped-padded-svg-nodes' ||
+			mode.id === 'root-self-scoped-padded-svg-nodes';
+		const nativeReference = isRootScene
+			? rootReference
+			: isScopeScene
+				? scopeReference
+				: reference;
+		const composition = isRootScene
 			? {
 					...svgViewportMedia,
-					id: 'svg-rasterization-scope',
-					component: ScopeComponent,
+					id: 'svg-rasterization-root',
+					component: RootComponent,
 				}
-			: svgViewportMedia;
+			: isScopeScene
+				? {
+						...svgViewportMedia,
+						id: 'svg-rasterization-scope',
+						component: ScopeComponent,
+					}
+				: svgViewportMedia;
 		const scopedStyles =
 			mode.id === 'scoped-padded-svg-nodes' ||
-			mode.id === 'scope-scoped-padded-svg-nodes';
+			mode.id === 'scope-scoped-padded-svg-nodes' ||
+			mode.id === 'root-scoped-padded-svg-nodes' ||
+			includeRoot;
 		const descriptor = Object.getOwnPropertyDescriptor(
 			HTMLImageElement.prototype,
 			'src',
@@ -497,10 +626,11 @@ for (const mode of modes) {
 						for (const style of svg.querySelectorAll('style')) {
 							const type = style.getAttribute('type')?.trim().toLowerCase();
 							if (type && type !== 'text/css') continue;
-							style.textContent =
-								'@scope ([data-remotion-raster-root]) {' +
-								(style.textContent ?? '') +
-								'}';
+							style.textContent = includeRoot
+								? scopeStylesIncludingRoot(style.textContent ?? '')
+								: '@scope ([data-remotion-raster-root]) {' +
+									(style.textContent ?? '') +
+									'}';
 						}
 					}
 
@@ -599,6 +729,8 @@ for (const mode of modes) {
 			JSON.stringify({
 				...mode,
 				isScopeScene,
+				isRootScene,
+				includeRoot,
 				scopedStyles,
 				...comparison,
 				captured,
@@ -611,13 +743,15 @@ for (const mode of modes) {
 			}),
 		);
 		expect(captured).toHaveLength(
-			isScopeScene ||
-				mode.id === 'unchanged' ||
-				mode.id === 'software-canvas' ||
-				mode.id === 'flatten-svg-transform' ||
-				mode.id === 'bitmap-native'
-				? 2
-				: 4,
+			isRootScene
+				? 1
+				: isScopeScene ||
+					  mode.id === 'unchanged' ||
+					  mode.id === 'software-canvas' ||
+					  mode.id === 'flatten-svg-transform' ||
+					  mode.id === 'bitmap-native'
+					? 2
+					: 4,
 		);
 		expect(comparison.mismatchedPixels).toBe(0);
 	});
