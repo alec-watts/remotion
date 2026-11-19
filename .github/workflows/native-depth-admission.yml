@@ -1,7 +1,7 @@
-name: Qualify native 3D capture admission
+name: Qualify native 3D scaffold filter influence
 on:
   push:
-    branches: [codex/qualify-native-3d-admission]
+    branches: [codex/qualify-native-3d-scaffold-filter]
 permissions:
   contents: read
 jobs:
@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 4
           persist-credentials: false
       - name: Fetch the exact baseline producer
-        run: git fetch --no-tags --depth=1 origin 1511402fb4904769c3e8df2d0ef1114260bd40b3
+        run: git fetch --no-tags --depth=1 origin 82825fdcf04abd7d13f1f07bc19ed88de09d4ae6
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -32,8 +32,8 @@ jobs:
         run: |
           mkdir -p evidence
           git rev-parse HEAD > evidence/revision.txt
-          printf '%s\n' 1511402fb4904769c3e8df2d0ef1114260bd40b3 > evidence/baseline.txt
-          printf '%s\n' 80eb0fa7ff78ab854b562adce293d6606259e977 > evidence/candidate-source.txt
+          printf '%s\n' 82825fdcf04abd7d13f1f07bc19ed88de09d4ae6 > evidence/baseline.txt
+          printf '%s\n' e0a10b7baaa1af4bde748cf963058b2f1578849f > evidence/candidate-source.txt
           node --version > evidence/node.txt
           bun --version > evidence/bun.txt
           node -p 'JSON.stringify({platform:process.platform,arch:process.arch,cpus:require("os").cpus().map(x=>x.model),memory:require("os").totalmem()})' > evidence/host.json
@@ -62,7 +62,7 @@ jobs:
           assert source.count(marker)==1
           config.write_text(source.replace(marker,marker+' executablePath: process.env.NATIVE_DEPTH_CHROME,'))
           Path('evidence/vitest.config.ts').write_bytes(config.read_bytes())
-          producers={'packages/web-renderer/src/take-screenshot.ts'}
+          producers={'packages/web-renderer/src/create-scaffold.tsx'}
           records=[]
           for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
             if not raw: continue
@@ -75,8 +75,8 @@ jobs:
       - name: Compare original tests and complete native depth pixels
         run: |
           set -o pipefail
-          baseline=1511402fb4904769c3e8df2d0ef1114260bd40b3
-          producers=(packages/web-renderer/src/take-screenshot.ts)
+          baseline=82825fdcf04abd7d13f1f07bc19ed88de09d4ae6
+          producers=(packages/web-renderer/src/create-scaffold.tsx)
           failed=0
           for arm in baseline candidate baseline-repeat; do
             revision="$baseline"
@@ -116,7 +116,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-depth-admission-${{ matrix.os }}
+          name: native-depth-scaffold-filter-${{ matrix.os }}
           path: evidence
           include-hidden-files: true
           if-no-files-found: error
