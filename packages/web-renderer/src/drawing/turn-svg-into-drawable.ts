@@ -50,6 +50,7 @@ export const svgDrawableMetadata = new WeakMap<
 		markup: string;
 		width: number;
 		height: number;
+		needsViewportRasterization: boolean;
 	}
 >();
 
@@ -70,6 +71,16 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 	const originalHeight = svg.getAttribute('height');
 	const resolvedWidth = width.endsWith('px') && parseFloat(width);
 	const resolvedHeight = height.endsWith('px') && parseFloat(height);
+	const viewBox = svg.viewBox.baseVal;
+	const needsViewportRasterization =
+		svg.hasAttribute('viewBox') &&
+		typeof resolvedWidth === 'number' &&
+		typeof resolvedHeight === 'number' &&
+		viewBox.width > 0 &&
+		viewBox.height > 0 &&
+		svg.preserveAspectRatio.baseVal.align !==
+			SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_NONE &&
+		resolvedWidth * viewBox.height !== resolvedHeight * viewBox.width;
 	const needsExplicitDimensions =
 		(typeof resolvedWidth === 'number' &&
 			typeof resolvedHeight === 'number' &&
@@ -393,6 +404,7 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 					markup,
 					width: width.endsWith('px') ? parseFloat(width) : image.width,
 					height: height.endsWith('px') ? parseFloat(height) : image.height,
+					needsViewportRasterization,
 				});
 				if (url !== null) URL.revokeObjectURL(url);
 				resolve(image);

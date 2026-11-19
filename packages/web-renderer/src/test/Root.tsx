@@ -219,7 +219,10 @@ import {
 	escapedStyleSelectorModes,
 	svgEscapedStyleSelector,
 } from './fixtures/svg-escaped-style-selector';
-import {svgExplicitDimensions} from './fixtures/svg-explicit-dimensions';
+import {
+	svgExplicitDimensions,
+	svgExplicitDimensionsNative,
+} from './fixtures/svg-explicit-dimensions';
 import {
 	svgExternalCarrierModes,
 	svgExternalEmptyCarrier,
@@ -390,6 +393,7 @@ export const Root: React.FC = () => {
 			<Composition {...nestedTranslateScale} />
 			<Composition {...scaledTranslatedSvg} />
 			<Composition {...svgExplicitDimensions} />
+			<Composition {...svgExplicitDimensionsNative} />
 			<Composition {...svgExternalFontSelection} />
 			<Composition {...svgForeignObjectFont} />
 			{svgAtRuleTextModes.flatMap((mode) =>

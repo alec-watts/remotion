@@ -364,7 +364,10 @@ const drawSvg = async ({
 		metadata !== undefined &&
 		(!Number.isInteger(metadata.width) || !Number.isInteger(metadata.height));
 	if (
-		(rasterize || readback || fractionalViewport) &&
+		(rasterize ||
+			readback ||
+			fractionalViewport ||
+			metadata?.needsViewportRasterization) &&
 		needsRasterization &&
 		(await drawSvgAtOutputResolution({
 			drawable,
