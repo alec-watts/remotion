@@ -253,12 +253,18 @@ jobs:
       - name: Build web renderer
         run: bunx turbo run make --filter=@remotion/web-renderer
       # Runs each added or changed test file 5 times (1 + 4 repeats) under the
-      # same single-worker, three-browser setup as "Web renderer tests", so
-      # flaky new tests fail here instead of in the merge queue.
+      # configured worker budget, running the three browsers sequentially so
+      # they do not compete for the runner's graphics resources.
       - name: Run changed tests 5 times
         env:
           FILES: ${{ needs.affected.outputs.webrenderer_flake_test_files }}
-        run: cd packages/web-renderer && bunx vitest --browser --run --repeats 4 $FILES
+        run: |
+          cd packages/web-renderer
+          failed=0
+          for project in chromium firefox webkit; do
+            bunx vitest --browser --run --repeats 4 --project "$project" $FILES || failed=1
+          done
+          exit "$failed"
   ssr-tests:
     needs: affected
     if: ${{ needs.affected.outputs.ssr == 'true' }}
