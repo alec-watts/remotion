@@ -165,7 +165,15 @@ export const captureNativeReference = async (
 						radius: computed.borderTopRightRadius,
 						box:
 							element instanceof SVGGraphicsElement
-								? element.getBBox().toJSON()
+								? (() => {
+										const box = element.getBBox();
+										return {
+											x: box.x,
+											y: box.y,
+											width: box.width,
+											height: box.height,
+										};
+									})()
 								: null,
 					};
 				},
