@@ -1,5 +1,5 @@
 import {loadFont} from '@remotion/fonts';
-import {AbsoluteFill} from 'remotion';
+import {AbsoluteFill, useCurrentFrame} from 'remotion';
 
 const fontFamily = 'Bangers, sans-serif';
 const text = 'Hamburgefonstiv';
@@ -10,6 +10,18 @@ export const pr11215FontPromise = loadFont({
 		.href,
 	format: 'woff2',
 });
+
+const SvgFontText: React.FC = () => (
+	<svg
+		viewBox="0 0 360 52"
+		style={{width: 360, height: 52}}
+		xmlns="http://www.w3.org/2000/svg"
+	>
+		<text x="0" y="42" fill="black" style={{fontFamily, fontSize: 42}}>
+			{text}
+		</text>
+	</svg>
+);
 
 const Component: React.FC = () => {
 	return (
@@ -27,15 +39,7 @@ const Component: React.FC = () => {
 			</div>
 			<div style={{display: 'flex', alignItems: 'center', gap: 20}}>
 				<div style={{fontFamily: 'sans-serif', width: 60}}>SVG</div>
-				<svg
-					viewBox="0 0 360 52"
-					style={{width: 360, height: 52}}
-					xmlns="http://www.w3.org/2000/svg"
-				>
-					<text x="0" y="42" fill="black" style={{fontFamily, fontSize: 42}}>
-						{text}
-					</text>
-				</svg>
+				<SvgFontText />
 			</div>
 		</AbsoluteFill>
 	);
@@ -48,4 +52,26 @@ export const pr11215SvgFontRepro = {
 	height: 220,
 	fps: 30,
 	durationInFrames: 1,
+} as const;
+
+const OpaqueSvgFont: React.FC = () => {
+	const frame = useCurrentFrame();
+	return (
+		<AbsoluteFill
+			style={{
+				backgroundColor: frame === 0 ? 'white' : '#ffc800',
+				justifyContent: 'center',
+				alignItems: 'center',
+			}}
+		>
+			<SvgFontText />
+		</AbsoluteFill>
+	);
+};
+
+export const svgOpaqueFont = {
+	...pr11215SvgFontRepro,
+	component: OpaqueSvgFont,
+	id: 'svg-opaque-font',
+	durationInFrames: 2,
 } as const;

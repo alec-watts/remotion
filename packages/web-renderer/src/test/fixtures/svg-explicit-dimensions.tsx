@@ -10,14 +10,16 @@ import {AbsoluteFill} from 'remotion';
  * but is inside a smaller container (256×284px). The SVG should render
  * at its specified dimensions and overflow the container.
  */
-const Component: React.FC = () => {
+const Component: React.FC<{readonly showLayoutBackgrounds?: boolean}> = ({
+	showLayoutBackgrounds = true,
+}) => {
 	return (
 		<AbsoluteFill style={{}}>
 			<AbsoluteFill
 				style={{
 					justifyContent: 'center',
 					alignItems: 'center',
-					backgroundColor: '#f0f0f0',
+					backgroundColor: showLayoutBackgrounds ? '#f0f0f0' : undefined,
 					width: 1080,
 					height: 1080,
 					scale: 1 / 4,
@@ -28,7 +30,7 @@ const Component: React.FC = () => {
 					style={{
 						width: 256,
 						height: 284,
-						backgroundColor: '#e0e0e0',
+						backgroundColor: showLayoutBackgrounds ? '#e0e0e0' : undefined,
 						display: 'flex',
 					}}
 				>
@@ -50,4 +52,14 @@ export const svgExplicitDimensions = {
 	height: 1080 / 4,
 	fps: 30,
 	durationInFrames: 1,
+} as const;
+
+export const svgExplicitDimensionsNative = {
+	...svgExplicitDimensions,
+	id: 'svg-explicit-dimensions-native',
+	component: () => (
+		<AbsoluteFill style={{backgroundColor: 'white'}}>
+			<Component showLayoutBackgrounds={false} />
+		</AbsoluteFill>
+	),
 } as const;

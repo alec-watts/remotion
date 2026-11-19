@@ -180,7 +180,10 @@ import {pitchShiftAudio} from './fixtures/pitch-shift-audio';
 import {pixelDensity} from './fixtures/pixel-density';
 import {pixelTransformOrigin} from './fixtures/pixel-transform-origin';
 import {positionedSvg} from './fixtures/positioned-svg';
-import {pr11215SvgFontRepro} from './fixtures/pr-11215-svg-font-repro';
+import {
+	pr11215SvgFontRepro,
+	svgOpaqueFont,
+} from './fixtures/pr-11215-svg-font-repro';
 import {queuedFrameCapturePreview} from './fixtures/queued-frame-capture';
 import {replacedElementPixelated} from './fixtures/replaced-element-pixelated';
 import {
@@ -219,7 +222,10 @@ import {
 	escapedStyleSelectorModes,
 	svgEscapedStyleSelector,
 } from './fixtures/svg-escaped-style-selector';
-import {svgExplicitDimensions} from './fixtures/svg-explicit-dimensions';
+import {
+	svgExplicitDimensions,
+	svgExplicitDimensionsNative,
+} from './fixtures/svg-explicit-dimensions';
 import {
 	svgExternalCarrierModes,
 	svgExternalEmptyCarrier,
@@ -261,6 +267,7 @@ import {
 	svgPreferredFontModes,
 } from './fixtures/svg-preferred-font-carrier';
 import {svgPreserveAspectRatioNone} from './fixtures/svg-preserve-aspect-ratio-none';
+import {svgRasterizationScenes} from './fixtures/svg-rasterization';
 import {
 	svgReadbackBounds,
 	svgReadbackBoundsModes,
@@ -389,6 +396,7 @@ export const Root: React.FC = () => {
 			<Composition {...nestedTranslateScale} />
 			<Composition {...scaledTranslatedSvg} />
 			<Composition {...svgExplicitDimensions} />
+			<Composition {...svgExplicitDimensionsNative} />
 			<Composition {...svgExternalFontSelection} />
 			<Composition {...svgForeignObjectFont} />
 			{svgAtRuleTextModes.flatMap((mode) =>
@@ -456,6 +464,9 @@ export const Root: React.FC = () => {
 			<Composition {...svgLayoutViewport} />
 			<Composition {...svgViewportLengthValues} />
 			<Composition {...svgViewportMedia} />
+			{svgRasterizationScenes.map((scene) => (
+				<Composition key={scene.id} {...scene} />
+			))}
 			<Composition {...flexPositionedScaled} />
 			<Composition {...displayNone} />
 			<Composition {...scaleFixture} />
@@ -608,6 +619,7 @@ export const Root: React.FC = () => {
 				<Composition {...issue7243SvgJapaneseText} />
 				<Composition {...issue7489Minimal} />
 				<Composition {...pr11215SvgFontRepro} />
+				<Composition {...svgOpaqueFont} />
 			</Folder>
 			<Folder name="clip-path">
 				<Composition {...clipPathShapes} />

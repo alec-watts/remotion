@@ -44,9 +44,20 @@ const getReferencedTemplates = (svg: SVGSVGElement) => {
 	return templates;
 };
 
+export const svgDrawableMetadata = new WeakMap<
+	HTMLImageElement,
+	{
+		markup: string;
+		width: number;
+		height: number;
+	}
+>();
+
 const drawableBySvg = new WeakMap<
 	SVGSVGElement,
 	{
+		width: string;
+		height: string;
 		fontStyleKey: string | null;
 		serializedSvg: string;
 		drawable: Promise<HTMLImageElement>;
@@ -59,43 +70,17 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 	const originalHeight = svg.getAttribute('height');
 	const resolvedWidth = width.endsWith('px') && parseFloat(width);
 	const resolvedHeight = height.endsWith('px') && parseFloat(height);
-	const [authoredWidth, authoredHeight] = [
-		svg.width.baseVal,
-		svg.height.baseVal,
-	].map((length) =>
-		[
-			SVGLength.SVG_LENGTHTYPE_NUMBER,
-			SVGLength.SVG_LENGTHTYPE_PX,
-			SVGLength.SVG_LENGTHTYPE_CM,
-			SVGLength.SVG_LENGTHTYPE_MM,
-			SVGLength.SVG_LENGTHTYPE_IN,
-			SVGLength.SVG_LENGTHTYPE_PT,
-			SVGLength.SVG_LENGTHTYPE_PC,
-		].some((unit) => unit === length.unitType)
-			? length.value
-			: null,
-	);
-	const resizedWithoutViewBox =
-		!svg.hasAttribute('viewBox') &&
-		originalWidth !== null &&
-		originalHeight !== null &&
-		authoredWidth !== null &&
-		authoredHeight !== null &&
-		authoredWidth >= 0 &&
-		authoredHeight >= 0 &&
-		Number.isFinite(authoredWidth) &&
-		Number.isFinite(authoredHeight) &&
-		resolvedWidth &&
-		resolvedHeight &&
-		(resolvedWidth !== authoredWidth || resolvedHeight !== authoredHeight);
 	const needsExplicitDimensions =
-		resizedWithoutViewBox ||
+		(typeof resolvedWidth === 'number' &&
+			typeof resolvedHeight === 'number' &&
+			resolvedWidth > 0 &&
+			resolvedHeight > 0) ||
 		svg.preserveAspectRatio.baseVal.align ===
 			SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_NONE;
 
 	// HTML percentages in a foreignObject can resolve against its owning page.
 	// Capture used sizes before changing the SVG viewport for its image document.
-	const foreignObjectSizes = resizedWithoutViewBox
+	const foreignObjectSizes = needsExplicitDimensions
 		? Array.from(
 				svg.querySelectorAll<HTMLElement>('foreignObject > *'),
 				(child) => {
@@ -132,8 +117,9 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		Boolean(style.sheet),
 	).lastIndexOf(true);
 
+	const hasEmbeddedStyles = svg.querySelector('style') !== null;
 	const authoredElements =
-		textElements.length > 0 || needsExplicitDimensions
+		textElements.length > 0 || needsExplicitDimensions || hasEmbeddedStyles
 			? [svg, ...svg.querySelectorAll('*')]
 			: null;
 	const authoredStyles =
@@ -165,8 +151,8 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 
 	const originalStyle = svg.getAttribute('style');
 
-	// Without a viewBox, layout sizes the viewport without scaling SVG user
-	// coordinates. Give the detached image the same viewport to preserve them.
+	// Give the image its resolved viewport, including viewBox SVGs. Otherwise
+	// intrinsic image dimensions can default or round independently of CSS layout.
 	if (needsExplicitDimensions) {
 		svg.setAttribute('width', width);
 		svg.setAttribute('height', height);
@@ -202,9 +188,18 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		textStyles.length === 0 &&
 		embeddedFontStyle === null &&
 		!hasDisabledStyles &&
+		!hasEmbeddedStyles &&
 		!needsExplicitDimensions
 			? svg
 			: (svg.cloneNode(true) as SVGSVGElement);
+	if (needsExplicitDimensions) {
+		svgForSerialization.setAttribute(
+			'style',
+			(svgForSerialization.getAttribute('style') ?? '') +
+				`;width:${width}!important;height:${height}!important;`,
+		);
+	}
+
 	if (foreignObjectSizes) {
 		const children =
 			svgForSerialization.querySelectorAll<HTMLElement>('foreignObject > *');
@@ -307,7 +302,7 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 			authoredEmpty,
 			authoredWidths,
 			authoredHeights,
-			preserveMediaQueries: Boolean(resizedWithoutViewBox),
+			preserveMediaQueries: true,
 		});
 	const serializedSvg = serializeSvg(svgForSerialization);
 
@@ -358,6 +353,8 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 	const cached = drawableBySvg.get(svg);
 	if (
 		cached?.serializedSvg === serializedSvg &&
+		cached.width === width &&
+		cached.height === height &&
 		cached.fontStyleKey === fontStyleKey
 	) {
 		return cached.drawable;
@@ -392,6 +389,11 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 				: URL.createObjectURL(blob);
 
 			image.onload = function () {
+				svgDrawableMetadata.set(image, {
+					markup,
+					width: width.endsWith('px') ? parseFloat(width) : image.width,
+					height: height.endsWith('px') ? parseFloat(height) : image.height,
+				});
 				if (url !== null) URL.revokeObjectURL(url);
 				resolve(image);
 			};
@@ -413,7 +415,13 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 			}
 		});
 	})();
-	drawableBySvg.set(svg, {fontStyleKey, serializedSvg, drawable});
+	drawableBySvg.set(svg, {
+		width,
+		height,
+		fontStyleKey,
+		serializedSvg,
+		drawable,
+	});
 	drawable.catch(() => {
 		if (drawableBySvg.get(svg)?.drawable === drawable) {
 			drawableBySvg.delete(svg);
