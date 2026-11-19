@@ -33,7 +33,7 @@ jobs:
           mkdir -p evidence
           git rev-parse HEAD > evidence/revision.txt
           printf '%s\n' 3cf7e5e5a62497046511b204be2b80e5d23bab1d > evidence/baseline.txt
-          printf '%s\n' da47ef1724145bfce5dfaaaec54295130fa6dad8 > evidence/public-candidate.txt
+          printf '%s\n' ff5f2318c182d4d0d5da04de03abb4aab6e933c7 > evidence/public-candidate.txt
           node --version > evidence/node.txt
           bun --version > evidence/bun.txt
           node -p 'JSON.stringify({platform:process.platform,arch:process.arch,cpus:require("os").cpus().map(x=>x.model),memory:require("os").totalmem()})' > evidence/host.json
