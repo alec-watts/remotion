@@ -18,8 +18,8 @@ jobs:
         with:
           fetch-depth: 4
           persist-credentials: false
-      - name: Fetch exact original preview producer
-        run: git fetch --no-tags --depth=1 origin 3cf7e5e5a62497046511b204be2b80e5d23bab1d
+      - name: Fetch exact original and prior renderer producers
+        run: git fetch --no-tags --depth=1 origin 3cf7e5e5a62497046511b204be2b80e5d23bab1d ff5f2318c182d4d0d5da04de03abb4aab6e933c7
       - uses: actions/setup-node@v6
         with:
           node-version: 26
@@ -83,6 +83,7 @@ jobs:
             revision="$baseline"
             if [ "$arm" = candidate ]; then revision=HEAD; fi
             if [ "$arm" = prior ]; then revision=ff5f2318c182d4d0d5da04de03abb4aab6e933c7; fi
+            git cat-file -e "$revision^{commit}"
             phase_directory="$GITHUB_WORKSPACE/evidence/$arm"
             mkdir -p "$phase_directory"
             : > "$phase_directory/producer.sha256"
@@ -91,6 +92,10 @@ jobs:
                 git show "$revision:$producer" > "$producer"
                 shasum -a 256 "$producer" >> "$phase_directory/producer.sha256"
               else
+                if [ "$producer" != packages/web-renderer/src/drawing/scope-svg-for-rasterization.ts ] || [ "$revision" != "$baseline" ]; then
+                  echo "Missing required renderer producer: $revision:$producer" >&2
+                  exit 1
+                fi
                 rm -f "$producer"
                 printf 'ABSENT  %s\n' "$producer" >> "$phase_directory/producer.sha256"
               fi
