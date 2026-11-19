@@ -6,6 +6,7 @@ import {
 	VideoSampleSink,
 } from 'mediabunny';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {supportsNativeHtmlInCanvas} from '../html-in-canvas';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import '../symbol-dispose';
@@ -55,7 +56,7 @@ test.for(['wav', 'mkv'] as const)(
 				sampleRate: 48000,
 				onFrame:
 					container === 'mkv'
-						? (frame) => {
+						? async (frame) => {
 								expect(frame.timestamp).toBe(
 									Math.round((frames / 24) * 1_000_000),
 								);
@@ -65,12 +66,51 @@ test.for(['wav', 'mkv'] as const)(
 									if (pixels[index] !== [16, 40, 80, 255][index % 4]) wrong++;
 								}
 
+								let frameBinary = '';
+								for (const byte of pixels)
+									frameBinary += String.fromCharCode(byte);
+								const framePath = `test/__results__/html-audio/${server.browser}/${container}/${boundary}/${frames}`;
+								await server.commands.writeFile(
+									framePath + '.rgba',
+									btoa(frameBinary),
+									'base64',
+								);
+								await server.commands.writeFile(
+									framePath + '.json',
+									JSON.stringify({
+										timestamp: frame.timestamp,
+										width: frame.displayWidth,
+										height: frame.displayHeight,
+									}),
+								);
 								expect(wrong).toBe(0);
 								frames++;
 								return frame;
 							}
 						: undefined,
 			});
+
+			const blob = await result.getBlob();
+			let binary = '';
+			for (const byte of new Uint8Array(await blob.arrayBuffer()))
+				binary += String.fromCharCode(byte);
+			const directory = `test/__results__/html-audio/${server.browser}/${container}/${boundary}`;
+			await server.commands.writeFile(
+				directory + '/export.media',
+				btoa(binary),
+				'base64',
+			);
+			await server.commands.writeFile(
+				directory + '/metadata.json',
+				JSON.stringify({
+					boundary,
+					container,
+					lifetime,
+					frames,
+					userAgent: navigator.userAgent,
+					dpr: devicePixelRatio,
+				}),
+			);
 			expect(frames).toBe(container === 'mkv' ? 12 : 0);
 			using input = new Input({
 				formats: ALL_FORMATS,
