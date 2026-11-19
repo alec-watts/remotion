@@ -4,7 +4,7 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {HtmlInCanvas, Internals} from 'remotion';
 import {expect, test, vi} from 'vitest';
-import {page} from 'vitest/browser';
+import {page, server} from 'vitest/browser';
 import {createScaffold} from '../create-scaffold';
 import {
 	drawWithHtmlInCanvas,
@@ -112,6 +112,25 @@ test('keeps custom preview children interactive at their painted position', asyn
 		});
 		const button = container.querySelector('button')!;
 		const bounds = visibleCanvas().getBoundingClientRect();
+		await server.commands.writeFile(
+			`test/__results__/preview-interaction/${server.browser}/hit-test.json`,
+			JSON.stringify({
+				userAgent: navigator.userAgent,
+				buttonRect: button.getBoundingClientRect().toJSON(),
+				canvasRect: bounds.toJSON(),
+				hit: document.elementFromPoint(bounds.left + 69, bounds.top + 42)
+					?.outerHTML,
+				buttonPointerEvents: getComputedStyle(button).pointerEvents,
+				canvases: Array.from(
+					container.querySelectorAll('canvas'),
+					(canvas) => ({
+						pointerEvents: getComputedStyle(canvas).pointerEvents,
+						visibility: getComputedStyle(canvas).visibility,
+					}),
+				),
+			}),
+		);
+
 		expect(document.elementFromPoint(bounds.left + 69, bounds.top + 42)).toBe(
 			button,
 		);
@@ -120,6 +139,11 @@ test('keeps custom preview children interactive at their painted position', asyn
 		expect(events).toEqual(['enter']);
 		await target.click();
 		expect(events).toEqual(['enter', 'click']);
+		await server.commands.writeFile(
+			`test/__results__/preview-interaction/${server.browser}/events.json`,
+			JSON.stringify(events),
+		);
+
 		await vi.waitFor(() => {
 			const pixels = readPixels(visibleCanvas(), width, height);
 			const offset = (42 * width + 69) * 4;
