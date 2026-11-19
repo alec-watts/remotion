@@ -584,13 +584,9 @@ const HtmlInCanvasContent = forwardRef<
 			return state;
 		}, [continueRender, delayRender, ancestorPaintState]);
 
-		const setVisibleCanvasRef = useCallback(
+		const setDrawableCanvasRef = useCallback(
 			(node: HTMLCanvasElement | null) => {
-				if (paintTargetMode === 'copied') {
-					outputCanvasRef.current = node;
-				} else {
-					canvas2dRef.current = node;
-				}
+				canvas2dRef.current = node;
 
 				if (typeof ref === 'function') {
 					ref(node);
@@ -598,7 +594,7 @@ const HtmlInCanvasContent = forwardRef<
 					(ref as React.RefObject<HTMLCanvasElement | null>).current = node;
 				}
 			},
-			[ref, paintTargetMode],
+			[ref],
 		);
 
 		const chainState = useEffectChainState(effectsOutputSize);
@@ -1090,7 +1086,7 @@ const HtmlInCanvasContent = forwardRef<
 			<HtmlInCanvasAncestorContext.Provider value={paintState}>
 				<canvas
 					key={paintTargetMode}
-					ref={paintTargetMode === 'copied' ? canvas2dRef : setVisibleCanvasRef}
+					ref={setDrawableCanvasRef}
 					style={
 						paintTargetMode === 'copied'
 							? {
@@ -1126,7 +1122,7 @@ const HtmlInCanvasContent = forwardRef<
 				{paintTargetMode === 'copied' ? (
 					<canvas
 						key="output"
-						ref={setVisibleCanvasRef}
+						ref={outputCanvasRef}
 						width={canvasWidth}
 						height={canvasHeight}
 						style={
