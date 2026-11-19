@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import '../symbol-dispose';
 import {svgLayoutViewport} from './fixtures/svg-layout-viewport';
@@ -20,6 +21,21 @@ test('preserves owning-document media queries when resolving the SVG viewport', 
 		allowHtmlInCanvas: false,
 	});
 	const actual = await still.blob({format: 'png'});
+
+	for (const [name, blob] of [
+		['reference', reference],
+		['actual', actual],
+	] as const) {
+		let binary = '';
+		for (const byte of new Uint8Array(await blob.arrayBuffer()))
+			binary += String.fromCharCode(byte);
+		await server.commands.writeFile(
+			`test/__results__/svg-media/${server.browser}/${name}.png`,
+			btoa(binary),
+			'base64',
+		);
+	}
+
 	expect((await compareNativePixels(reference, actual)).mismatchedPixels).toBe(
 		0,
 	);
