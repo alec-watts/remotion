@@ -1,0 +1,127 @@
+name: Measure SVG fractional viewport painting modes
+on:
+  push:
+    branches: [codex/qualify-svg-fractional-paint-modes]
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.repository == 'alec-watts/remotion'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Fetch exact original preview producer
+        run: git fetch --no-tags --depth=1 origin b8b5fc2f76f76691f58b897db76a87b16d12d5e4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: 1.4.3
+      - run: bun ci
+      - run: cd packages/web-renderer && bunx playwright install --with-deps
+      - name: Freeze Chrome and record inputs
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/revision.txt
+          printf '%s\n' b8b5fc2f76f76691f58b897db76a87b16d12d5e4 > evidence/baseline.txt
+          printf '%s\n' b8b5fc2f76f76691f58b897db76a87b16d12d5e4 > evidence/public-candidate.txt
+          node --version > evidence/node.txt
+          bun --version > evidence/bun.txt
+          node -p 'JSON.stringify({platform:process.platform,arch:process.arch,cpus:require("os").cpus().map(x=>x.model),memory:require("os").totalmem()})' > evidence/host.json
+          browser_bundle="$RUNNER_TEMP/fractional-chrome157"
+          browser_archive="$RUNNER_TEMP/fractional-chrome157.zip"
+          mkdir -p "$browser_bundle"
+          if [ "$RUNNER_OS" = macOS ]; then
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/mac-arm64/chrome-mac-arm64.zip --output "$browser_archive"
+            ditto -x -k "$browser_archive" "$browser_bundle"
+            binary="$browser_bundle/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+            chflags -R uchg "$browser_bundle"
+          else
+            curl --fail --location --silent --show-error https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.79/linux64/chrome-linux64.zip --output "$browser_archive"
+            unzip -q "$browser_archive" -d "$browser_bundle"
+            binary="$browser_bundle/chrome-linux64/chrome"
+          fi
+          "$binary" --version > evidence/chrome.txt
+          grep -q '157.0.8103.79' evidence/chrome.txt
+          echo "FRACTIONAL_AUDIO_CHROME=$binary" >> "$GITHUB_ENV"
+          find "$browser_bundle" -type f -exec shasum -a 256 {} + > evidence/browser.sha256
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          config=Path('packages/web-renderer/vitest.config.ts')
+          source=config.read_text(); marker="channel: 'chrome',"
+          assert source.count(marker)==1
+          config.write_text(source.replace(marker,marker+' executablePath: process.env.FRACTIONAL_AUDIO_CHROME,'))
+          Path('evidence/vitest.config.ts').write_bytes(config.read_bytes())
+          producers=set()
+          records=[]
+          for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
+            if not raw: continue
+            p=os.fsdecode(raw)
+            if p in producers: continue
+            if os.path.islink(p): records.append({'path':p,'symlink':os.readlink(p)})
+            else: records.append({'path':p,'sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest()})
+          Path('evidence/common-inputs.json').write_text(json.dumps(records))
+          PY
+      - name: Compare detached SVG edge modes against the unchanged native reference
+        run: |
+          set -o pipefail
+          baseline=b8b5fc2f76f76691f58b897db76a87b16d12d5e4
+          producers=()
+          failed=0
+          for arm in baseline; do
+            revision="$baseline"
+            if [ "$arm" = candidate ]; then revision=HEAD; fi
+            phase_directory="$GITHUB_WORKSPACE/evidence/$arm"
+            mkdir -p "$phase_directory"
+            : > "$phase_directory/producer.sha256"
+            for producer in "${producers[@]}"; do
+              git show "$revision:$producer" > "$producer"
+              shasum -a 256 "$producer" >> "$phase_directory/producer.sha256"
+            done
+            git diff --binary -- "${producers[@]}" > "$phase_directory/working.diff"
+            bunx turbo run make --filter=@remotion/web-renderer
+            for browser in chromium firefox webkit; do
+              status=0
+              (cd packages/web-renderer && bunx vitest src/test/svg-fractional-paint-modes.test.tsx --run --project "$browser" --reporter=default --reporter=json --outputFile="$phase_directory/$browser.json") 2>&1 | tee "$phase_directory/$browser.log" || status=$?
+              printf '%s\n' "$status" > "$phase_directory/$browser.status"
+              if [ "$status" != 0 ]; then failed=1; fi
+            done
+            if [ -d packages/web-renderer/test/__results__/svg-edge-paint ]; then
+              mv packages/web-renderer/test/__results__/svg-edge-paint "$phase_directory/captures"
+            fi
+            python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          for record in json.loads(Path('evidence/common-inputs.json').read_text()):
+            p=record['path']
+            if 'symlink' in record: assert os.path.islink(p) and os.readlink(p)==record['symlink'],p
+            else: assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==record['sha256'],p
+          PY
+            shasum -a 256 --quiet -c evidence/browser.sha256
+          done
+          exit "$failed"
+      - name: Archive actual SVG bitmaps, serialization, statuses and source inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svg-fractional-paint-modes-${{ matrix.os }}
+          path: evidence
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release frozen macOS browser
+        if: always()
+        run: |
+          if [ "$RUNNER_OS" = macOS ] && [ -d "$RUNNER_TEMP/fractional-chrome157" ]; then
+            chflags -R nouchg "$RUNNER_TEMP/fractional-chrome157"
+          fi
