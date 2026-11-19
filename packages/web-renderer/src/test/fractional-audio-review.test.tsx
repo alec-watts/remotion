@@ -6,6 +6,7 @@ import {
 	VideoSampleSink,
 } from 'mediabunny';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import '../symbol-dispose';
 import {
@@ -60,7 +61,7 @@ test.each([fractionalLoopedVideo, fractionalShortVideo])(
 				audioCodec: 'pcm-s16',
 				sampleRate: 48000,
 				muted,
-				onFrame: (frame) => {
+				onFrame: async (frame) => {
 					expect(frame.timestamp).toBe(
 						Math.round((captured / composition.fps) * 1_000_000),
 					);
@@ -70,6 +71,20 @@ test.each([fractionalLoopedVideo, fractionalShortVideo])(
 						(count, value, index) => count + Number(value !== reference[index]),
 						0,
 					);
+
+					for (const [name, bytes] of [
+						['actual', pixels],
+						['reference', reference],
+					] as const) {
+						let binary = '';
+						for (const byte of bytes) binary += String.fromCharCode(byte);
+						await server.commands.writeFile(
+							`test/__results__/fractional-review/${server.browser}/${composition.id}/${muted}/${captured}-${name}.rgba`,
+							btoa(binary),
+							'base64',
+						);
+					}
+
 					expect(wrong, `frame ${captured}, export muted=${muted}`).toBe(0);
 					captured++;
 					return frame;
@@ -92,6 +107,17 @@ test.each(['wav', 'mkv'] as const)(
 			audioCodec: 'pcm-s16',
 			sampleRate: 48000,
 		});
+		const bytes = new Uint8Array(await (await result.getBlob()).arrayBuffer());
+		let binary = '';
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		const name = expect
+			.getState()
+			.currentTestName!.replace(/[^a-zA-Z0-9_-]/g, '-');
+		await server.commands.writeFile(
+			`test/__results__/fractional-review/${server.browser}/${name}.media`,
+			btoa(binary),
+			'base64',
+		);
 		using input = new Input({
 			formats: ALL_FORMATS,
 			source: new BlobSource(await result.getBlob()),
@@ -133,7 +159,7 @@ test('does not load an unused visual asset during fractional audio passes', asyn
 		videoCodec: 'vp8',
 		audioCodec: 'pcm-s16',
 		sampleRate: 48000,
-		onFrame: (frame) => {
+		onFrame: async (frame) => {
 			const pixels = readFrame(frame);
 			let wrongPixels = 0;
 			for (let i = 0; i < pixels.length; i++)
@@ -144,6 +170,17 @@ test('does not load an unused visual asset during fractional audio passes', asyn
 		},
 	});
 	expect(captured).toBe(4);
+	const bytes = new Uint8Array(await (await result.getBlob()).arrayBuffer());
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	const name = expect
+		.getState()
+		.currentTestName!.replace(/[^a-zA-Z0-9_-]/g, '-');
+	await server.commands.writeFile(
+		`test/__results__/fractional-review/${server.browser}/${name}.media`,
+		btoa(binary),
+		'base64',
+	);
 	using input = new Input({
 		formats: ALL_FORMATS,
 		source: new BlobSource(await result.getBlob()),
