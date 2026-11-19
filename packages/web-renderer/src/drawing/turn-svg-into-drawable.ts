@@ -407,10 +407,17 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 				: URL.createObjectURL(blob);
 
 			image.onload = function () {
+				// Keep the serialized image's intrinsic aspect ratio when its authored
+				// viewport differs from CSS layout. Only recover subpixel rounding.
+				const hasRoundedUsedDimensions =
+					typeof resolvedWidth === 'number' &&
+					typeof resolvedHeight === 'number' &&
+					Math.abs(image.width - resolvedWidth) < 1 &&
+					Math.abs(image.height - resolvedHeight) < 1;
 				svgDrawableMetadata.set(image, {
 					markup,
-					width: width.endsWith('px') ? parseFloat(width) : image.width,
-					height: height.endsWith('px') ? parseFloat(height) : image.height,
+					width: hasRoundedUsedDimensions ? resolvedWidth : image.width,
+					height: hasRoundedUsedDimensions ? resolvedHeight : image.height,
 				});
 				if (url !== null) URL.revokeObjectURL(url);
 				resolve(image);
