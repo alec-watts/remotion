@@ -9,6 +9,7 @@ import {
 } from 'mediabunny';
 import {AnimatedImage, CanvasImage, Img, Sequence, staticFile} from 'remotion';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import '../symbol-dispose';
 import {fractionalAudio} from './fixtures/fractional-audio';
@@ -46,6 +47,7 @@ test.each([
 	'preserves fractional audio windows and integer video frames in $container from frame $startFrame',
 	async ({container, startFrame}) => {
 		let videoFrames = 0;
+		const capturedFrames: {timestamp: number; rgba: Uint8Array}[] = [];
 		const result = await renderMediaOnWeb({
 			licenseKey: 'free-license',
 			composition: {...fractionalAudio, calculateMetadata: null},
@@ -78,6 +80,8 @@ test.each([
 					}
 				}
 
+				capturedFrames.push({timestamp: frame.timestamp, rgba: pixels});
+
 				const absoluteFrame = startFrame + videoFrames;
 				const background = [32 + absoluteFrame * 24, 64, 128];
 				const loopColor = [224, 32, 96];
@@ -101,6 +105,34 @@ test.each([
 			},
 		});
 		expect(videoFrames).toBe(container === 'wav' ? 0 : 4 - startFrame);
+		const exportedBlob = await result.getBlob();
+		const evidence = `test/__results__/fractional-audio/${server.browser}-${container}-${startFrame}`;
+		const saveBytes = async (filename: string, bytes: Uint8Array) => {
+			let binary = '';
+			for (const byte of bytes) binary += String.fromCharCode(byte);
+			await server.commands.writeFile(filename, btoa(binary), 'base64');
+		};
+
+		await saveBytes(
+			`${evidence}/export.${container}`,
+			new Uint8Array(await exportedBlob.arrayBuffer()),
+		);
+		for (let i = 0; i < capturedFrames.length; i++) {
+			await saveBytes(`${evidence}/frame-${i}.rgba`, capturedFrames[i].rgba);
+		}
+
+		await server.commands.writeFile(
+			`${evidence}/runtime.json`,
+			JSON.stringify({
+				browser: server.browser,
+				platform: server.platform,
+				version: server.version,
+				userAgent: navigator.userAgent,
+				container,
+				startFrame,
+				frames: capturedFrames.map(({timestamp}) => ({timestamp})),
+			}),
+		);
 		using input = new Input({
 			formats: ALL_FORMATS,
 			source: new BlobSource(await result.getBlob()),
@@ -116,6 +148,13 @@ test.each([
 			}
 
 			totalSamples += buffer.length;
+		}
+
+		for (let channel = 0; channel < channels.length; channel++) {
+			await saveBytes(
+				`${evidence}/channel-${channel}.f32`,
+				new Uint8Array(channels[channel].buffer),
+			);
 		}
 
 		expect(totalSamples).toBe(samples);
