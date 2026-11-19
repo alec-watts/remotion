@@ -575,6 +575,16 @@ test('refreshes cached SVG drawables when the used viewport changes without chan
 		host.style.width = '320px';
 		expect(getComputedStyle(svg).width).toBe('320px');
 		const second = turnSvgIntoDrawable(svg);
+		await server.commands.writeFile(
+			`test/__results__/svg-authored-order-url/${server.browser}/used-viewport-cache.json`,
+			JSON.stringify({
+				usedWidth: getComputedStyle(svg).width,
+				usedHeight: getComputedStyle(svg).height,
+				reused: second === first,
+				mountedUnchanged: svg.outerHTML === mounted,
+			}),
+		);
+
 		expect(second).not.toBe(first);
 		await second;
 		expect(turnSvgIntoDrawable(svg)).toBe(second);
