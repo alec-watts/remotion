@@ -7,6 +7,12 @@ import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
 	{id: 'unchanged', rasterScale: null, logicalSize: false, readback: false},
+	{
+		id: 'flatten-svg-transform',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
 	{id: 'data-uri', rasterScale: null, logicalSize: false, readback: false},
 	{
 		id: 'software-canvas',
@@ -89,6 +95,11 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 	);
 	if (!descriptor?.set || !descriptor.get)
 		throw new Error('Image src setter unavailable');
+	const drawDescriptor = Object.getOwnPropertyDescriptor(
+		OffscreenCanvasRenderingContext2D.prototype,
+		'drawImage',
+	);
+	if (!drawDescriptor?.value) throw new Error('Canvas draw method unavailable');
 	const contextDescriptor = Object.getOwnPropertyDescriptor(
 		OffscreenCanvas.prototype,
 		'getContext',
@@ -104,6 +115,46 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 	}[] = [];
 	let actual: Blob;
 	try {
+		if (mode.id === 'flatten-svg-transform')
+			Object.defineProperty(
+				OffscreenCanvasRenderingContext2D.prototype,
+				'drawImage',
+				{
+					...drawDescriptor,
+					value(
+						this: OffscreenCanvasRenderingContext2D,
+						image: CanvasImageSource,
+						...args: number[]
+					) {
+						const matrix = this.getTransform();
+						if (
+							image instanceof HTMLImageElement &&
+							args.length === 4 &&
+							matrix.b === 0 &&
+							matrix.c === 0 &&
+							matrix.a > 0 &&
+							matrix.d > 0
+						) {
+							this.save();
+							try {
+								this.resetTransform();
+								return drawDescriptor.value.call(
+									this,
+									image,
+									args[0]! * matrix.a + matrix.e,
+									args[1]! * matrix.d + matrix.f,
+									args[2]! * matrix.a,
+									args[3]! * matrix.d,
+								);
+							} finally {
+								this.restore();
+							}
+						}
+
+						return drawDescriptor.value.call(this, image, ...args);
+					},
+				},
+			);
 		if (mode.id === 'software-canvas')
 			Object.defineProperty(OffscreenCanvas.prototype, 'getContext', {
 				...contextDescriptor,
@@ -128,7 +179,8 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 				if (
 					value.startsWith('blob:') &&
 					mode.id !== 'unchanged' &&
-					mode.id !== 'software-canvas'
+					mode.id !== 'software-canvas' &&
+					mode.id !== 'flatten-svg-transform'
 				) {
 					fetch(value)
 						.then((response) => response.blob())
@@ -211,6 +263,11 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 		});
 		actual = await still.blob({format: 'png'});
 	} finally {
+		Object.defineProperty(
+			OffscreenCanvasRenderingContext2D.prototype,
+			'drawImage',
+			drawDescriptor,
+		);
 		Object.defineProperty(HTMLImageElement.prototype, 'src', descriptor);
 		Object.defineProperty(
 			OffscreenCanvas.prototype,
@@ -246,7 +303,11 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 		}),
 	);
 	expect(captured).toHaveLength(
-		mode.id === 'unchanged' || mode.id === 'software-canvas' ? 2 : 4,
+		mode.id === 'unchanged' ||
+			mode.id === 'software-canvas' ||
+			mode.id === 'flatten-svg-transform'
+			? 2
+			: 4,
 	);
 	expect(comparison.mismatchedPixels).toBe(0);
 });
