@@ -202,9 +202,55 @@ export const countNativePixels = async (reference: Blob, actual: Blob) => {
 	return {mismatchedPixels, maxChannelDelta};
 };
 
+const nativeCaptureCounts = new Map<string, number>();
+
 export const compareNativePixels = async (reference: Blob, actual: Blob) => {
 	const {mismatchedPixels, maxChannelDelta, diff, width, height} =
 		await compareNativePixelData(reference, actual, true);
+
+	const captureState = expect.getState() as {
+		currentTestName?: string;
+		testPath?: string;
+	};
+	const captureTestName = captureState.currentTestName ?? 'unknown-native-test';
+	const captureFile =
+		captureState.testPath?.split('/').pop() ?? 'unknown-native-file';
+	const identity = captureFile + '\n' + captureTestName;
+	const ordinal = nativeCaptureCounts.get(identity) ?? 0;
+	nativeCaptureCounts.set(identity, ordinal + 1);
+	const captureHash = new Uint8Array(
+		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity)),
+	);
+	const key = Array.from(captureHash, (byte) =>
+		byte.toString(16).padStart(2, '0'),
+	).join('');
+	const directory = `test/__results__/svg-opaque-integer-font/${server.browser}/native/${key}/${ordinal}`;
+	for (const [label, blob] of [
+		['reference', reference],
+		['actual', actual],
+	] as const) {
+		let binary = '';
+		for (const byte of new Uint8Array(await blob.arrayBuffer()))
+			binary += String.fromCharCode(byte);
+		await server.commands.writeFile(
+			directory + '/' + label + '.b64',
+			btoa(binary),
+		);
+	}
+
+	await server.commands.writeFile(
+		directory + '/metadata.json',
+		JSON.stringify({
+			file: captureFile,
+			name: captureTestName,
+			ordinal,
+			width,
+			height,
+			mismatchedPixels,
+			maxChannelDelta,
+			userAgent: navigator.userAgent,
+		}),
+	);
 	const diffBlob = new Blob(
 		[Uint8Array.from(atob(diff!), (character) => character.charCodeAt(0))],
 		{type: 'image/png'},
