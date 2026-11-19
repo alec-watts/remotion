@@ -1,5 +1,6 @@
 import '../symbol-dispose';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
 import {
 	svgCornerDeclarationMarkup,
@@ -35,6 +36,12 @@ test.each(['inline', 'stylesheet'] as const)(
 				'image/svg+xml',
 			);
 			expect(parsed.querySelector('parsererror')).toBe(null);
+			await server.commands.writeFile(
+				`test/__results__/corner-review/${server.browser}/${kind}.svg`,
+				decodeURIComponent(
+					image.src.slice('data:image/svg+xml;charset=utf-8,'.length),
+				),
+			);
 			if (kind === 'inline') {
 				const encoded = parsed.querySelector<HTMLElement>(
 					'[data-inline-corner]',
