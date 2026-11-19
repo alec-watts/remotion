@@ -41,7 +41,14 @@ for (const {scene, frame} of [
 					this.addEventListener(
 						'load',
 						() => {
-							const metadata = svgDrawable.svgDrawableMetadata?.get(this);
+							const metadata = (
+								svgDrawable as {
+									svgDrawableMetadata?: WeakMap<
+										HTMLImageElement,
+										{markup: string; width: number; height: number}
+									>;
+								}
+							).svgDrawableMetadata?.get(this);
 							if (metadata)
 								images.push({width: this.width, height: this.height, metadata});
 						},
