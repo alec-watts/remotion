@@ -210,7 +210,6 @@ export function createScaffold<Props extends Record<string, unknown>>({
 	wrapper.style.visibility = 'hidden';
 	// A filter keeps visible layout subtrees transparent on screen without
 	// suppressing the paint records that CSS opacity:0 would remove.
-	wrapper.style.filter = 'opacity(0)';
 	wrapper.style.pointerEvents = 'none';
 	wrapper.style.zIndex = '-9999';
 
