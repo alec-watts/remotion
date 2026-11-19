@@ -6,6 +6,12 @@ import {svgViewportMedia} from './fixtures/svg-viewport-media';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
+	...[
+		'scoped-padded-svg-nodes',
+		'scope-control',
+		'scope-padded-svg-nodes',
+		'scope-scoped-padded-svg-nodes',
+	].map((id) => ({id, rasterScale: null, logicalSize: false, readback: false})),
 	{
 		id: 'image-frame-svg',
 		rasterScale: null,
@@ -67,6 +73,24 @@ const modes = [
 	},
 ] as const;
 const MediaComponent = svgViewportMedia.component;
+const ScopeComponent = () => (
+	<div
+		style={{position: 'absolute', width: 400, height: 160, background: 'white'}}
+	>
+		{[8, 208].map((left, index) => (
+			<svg
+				key={left}
+				width={320}
+				height={100}
+				style={{position: 'absolute', left, top: 88, width: 160, height: 50}}
+			>
+				<style>{`@media (min-width:1px) { .scope-marker {fill:lime;} ${index === 0 ? 'g > svg .scope-marker, svg svg .scope-marker' : ':is(g svg, .absent) > .scope-marker, g:has(> svg) .scope-marker'} {fill:red;} }`}</style>
+				<rect className="scope-marker" width={160} height={50} />
+			</svg>
+		))}
+	</div>
+);
+let scopeReference: Blob;
 const ReadbackComponent = () => {
 	const host = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
@@ -116,10 +140,45 @@ beforeAll(async () => {
 			omitBackground: false,
 		},
 	);
+	scopeReference = await captureNativeReference(
+		{
+			...svgViewportMedia,
+			id: 'svg-rasterization-scope-fractional',
+			width: 500,
+			height: 200,
+			component: () => (
+				<div
+					style={{
+						position: 'absolute',
+						width: 400,
+						height: 160,
+						transform: 'scale(1.25)',
+						transformOrigin: '0 0',
+					}}
+				>
+					<ScopeComponent />
+				</div>
+			),
+		},
+		0,
+		{omitBackground: false},
+	);
 });
 
 for (const mode of modes) {
 	test('SVG fractional painting ' + mode.id, async () => {
+		const isScopeScene = mode.id.startsWith('scope-');
+		const nativeReference = isScopeScene ? scopeReference : reference;
+		const composition = isScopeScene
+			? {
+					...svgViewportMedia,
+					id: 'svg-rasterization-scope',
+					component: ScopeComponent,
+				}
+			: svgViewportMedia;
+		const scopedStyles =
+			mode.id === 'scoped-padded-svg-nodes' ||
+			mode.id === 'scope-scoped-padded-svg-nodes';
 		const descriptor = Object.getOwnPropertyDescriptor(
 			HTMLImageElement.prototype,
 			'src',
@@ -340,8 +399,8 @@ for (const mode of modes) {
 			});
 			const still = await renderStillOnWeb({
 				composition: mode.readback
-					? {...svgViewportMedia, component: ReadbackComponent}
-					: svgViewportMedia,
+					? {...composition, component: ReadbackComponent}
+					: composition,
 				frame: 0,
 				inputProps: {},
 				licenseKey: 'free-license',
@@ -351,7 +410,7 @@ for (const mode of modes) {
 			actual = await still.blob({format: 'png'});
 		} catch (error) {
 			let binary = '';
-			for (const byte of new Uint8Array(await reference.arrayBuffer()))
+			for (const byte of new Uint8Array(await nativeReference.arrayBuffer()))
 				binary += String.fromCharCode(byte);
 			await server.commands.writeFile(
 				directory + '/reference.b64',
@@ -391,7 +450,9 @@ for (const mode of modes) {
 			mode.id === 'whole-frame-svg' ||
 			mode.id === 'padded-svg-nodes' ||
 			mode.id === 'image-frame-svg' ||
-			mode.id === 'image-padded-svg-nodes'
+			mode.id === 'image-padded-svg-nodes' ||
+			scopedStyles ||
+			mode.id === 'scope-padded-svg-nodes'
 		) {
 			try {
 				let controlBinary = '';
@@ -429,6 +490,18 @@ for (const mode of modes) {
 							'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup),
 						);
 						return image;
+					}
+
+					if (scopedStyles) {
+						svg.setAttribute('data-remotion-raster-root', '');
+						for (const style of svg.querySelectorAll('style')) {
+							const type = style.getAttribute('type')?.trim().toLowerCase();
+							if (type && type !== 'text/css') continue;
+							style.textContent =
+								'@scope ([data-remotion-raster-root]) {' +
+								(style.textContent ?? '') +
+								'}';
+						}
 					}
 
 					svg.setAttribute('x', String(x));
@@ -483,7 +556,7 @@ for (const mode of modes) {
 				}
 			} catch (error) {
 				let binary = '';
-				for (const byte of new Uint8Array(await reference.arrayBuffer()))
+				for (const byte of new Uint8Array(await nativeReference.arrayBuffer()))
 					binary += String.fromCharCode(byte);
 				await server.commands.writeFile(
 					directory + '/reference.b64',
@@ -508,7 +581,7 @@ for (const mode of modes) {
 		}
 
 		for (const [name, blob] of [
-			['reference', reference],
+			['reference', nativeReference],
 			['actual', actual],
 		] as const) {
 			let binary = '';
@@ -520,11 +593,13 @@ for (const mode of modes) {
 			);
 		}
 
-		const comparison = await compareNativePixels(reference, actual);
+		const comparison = await compareNativePixels(nativeReference, actual);
 		await server.commands.writeFile(
 			directory + '/metadata.json',
 			JSON.stringify({
 				...mode,
+				isScopeScene,
+				scopedStyles,
 				...comparison,
 				captured,
 				imageSizes,
@@ -536,7 +611,8 @@ for (const mode of modes) {
 			}),
 		);
 		expect(captured).toHaveLength(
-			mode.id === 'unchanged' ||
+			isScopeScene ||
+				mode.id === 'unchanged' ||
 				mode.id === 'software-canvas' ||
 				mode.id === 'flatten-svg-transform' ||
 				mode.id === 'bitmap-native'
