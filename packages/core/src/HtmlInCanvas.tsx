@@ -2,6 +2,7 @@ import React, {
 	forwardRef,
 	useCallback,
 	useContext,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -516,6 +517,7 @@ const HtmlInCanvasContent = forwardRef<
 		ref,
 	) => {
 		const ancestorPaintState = useContext(HtmlInCanvasAncestorContext);
+		const layoutAnchor = `--remotion-canvas-${useId().replace(/:/g, '-')}`;
 		const inheritedPremountInSeconds = useContext(DefaultPremountContext);
 		const canPremount = useMemo(canPremountInHtmlInCanvas, []);
 		assertHtmlInCanvasDimensions(width, height);
@@ -1091,7 +1093,14 @@ const HtmlInCanvasContent = forwardRef<
 						paintTargetMode === 'copied'
 							? {
 									...canvasStyle,
-									position: 'absolute',
+									position:
+										!isRendering && !ancestorPaintState
+											? canvasStyle.position
+											: 'absolute',
+									anchorName:
+										!isRendering && !ancestorPaintState
+											? layoutAnchor
+											: canvasStyle.anchorName,
 									// Hide the source canvas while keeping its drawable children
 									// visible to captureElementImage. opacity: 0 drops paint records.
 									visibility: 'hidden',
@@ -1127,7 +1136,19 @@ const HtmlInCanvasContent = forwardRef<
 						height={canvasHeight}
 						style={
 							!isRendering && !ancestorPaintState
-								? {...canvasStyle, pointerEvents: 'none'}
+								? {
+										...canvasStyle,
+										position: 'absolute',
+										positionAnchor: layoutAnchor,
+										inset: 'auto',
+										top: 'anchor(top)',
+										left: 'anchor(left)',
+										width: 'anchor-size(width)',
+										height: 'anchor-size(height)',
+										boxSizing: 'border-box',
+										margin: 0,
+										pointerEvents: 'none',
+									}
 								: canvasStyle
 						}
 					/>
