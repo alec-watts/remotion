@@ -1,8 +1,26 @@
 import {expect, test} from 'vitest';
 import {renderStillOnWeb} from '../render-still-on-web';
 import '../symbol-dispose';
+import {svgExplicitDimensions} from './fixtures/svg-explicit-dimensions';
 import {svgRasterizationScenes} from './fixtures/svg-rasterization';
 import {captureNativeReference, compareNativePixels} from './native-reference';
+
+test('preserves the native aspect ratio of an authored SVG viewport after flex shrinking', async () => {
+	const reference = await captureNativeReference(svgExplicitDimensions, 0, {
+		omitBackground: false,
+	});
+	const still = await renderStillOnWeb({
+		composition: svgExplicitDimensions,
+		frame: 0,
+		inputProps: {},
+		licenseKey: 'free-license',
+		allowHtmlInCanvas: false,
+	});
+	const actual = await still.blob({format: 'png'});
+	expect((await compareNativePixels(reference, actual)).mismatchedPixels).toBe(
+		0,
+	);
+});
 
 for (const scene of svgRasterizationScenes) {
 	test(

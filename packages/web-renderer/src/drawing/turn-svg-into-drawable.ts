@@ -70,43 +70,17 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 	const originalHeight = svg.getAttribute('height');
 	const resolvedWidth = width.endsWith('px') && parseFloat(width);
 	const resolvedHeight = height.endsWith('px') && parseFloat(height);
-	const [authoredWidth, authoredHeight] = [
-		svg.width.baseVal,
-		svg.height.baseVal,
-	].map((length) =>
-		[
-			SVGLength.SVG_LENGTHTYPE_NUMBER,
-			SVGLength.SVG_LENGTHTYPE_PX,
-			SVGLength.SVG_LENGTHTYPE_CM,
-			SVGLength.SVG_LENGTHTYPE_MM,
-			SVGLength.SVG_LENGTHTYPE_IN,
-			SVGLength.SVG_LENGTHTYPE_PT,
-			SVGLength.SVG_LENGTHTYPE_PC,
-		].some((unit) => unit === length.unitType)
-			? length.value
-			: null,
-	);
-	const resizedWithoutViewBox =
-		!svg.hasAttribute('viewBox') &&
-		originalWidth !== null &&
-		originalHeight !== null &&
-		authoredWidth !== null &&
-		authoredHeight !== null &&
-		authoredWidth >= 0 &&
-		authoredHeight >= 0 &&
-		Number.isFinite(authoredWidth) &&
-		Number.isFinite(authoredHeight) &&
-		resolvedWidth &&
-		resolvedHeight &&
-		(resolvedWidth !== authoredWidth || resolvedHeight !== authoredHeight);
 	const needsExplicitDimensions =
-		resizedWithoutViewBox ||
+		(typeof resolvedWidth === 'number' &&
+			typeof resolvedHeight === 'number' &&
+			resolvedWidth > 0 &&
+			resolvedHeight > 0) ||
 		svg.preserveAspectRatio.baseVal.align ===
 			SVGPreserveAspectRatio.SVG_PRESERVEASPECTRATIO_NONE;
 
 	// HTML percentages in a foreignObject can resolve against its owning page.
 	// Capture used sizes before changing the SVG viewport for its image document.
-	const foreignObjectSizes = resizedWithoutViewBox
+	const foreignObjectSizes = needsExplicitDimensions
 		? Array.from(
 				svg.querySelectorAll<HTMLElement>('foreignObject > *'),
 				(child) => {
@@ -177,8 +151,8 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 
 	const originalStyle = svg.getAttribute('style');
 
-	// Without a viewBox, layout sizes the viewport without scaling SVG user
-	// coordinates. Give the detached image the same viewport to preserve them.
+	// Give the image its resolved viewport, including viewBox SVGs. Otherwise
+	// intrinsic image dimensions can default or round independently of CSS layout.
 	if (needsExplicitDimensions) {
 		svg.setAttribute('width', width);
 		svg.setAttribute('height', height);
@@ -218,6 +192,14 @@ export const turnSvgIntoDrawable = (svg: SVGSVGElement) => {
 		!needsExplicitDimensions
 			? svg
 			: (svg.cloneNode(true) as SVGSVGElement);
+	if (needsExplicitDimensions) {
+		svgForSerialization.setAttribute(
+			'style',
+			(svgForSerialization.getAttribute('style') ?? '') +
+				`;width:${width}!important;height:${height}!important;`,
+		);
+	}
+
 	if (foreignObjectSizes) {
 		const children =
 			svgForSerialization.querySelectorAll<HTMLElement>('foreignObject > *');
