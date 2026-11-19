@@ -6,6 +6,7 @@ import {
 	VideoSampleSink,
 } from 'mediabunny';
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {renderMediaOnWeb} from '../render-media-on-web';
 import '../symbol-dispose';
 import {
@@ -16,6 +17,27 @@ import {
 	fractionalShortVideo,
 	fractionalUnusedImage,
 } from './fixtures/fractional-audio-review';
+
+const savePixels = async (label: string, bytes: Uint8ClampedArray) => {
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	await server.commands.writeFile(
+		`test/__results__/fractional-review/${server.browser}/${label}.rgba`,
+		btoa(binary),
+		'base64',
+	);
+};
+
+const saveMedia = async (label: string, blob: Blob) => {
+	const bytes = new Uint8Array(await blob.arrayBuffer());
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	await server.commands.writeFile(
+		`test/__results__/fractional-review/${server.browser}/${label}.media`,
+		btoa(binary),
+		'base64',
+	);
+};
 
 const readFrame = (frame: VideoFrame) => {
 	const canvas = document.createElement('canvas');
@@ -61,7 +83,7 @@ test.each([fractionalLoopedVideo, fractionalShortVideo])(
 				audioCodec: 'pcm-s16',
 				sampleRate: 48000,
 				muted,
-				onFrame: (frame) => {
+				onFrame: async (frame) => {
 					expect(frame.timestamp).toBe(
 						Math.round((captured / composition.fps) * 1_000_000),
 					);
@@ -70,6 +92,15 @@ test.each([fractionalLoopedVideo, fractionalShortVideo])(
 					const wrong = pixels.reduce(
 						(count, value, index) => count + Number(value !== reference[index]),
 						0,
+					);
+
+					await savePixels(
+						`${composition.id}/${muted}/${captured}-actual`,
+						pixels,
+					);
+					await savePixels(
+						`${composition.id}/${muted}/${captured}-reference`,
+						reference,
 					);
 					expect(wrong, `frame ${captured}, export muted=${muted}`).toBe(0);
 					captured++;
@@ -93,6 +124,7 @@ test.each(['wav', 'mkv'] as const)(
 			audioCodec: 'pcm-s16',
 			sampleRate: 48000,
 		});
+		await saveMedia(`nested-${container}`, await result.getBlob());
 		using input = new Input({
 			formats: ALL_FORMATS,
 			source: new BlobSource(await result.getBlob()),
@@ -134,17 +166,19 @@ test('does not load an unused visual asset during fractional audio passes', asyn
 		videoCodec: 'vp8',
 		audioCodec: 'pcm-s16',
 		sampleRate: 48000,
-		onFrame: (frame) => {
+		onFrame: async (frame) => {
 			const pixels = readFrame(frame);
 			let wrongPixels = 0;
 			for (let i = 0; i < pixels.length; i++)
 				if (pixels[i] !== [16, 40, 80, 255][i % 4]) wrongPixels++;
+			await savePixels(`unused-image/${captured}-actual`, pixels);
 			expect(wrongPixels).toBe(0);
 			captured++;
 			return frame;
 		},
 	});
 	expect(captured).toBe(4);
+	await saveMedia('unused-image', await result.getBlob());
 	using input = new Input({
 		formats: ALL_FORMATS,
 		source: new BlobSource(await result.getBlob()),
@@ -184,6 +218,8 @@ test.each(['wav', 'mkv'] as const)(
 	'excludes roundoff-only final wraps in looping Sequences for %s',
 	async (container) => {
 		let captured = 0;
+		let observedPass = 0;
+		let lastTimestamp = -1;
 		const options = {
 			licenseKey: 'free-license' as const,
 			composition: {...fractionalLoopingSequence, calculateMetadata: null},
@@ -194,7 +230,7 @@ test.each(['wav', 'mkv'] as const)(
 			sampleRate: 48000,
 			onFrame:
 				container === 'mkv'
-					? (frame: VideoFrame) => {
+					? async (frame: VideoFrame) => {
 							expect(frame.timestamp).toBe(
 								Math.round((captured / 24) * 1_000_000),
 							);
@@ -203,6 +239,19 @@ test.each(['wav', 'mkv'] as const)(
 							for (let index = 0; index < pixels.length; index++)
 								if (pixels[index] !== [16, 40, 80, 255][index % 4])
 									wrongPixels++;
+
+							if (frame.timestamp <= lastTimestamp) observedPass++;
+							lastTimestamp = frame.timestamp;
+							const label = `sequence-loop/${observedPass === 0 ? 'muted' : 'audio'}/${captured}`;
+							await savePixels(label + '-actual', pixels);
+							await server.commands.writeFile(
+								`test/__results__/fractional-review/${server.browser}/${label}.json`,
+								JSON.stringify({
+									timestamp: frame.timestamp,
+									width: frame.displayWidth,
+									height: frame.displayHeight,
+								}),
+							);
 							expect(wrongPixels).toBe(0);
 							captured++;
 							return frame;
@@ -210,13 +259,15 @@ test.each(['wav', 'mkv'] as const)(
 					: undefined,
 		};
 		if (container === 'mkv') {
-			await renderMediaOnWeb({...options, muted: true});
+			const mutedResult = await renderMediaOnWeb({...options, muted: true});
+			await saveMedia('sequence-loop-muted', await mutedResult.getBlob());
 			expect(captured).toBe(4);
 			captured = 0;
 		}
 
 		const result = await renderMediaOnWeb(options);
 		expect(captured).toBe(container === 'mkv' ? 4 : 0);
+		await saveMedia(`sequence-loop-${container}`, await result.getBlob());
 		using input = new Input({
 			formats: ALL_FORMATS,
 			source: new BlobSource(await result.getBlob()),
