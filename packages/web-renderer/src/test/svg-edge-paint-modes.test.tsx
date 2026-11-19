@@ -1,11 +1,13 @@
+import {useLayoutEffect, useRef} from 'react';
 import {beforeAll, expect, test} from 'vitest';
 import {server} from 'vitest/browser';
 import {renderStillOnWeb} from '../render-still-on-web';
 import {svgViewportMedia} from './fixtures/svg-viewport-media';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
-const modes = [
+const paintModes = [
 	{id: 'unchanged', css: '', target: 'child'},
+	{id: 'text-readback', css: '', target: 'child'},
 	{id: 'round-trip', css: '', target: 'child'},
 	{id: 'translate3d', css: 'transform:translate3d(0,0,0)', target: 'child'},
 	{id: 'translate2d', css: 'transform:translate(0,0)', target: 'child'},
@@ -43,6 +45,38 @@ const modes = [
 	{id: 'fo-translate3d', css: 'transform:translate3d(0,0,0)', target: 'fo'},
 	{id: 'root-opacity', css: 'filter:opacity(1)', target: 'root'},
 ] as const;
+const modes = [
+	...paintModes.map((mode) => ({...mode, rasterScale: null as number | null})),
+	...[1.25, 1.5, 2, 3, 4, 8].map((rasterScale) => ({
+		id: 'raster-' + rasterScale,
+		css: '',
+		target: 'root' as const,
+		rasterScale,
+	})),
+];
+const MediaComponent = svgViewportMedia.component;
+const ReadbackComponent = () => {
+	const host = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		const texts = Array.from(host.current!.querySelectorAll('svg'), (svg) => {
+			const text = document.createElementNS(
+				'http://www.w3.org/2000/svg',
+				'text',
+			);
+			svg.appendChild(text);
+			return text;
+		});
+		return () => {
+			for (const text of texts) text.remove();
+		};
+	}, []);
+	return (
+		<div ref={host} style={{position: 'absolute', width: 400, height: 160}}>
+			<MediaComponent />
+		</div>
+	);
+};
+
 let reference: Blob;
 beforeAll(async () => {
 	reference = await captureNativeReference(svgViewportMedia, 0, {
@@ -80,6 +114,19 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 								'image/svg+xml',
 							);
 							const svg = document.documentElement;
+							if (mode.rasterScale !== null) {
+								const width = parseFloat(svg.getAttribute('width')!);
+								const height = parseFloat(svg.getAttribute('height')!);
+								svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+								svg.setAttribute('width', String(width * mode.rasterScale));
+								svg.setAttribute('height', String(height * mode.rasterScale));
+								svg.setAttribute(
+									'style',
+									(svg.getAttribute('style') ?? '') +
+										`;width:${width * mode.rasterScale}px!important;height:${height * mode.rasterScale}px!important;`,
+								);
+							}
+
 							const targets =
 								mode.target === 'root'
 									? [svg]
@@ -109,7 +156,10 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 			},
 		});
 		const still = await renderStillOnWeb({
-			composition: svgViewportMedia,
+			composition:
+				mode.id === 'text-readback'
+					? {...svgViewportMedia, component: ReadbackComponent}
+					: svgViewportMedia,
 			frame: 0,
 			inputProps: {},
 			licenseKey: 'free-license',
