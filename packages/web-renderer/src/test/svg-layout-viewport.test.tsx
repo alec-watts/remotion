@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {server} from 'vitest/browser';
 import {preserveSvgAttributeSelectors} from '../drawing/preserve-svg-style-selectors';
 import '../symbol-dispose';
 import {turnSvgIntoDrawable} from '../drawing/turn-svg-into-drawable';
@@ -8,7 +9,7 @@ import {svgViewportLengthValues} from './fixtures/svg-layout-viewport-lengths';
 import {svgViewportMedia} from './fixtures/svg-viewport-media';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
-test('preserves an authored physical radius override after a logical radius', () => {
+test('preserves an authored physical radius override after a logical radius', async () => {
 	const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 	svg.innerHTML = `<style>@media (min-width: 1px) {
 		.physical { direction: rtl; border-radius: 12px; border-start-start-radius: 30px; border-top-right-radius: 12px; }
@@ -17,6 +18,36 @@ test('preserves an authored physical radius override after a logical radius', ()
 	try {
 		const element = svg.querySelector('div')!;
 		expect(getComputedStyle(element).borderTopRightRadius).toBe('12px');
+
+		const inspect = () => {
+			const rule = (
+				svg.querySelector('style')!.sheet!.cssRules[0] as CSSMediaRule
+			).cssRules[0] as CSSStyleRule;
+			const radiusBeforeSerialization =
+				getComputedStyle(element).borderTopRightRadius;
+			const ruleText = rule.cssText;
+			const declarations = Array.from(rule.style, (name) => ({
+				name,
+				value: rule.style.getPropertyValue(name),
+				priority: rule.style.getPropertyPriority(name),
+			}));
+			return {
+				styleText: svg.querySelector('style')!.textContent,
+				ruleText,
+				declarations,
+				radiusBeforeSerialization,
+				radiusAfterSerialization:
+					getComputedStyle(element).borderTopRightRadius,
+				paint: getComputedStyle(element).getPropertyValue('--paint'),
+				background: getComputedStyle(element).backgroundImage,
+				userAgent: navigator.userAgent,
+			};
+		};
+
+		await server.commands.writeFile(
+			`test/__results__/svg-authored-order-url/${server.browser}/physical-before.json`,
+			JSON.stringify(inspect()),
+		);
 		preserveSvgAttributeSelectors({
 			svg,
 			authoredStyles: null,
@@ -26,13 +57,17 @@ test('preserves an authored physical radius override after a logical radius', ()
 			authoredHeights: null,
 			preserveMediaQueries: true,
 		});
+		await server.commands.writeFile(
+			`test/__results__/svg-authored-order-url/${server.browser}/physical-after.json`,
+			JSON.stringify(inspect()),
+		);
 		expect(getComputedStyle(element).borderTopRightRadius).toBe('12px');
 	} finally {
 		svg.remove();
 	}
 });
 
-test('preserves unquoted URL tokens while expanding stylesheet corner declarations', () => {
+test('preserves unquoted URL tokens while expanding stylesheet corner declarations', async () => {
 	const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 	const image =
 		'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2264%22%20height=%2264%22%3E%3C!--];corner:2px;--%3E%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22lime%22/%3E%3C/svg%3E';
@@ -48,6 +83,36 @@ test('preserves unquoted URL tokens while expanding stylesheet corner declaratio
 		);
 		expect(before[0]).toContain('];corner:2px;');
 		expect(before[1]).not.toBe('none');
+
+		const inspect = () => {
+			const rule = (
+				svg.querySelector('style')!.sheet!.cssRules[0] as CSSMediaRule
+			).cssRules[0] as CSSStyleRule;
+			const radiusBeforeSerialization =
+				getComputedStyle(element).borderTopRightRadius;
+			const ruleText = rule.cssText;
+			const declarations = Array.from(rule.style, (name) => ({
+				name,
+				value: rule.style.getPropertyValue(name),
+				priority: rule.style.getPropertyPriority(name),
+			}));
+			return {
+				styleText: svg.querySelector('style')!.textContent,
+				ruleText,
+				declarations,
+				radiusBeforeSerialization,
+				radiusAfterSerialization:
+					getComputedStyle(element).borderTopRightRadius,
+				paint: getComputedStyle(element).getPropertyValue('--paint'),
+				background: getComputedStyle(element).backgroundImage,
+				userAgent: navigator.userAgent,
+			};
+		};
+
+		await server.commands.writeFile(
+			`test/__results__/svg-authored-order-url/${server.browser}/url-before.json`,
+			JSON.stringify(inspect()),
+		);
 		preserveSvgAttributeSelectors({
 			svg,
 			authoredStyles: null,
@@ -57,6 +122,10 @@ test('preserves unquoted URL tokens while expanding stylesheet corner declaratio
 			authoredHeights: null,
 			preserveMediaQueries: true,
 		});
+		await server.commands.writeFile(
+			`test/__results__/svg-authored-order-url/${server.browser}/url-after.json`,
+			JSON.stringify(inspect()),
+		);
 		expect(
 			properties.map((name) =>
 				getComputedStyle(element).getPropertyValue(name),
