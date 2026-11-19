@@ -24,7 +24,10 @@ import {
 	htmlInCanvasFrameMatrix,
 	htmlInCanvasNestedFrames,
 } from './fixtures/html-in-canvas-frames';
-import {htmlInCanvasInteraction} from './fixtures/html-in-canvas-interaction';
+import {
+	htmlInCanvasFlowInteraction,
+	htmlInCanvasInteraction,
+} from './fixtures/html-in-canvas-interaction';
 import {
 	htmlInCanvasResize,
 	htmlInCanvasResizeFrames,
@@ -66,6 +69,88 @@ const countDifferentPixels = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
 
 	return different;
 };
+
+test.for(['flow', 'ref'] as const)(
+	'preserves custom preview %s semantics after a preceding sibling',
+	async (kind, t) => {
+		if (!supportsNativeHtmlInCanvas()) {
+			t.skip();
+			return;
+		}
+
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		const reportedHost = createRef<HTMLCanvasElement>();
+		let painted: Uint8ClampedArray | null = null;
+		const events: string[] = [];
+		try {
+			root.render(
+				<Player
+					acknowledgeRemotionLicense
+					component={htmlInCanvasFlowInteraction.component}
+					compositionWidth={300}
+					compositionHeight={300}
+					fps={30}
+					durationInFrames={1}
+					inputProps={{
+						onHost: reportedHost,
+						onEvent: (event) => events.push(event),
+						onPainted: (canvas) => {
+							painted = readPixels(canvas, 160, 96);
+						},
+					}}
+					style={{width: 300, height: 300}}
+				/>,
+			);
+			const visibleCanvas = () =>
+				Array.from(container.querySelectorAll('canvas')).find(
+					(canvas) => getComputedStyle(canvas).visibility !== 'hidden',
+				)!;
+			await vi.waitFor(() => {
+				expect(painted).not.toBeNull();
+				expect(
+					countDifferentPixels(readPixels(visibleCanvas(), 160, 96), painted!),
+				).toBe(0);
+			});
+			const button = container.querySelector('button')!;
+			if (kind === 'ref') {
+				expect(reportedHost.current).not.toBeNull();
+				expect(reportedHost.current!.contains(button)).toBe(true);
+				const drawable = reportedHost.current as HTMLCanvasElement & {
+					updateElementGeometry: (element: Element) => void;
+				};
+				expect(() =>
+					drawable.updateElementGeometry(button.parentElement!),
+				).not.toThrow();
+			} else {
+				const bounds = visibleCanvas().getBoundingClientRect();
+				expect(
+					document.elementFromPoint(bounds.left + 60, bounds.top + 40),
+				).toBe(button);
+				const target = page.getByRole('button', {
+					name: 'Flow canvas interaction',
+				});
+				await target.hover();
+				expect(events).toEqual(['enter']);
+				await target.click();
+				expect(events).toEqual(['enter', 'click']);
+				await vi.waitFor(() => {
+					const pixels = readPixels(visibleCanvas(), 160, 96);
+					expect(
+						Array.from(
+							pixels.slice((40 * 160 + 60) * 4, (40 * 160 + 60) * 4 + 4),
+						),
+					).toEqual([0, 255, 0, 255]);
+					expect(countDifferentPixels(pixels, painted!)).toBe(0);
+				});
+			}
+		} finally {
+			root.unmount();
+			container.remove();
+		}
+	},
+);
 
 test('keeps custom preview children interactive at their painted position', async (t) => {
 	if (!supportsNativeHtmlInCanvas()) {

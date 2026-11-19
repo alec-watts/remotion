@@ -53,3 +53,65 @@ export const htmlInCanvasInteraction = {
 	durationInFrames: 1,
 	defaultProps: {onEvent: null, onPainted: null},
 } as const;
+
+const FlowComponent: React.FC<
+	Props & {
+		readonly onHost: React.Ref<HTMLCanvasElement>;
+	}
+> = ({onEvent, onPainted, onHost}) => {
+	const [clicked, setClicked] = useState(false);
+	const onPaint: HtmlInCanvasOnPaint = useCallback(
+		({canvas, elementImage}) => {
+			const ctx = canvas.getContext('2d')!;
+			ctx.reset();
+			ctx.fillStyle = 'white';
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			ctx.drawElementImage(elementImage, 0, 0);
+			onPainted?.(canvas);
+		},
+		[onPainted],
+	);
+	return (
+		<div style={{position: 'relative'}}>
+			<div style={{height: 100}} />
+			<HtmlInCanvas
+				ref={onHost}
+				width={160}
+				height={96}
+				pixelDensity={1}
+				style={{position: 'relative', top: 10}}
+				onPaint={onPaint}
+			>
+				<button
+					type="button"
+					aria-label="Flow canvas interaction"
+					onPointerEnter={() => onEvent?.('enter')}
+					onClick={() => {
+						onEvent?.('click');
+						setClicked(true);
+					}}
+					style={{
+						position: 'absolute',
+						left: 20,
+						top: 20,
+						width: 80,
+						height: 40,
+						padding: 0,
+						border: 0,
+						background: clicked ? 'lime' : 'blue',
+					}}
+				/>
+			</HtmlInCanvas>
+		</div>
+	);
+};
+
+export const htmlInCanvasFlowInteraction = {
+	component: FlowComponent,
+	id: 'html-in-canvas-flow-interaction',
+	width: 300,
+	height: 300,
+	fps: 30,
+	durationInFrames: 1,
+	defaultProps: {onHost: null, onEvent: null, onPainted: null},
+} as const;
