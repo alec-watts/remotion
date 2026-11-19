@@ -7,6 +7,18 @@ import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
 	{
+		id: 'image-frame-svg',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
+	{
+		id: 'image-padded-svg-nodes',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
+	{
 		id: 'whole-frame-svg',
 		rasterScale: null,
 		logicalSize: false,
@@ -375,7 +387,12 @@ for (const mode of modes) {
 			);
 		}
 
-		if (mode.id === 'whole-frame-svg' || mode.id === 'padded-svg-nodes') {
+		if (
+			mode.id === 'whole-frame-svg' ||
+			mode.id === 'padded-svg-nodes' ||
+			mode.id === 'image-frame-svg' ||
+			mode.id === 'image-padded-svg-nodes'
+		) {
 			try {
 				let controlBinary = '';
 				for (const byte of new Uint8Array(await actual.arrayBuffer()))
@@ -398,12 +415,29 @@ for (const mode of modes) {
 					const y = parseFloat(authored.style.top);
 					if (!Number.isFinite(x) || !Number.isFinite(y))
 						throw new Error('Expected measured absolute SVG position');
+					if (mode.id.startsWith('image-')) {
+						const image = svg.ownerDocument.createElementNS(
+							'http://www.w3.org/2000/svg',
+							'image',
+						);
+						image.setAttribute('x', String(x));
+						image.setAttribute('y', String(y));
+						image.setAttribute('width', '160');
+						image.setAttribute('height', '50');
+						image.setAttribute(
+							'href',
+							'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup),
+						);
+						return image;
+					}
+
 					svg.setAttribute('x', String(x));
 					svg.setAttribute('y', String(y));
 					return svg;
 				});
-				const groups =
-					mode.id === 'whole-frame-svg' ? [roots] : roots.map((svg) => [svg]);
+				const groups = mode.id.endsWith('frame-svg')
+					? [roots]
+					: roots.map((svg) => [svg]);
 				const canvas = new OffscreenCanvas(500, 200);
 				try {
 					const context = canvas.getContext('2d')!;
