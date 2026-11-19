@@ -177,16 +177,47 @@ const rasterizedSvgByDrawable = new WeakMap<
 	}
 >();
 
+const getOpaqueSvgBackdrop = async (
+	context: OffscreenCanvasRenderingContext2D,
+): Promise<string | null> => {
+	if (
+		context.globalAlpha !== 1 ||
+		context.filter !== 'none' ||
+		!['rgba(0, 0, 0, 0)', '#00000000'].includes(context.shadowColor)
+	)
+		return null;
+	try {
+		const {width, height} = context.canvas;
+		const {data} = context.getImageData(0, 0, width, height);
+		for (let index = 3; index < data.length; index += 4) {
+			if (data[index] !== 255) return null;
+		}
+
+		const blob = await context.canvas.convertToBlob({type: 'image/png'});
+		return await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(reader.result as string);
+			reader.onerror = () => reject(reader.error);
+			reader.onabort = () => reject(new Error('SVG backdrop read was aborted'));
+			reader.readAsDataURL(blob);
+		});
+	} catch {
+		return null;
+	}
+};
+
 const drawSvgAtOutputResolution = async ({
 	drawable,
 	fitted,
 	context,
 	readback,
+	preblendOpaqueBackdrop,
 }: {
 	drawable: HTMLImageElement;
 	fitted: ReturnType<typeof fitSvgIntoItsContainer>;
 	context: OffscreenCanvasRenderingContext2D;
 	readback: boolean;
+	preblendOpaqueBackdrop: boolean;
 }) => {
 	const {width, height} = context.canvas;
 	const transform = context.getTransform();
@@ -213,7 +244,14 @@ const drawSvgAtOutputResolution = async ({
 		fitted.width,
 		fitted.height,
 	]);
-	let entry = rasterizedSvgByDrawable.get(drawable);
+	const cached = rasterizedSvgByDrawable.get(drawable);
+	if (cached?.key === key && cached.image === null) return false;
+	const backdrop = preblendOpaqueBackdrop
+		? await getOpaqueSvgBackdrop(context)
+		: null;
+	// The prefix can change while this drawable remains cached. Keep opaque
+	// composites local to this draw so they never reuse a previous backdrop.
+	let entry = backdrop === null ? cached : undefined;
 	if (entry?.key !== key) {
 		const metadata = svgDrawableMetadata.get(drawable);
 		if (metadata === undefined)
@@ -245,6 +283,17 @@ const drawSvgAtOutputResolution = async ({
 		);
 		document.documentElement.setAttribute('width', String(width));
 		document.documentElement.setAttribute('height', String(height));
+		if (backdrop !== null) {
+			const background = document.createElementNS(
+				'http://www.w3.org/2000/svg',
+				'image',
+			);
+			background.setAttribute('href', backdrop);
+			background.setAttribute('width', String(width));
+			background.setAttribute('height', String(height));
+			document.documentElement.appendChild(background);
+		}
+
 		const foreignObject = document.createElementNS(
 			'http://www.w3.org/2000/svg',
 			'foreignObject',
@@ -294,7 +343,7 @@ const drawSvgAtOutputResolution = async ({
 				'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(paddedMarkup);
 		});
 		entry = {key, image};
-		rasterizedSvgByDrawable.set(drawable, entry);
+		if (backdrop === null) rasterizedSvgByDrawable.set(drawable, entry);
 		image.catch(() => {
 			if (rasterizedSvgByDrawable.get(drawable)?.image === image)
 				rasterizedSvgByDrawable.delete(drawable);
@@ -374,6 +423,7 @@ const drawSvg = async ({
 			fitted,
 			context: contextToDraw,
 			readback,
+			preblendOpaqueBackdrop: rasterize,
 		}))
 	)
 		return;
