@@ -139,6 +139,24 @@ export const captureNativeReference = async (
 			if (resources.error !== null) throw resources.error;
 		} while (isPending());
 
+		if (fixture.id === 'svg-viewport-length-values') {
+			await server.commands.writeFile(
+				`test/__results__/svg-lengths/${server.browser}/native-lengths.json`,
+				JSON.stringify(
+					Array.from(host.querySelectorAll('svg'), (svg) => ({
+						width: svg.getAttribute('width'),
+						height: svg.getAttribute('height'),
+						widthUnit: svg.width.baseVal.unitType,
+						heightUnit: svg.height.baseVal.unitType,
+						widthValue: svg.width.baseVal.value,
+						heightValue: svg.height.baseVal.value,
+						cssWidth: getComputedStyle(svg).width,
+						cssHeight: getComputedStyle(svg).height,
+					})),
+				),
+			);
+		}
+
 		// `save: false` skips writing the PNG to disk. Vitest 5.0.3 then resolves
 		// to the base64 string even though its types still declare {path, base64}.
 		const screenshot: string | {base64: string} = await page
@@ -190,6 +208,20 @@ const compareNativePixelData = async (
 		encode(reference),
 		encode(actual),
 	]);
+	const testName = expect.getState().currentTestName ?? 'native-pixels';
+	const referenceHash = Array.from(
+		new Uint8Array(
+			await crypto.subtle.digest('SHA-256', await reference.arrayBuffer()),
+		),
+		(byte) => byte.toString(16).padStart(2, '0'),
+	).join('');
+	const evidence = `test/__results__/svg-lengths/${server.browser}/${testName.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80)}-${referenceHash}`;
+	await server.commands.writeFile(
+		`${evidence}-reference.png`,
+		expected,
+		'base64',
+	);
+	await server.commands.writeFile(`${evidence}-actual.png`, received, 'base64');
 	return server.commands.compareNativePngs(expected, received, createDiff);
 };
 
