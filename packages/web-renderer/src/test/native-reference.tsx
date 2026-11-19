@@ -151,6 +151,96 @@ export const captureNativeReference = async (
 				style:
 					'html, body, iframe[data-vitest] { background: transparent !important; }',
 			});
+		if (fixture.id === 'svg-rasterization-pseudo-fractional') {
+			const panel = host.querySelector('.panel')!;
+			const pseudo = getComputedStyle(panel, '::before');
+			await server.commands.writeFile(
+				`test/__results__/svg-authored-order-url/${server.browser}/rasterization-svg-rasterization-pseudo/pseudo-computed.json`,
+				JSON.stringify({
+					content: pseudo.content,
+					width: pseudo.width,
+					height: pseudo.height,
+					left: pseudo.left,
+					top: pseudo.top,
+					background: pseudo.backgroundColor,
+				}),
+			);
+		}
+
+		if (fixture.id.startsWith('svg-rasterization-')) {
+			const geometry = Array.from(
+				host.querySelectorAll('svg, rect'),
+				(node) => {
+					const computed = getComputedStyle(node);
+					const rect = node.getBoundingClientRect();
+					const screen =
+						node instanceof SVGGraphicsElement ? node.getScreenCTM() : null;
+					return {
+						tag: node.tagName,
+						style: node.getAttribute('style'),
+						width: computed.width,
+						height: computed.height,
+						transform: computed.transform,
+						overflow: computed.overflow,
+						fill: computed.fill,
+						stroke: computed.stroke,
+						strokeWidth: computed.strokeWidth,
+						strokeLinejoin: computed.strokeLinejoin,
+						bounds: rect.toJSON(),
+						screen: screen
+							? {
+									a: screen.a,
+									b: screen.b,
+									c: screen.c,
+									d: screen.d,
+									e: screen.e,
+									f: screen.f,
+								}
+							: null,
+					};
+				},
+			);
+			await server.commands.writeFile(
+				`test/__results__/svg-authored-order-url/${server.browser}/rasterization-${fixture.id.replace(/-fractional$/, '')}/native-geometry.json`,
+				JSON.stringify(geometry),
+			);
+		}
+
+		if (fixture.id === 'svg-viewport-media') {
+			const geometry = Array.from(
+				host.querySelectorAll(
+					'svg, foreignObject, .physical-radius, .explicit-radius',
+				),
+				(element) => {
+					const computed = getComputedStyle(element);
+					return {
+						tag: element.tagName,
+						markup: element.outerHTML,
+						bounds: element.getBoundingClientRect().toJSON(),
+						width: computed.width,
+						height: computed.height,
+						radius: computed.borderTopRightRadius,
+						box:
+							element instanceof SVGGraphicsElement
+								? (() => {
+										const box = element.getBBox();
+										return {
+											x: box.x,
+											y: box.y,
+											width: box.width,
+											height: box.height,
+										};
+									})()
+								: null,
+					};
+				},
+			);
+			await server.commands.writeFile(
+				`test/__results__/svg-authored-order-url/${server.browser}/native-geometry.json`,
+				JSON.stringify(geometry),
+			);
+		}
+
 		const base64 =
 			typeof screenshot === 'string' ? screenshot : screenshot.base64;
 		return new Blob(
