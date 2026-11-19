@@ -6,6 +6,18 @@ import {svgViewportMedia} from './fixtures/svg-viewport-media';
 import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
+	{
+		id: 'whole-frame-svg',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
+	{
+		id: 'padded-svg-nodes',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
 	...[null, 1.25, 2, 4].map((rasterScale) => ({
 		id: rasterScale === null ? 'bitmap-native' : 'bitmap-raster-' + rasterScale,
 		rasterScale,
@@ -119,6 +131,7 @@ for (const mode of modes) {
 		const createdBitmaps: ImageBitmap[] = [];
 		const bitmapSizes: {width: number; height: number}[] = [];
 		const bitmapErrors: string[] = [];
+		const assembled: string[] = [];
 		let disposed = false;
 		const directory = `test/__results__/svg-edge-paint/${server.browser}/${mode.id}`;
 		const captured: string[] = [];
@@ -362,6 +375,104 @@ for (const mode of modes) {
 			);
 		}
 
+		if (mode.id === 'whole-frame-svg' || mode.id === 'padded-svg-nodes') {
+			try {
+				let controlBinary = '';
+				for (const byte of new Uint8Array(await actual.arrayBuffer()))
+					controlBinary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					directory + '/control-actual.b64',
+					btoa(controlBinary),
+				);
+				const roots = captured.map((markup) => {
+					const svg = new DOMParser().parseFromString(
+						markup,
+						'image/svg+xml',
+					).documentElement;
+					const authored = document.createElement('div');
+					authored.setAttribute(
+						'style',
+						svg.getAttribute('data-remotion-authored-style')!,
+					);
+					const x = parseFloat(authored.style.left);
+					const y = parseFloat(authored.style.top);
+					if (!Number.isFinite(x) || !Number.isFinite(y))
+						throw new Error('Expected measured absolute SVG position');
+					svg.setAttribute('x', String(x));
+					svg.setAttribute('y', String(y));
+					return svg;
+				});
+				const groups =
+					mode.id === 'whole-frame-svg' ? [roots] : roots.map((svg) => [svg]);
+				const canvas = new OffscreenCanvas(500, 200);
+				try {
+					const context = canvas.getContext('2d')!;
+					context.fillStyle = 'white';
+					context.fillRect(0, 0, 500, 200);
+					for (const rootsInGroup of groups) {
+						const xml = document.implementation.createDocument(
+							'http://www.w3.org/2000/svg',
+							'svg',
+							null,
+						);
+						const root = xml.documentElement;
+						root.setAttribute('width', '500');
+						root.setAttribute('height', '200');
+						const group = xml.createElementNS(
+							'http://www.w3.org/2000/svg',
+							'g',
+						);
+						group.setAttribute('transform', 'scale(1.25)');
+						for (const svg of rootsInGroup)
+							group.appendChild(xml.importNode(svg, true));
+						root.appendChild(group);
+						const markup = new XMLSerializer().serializeToString(root);
+						assembled.push(markup);
+						const image = await new Promise<HTMLImageElement>(
+							(resolve, reject) => {
+								const loaded = new Image();
+								loaded.onload = () => resolve(loaded);
+								loaded.onerror = () =>
+									reject(new Error('Assembled SVG decode failed'));
+								loaded.src =
+									'data:image/svg+xml;charset=utf-8,' +
+									encodeURIComponent(markup);
+							},
+						);
+						context.drawImage(image, 0, 0);
+					}
+
+					actual = await canvas.convertToBlob({type: 'image/png'});
+				} finally {
+					canvas.width = 0;
+					canvas.height = 0;
+				}
+			} catch (error) {
+				let binary = '';
+				for (const byte of new Uint8Array(await reference.arrayBuffer()))
+					binary += String.fromCharCode(byte);
+				await server.commands.writeFile(
+					directory + '/reference.b64',
+					btoa(binary),
+				);
+				await server.commands.writeFile(
+					directory + '/failure.json',
+					JSON.stringify({
+						...mode,
+						error: String(error),
+						assembled,
+						captured,
+						imageSizes,
+						bitmapErrors,
+						bitmapSizes,
+						userAgent: navigator.userAgent,
+						dpr: devicePixelRatio,
+					}),
+				);
+				throw error;
+			}
+		}
+
 		for (const [name, blob] of [
 			['reference', reference],
 			['actual', actual],
@@ -385,6 +496,7 @@ for (const mode of modes) {
 				imageSizes,
 				bitmapSizes,
 				bitmapErrors,
+				assembled,
 				userAgent: navigator.userAgent,
 				dpr: devicePixelRatio,
 			}),
