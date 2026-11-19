@@ -7,6 +7,13 @@ import {captureNativeReference, compareNativePixels} from './native-reference';
 
 const modes = [
 	{id: 'unchanged', rasterScale: null, logicalSize: false, readback: false},
+	{id: 'data-uri', rasterScale: null, logicalSize: false, readback: false},
+	{
+		id: 'software-canvas',
+		rasterScale: null,
+		logicalSize: false,
+		readback: false,
+	},
 	{id: 'text-readback', rasterScale: null, logicalSize: false, readback: true},
 	...[1.25, 2, 4].flatMap((rasterScale) =>
 		[false, true].map((logicalSize) => ({
@@ -82,6 +89,12 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 	);
 	if (!descriptor?.set || !descriptor.get)
 		throw new Error('Image src setter unavailable');
+	const contextDescriptor = Object.getOwnPropertyDescriptor(
+		OffscreenCanvas.prototype,
+		'getContext',
+	);
+	if (!contextDescriptor?.value)
+		throw new Error('Canvas context method unavailable');
 	const captured: string[] = [];
 	const imageSizes: {
 		width: number;
@@ -91,12 +104,47 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 	}[] = [];
 	let actual: Blob;
 	try {
+		if (mode.id === 'software-canvas')
+			Object.defineProperty(OffscreenCanvas.prototype, 'getContext', {
+				...contextDescriptor,
+				value(
+					this: OffscreenCanvas,
+					type: string,
+					options: object | undefined,
+				) {
+					return contextDescriptor.value.call(
+						this,
+						type,
+						type === '2d' ? {...options, willReadFrequently: true} : options,
+					);
+				},
+			});
 		Object.defineProperty(HTMLImageElement.prototype, 'src', {
 			...descriptor,
 			get(this: HTMLImageElement) {
 				return descriptor.get!.call(this);
 			},
 			set(this: HTMLImageElement, value: string) {
+				if (
+					value.startsWith('blob:') &&
+					mode.id !== 'unchanged' &&
+					mode.id !== 'software-canvas'
+				) {
+					fetch(value)
+						.then((response) => response.blob())
+						.then(async (blob) => {
+							if (!blob.type.startsWith('image/svg+xml'))
+								throw new Error('Unexpected blob type: ' + blob.type);
+							this.src =
+								'data:image/svg+xml;charset=utf-8,' +
+								encodeURIComponent(await blob.text());
+						})
+						.catch((error: unknown) => {
+							throw error;
+						});
+					return;
+				}
+
 				let next = value;
 				const prefix = 'data:image/svg+xml;charset=utf-8,';
 				if (value.startsWith(prefix)) {
@@ -164,6 +212,11 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 		actual = await still.blob({format: 'png'});
 	} finally {
 		Object.defineProperty(HTMLImageElement.prototype, 'src', descriptor);
+		Object.defineProperty(
+			OffscreenCanvas.prototype,
+			'getContext',
+			contextDescriptor,
+		);
 	}
 
 	const directory = `test/__results__/svg-edge-paint/${server.browser}/${mode.id}`;
@@ -192,6 +245,8 @@ test.for(modes)('SVG edge painting %o', async (mode) => {
 			dpr: devicePixelRatio,
 		}),
 	);
-	expect(captured).toHaveLength(4);
+	expect(captured).toHaveLength(
+		mode.id === 'unchanged' || mode.id === 'software-canvas' ? 2 : 4,
+	);
 	expect(comparison.mismatchedPixels).toBe(0);
 });
