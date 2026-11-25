@@ -1,0 +1,29 @@
+name: Record issue 13634 in Chromium
+on:
+  push:
+    branches: [codex/record-13634]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: 13634
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm install --no-audit --no-fund remotion@4.0.544 @remotion/player@4.0.544 react@19.2.0 react-dom@19.2.0 esbuild@0.25.12 playwright@1.58.2
+      - run: npx playwright install --with-deps chromium
+      - run: npx esbuild demo.jsx --bundle --outfile=bundle.js
+      - run: node record.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-13634-browser-recording
+          path: 13634/evidence
+          if-no-files-found: error
